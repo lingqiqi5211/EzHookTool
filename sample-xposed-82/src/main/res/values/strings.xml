@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EzHookTool sample app</string>
+    <string name="xposed_desc">EzHookTool sample module for Xposed API 82.</string>
+</resources>

@@ -1,0 +1,75 @@
+name: Release API Docs
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to publish docs under
+        required: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-api-docs
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      REPOSITORY: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        run: |
+          release_tag="${{ github.event.release.tag_name }}"
+          if [ -z "${release_tag}" ]; then
+            release_tag="${{ inputs.release_tag }}"
+          fi
+          if [ -z "${release_tag}" ]; then
+            echo "Release tag is required" >&2
+            exit 1
+          fi
+          echo "RELEASE_TAG=${release_tag}" >> "$GITHUB_ENV"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Generate API docs
+        run: chmod +x ./gradlew && ./gradlew generateApiDocs
+
+      - name: Assemble versioned site
+        run: bash ./.github/scripts/prepare-api-site.sh
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

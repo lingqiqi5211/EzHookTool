@@ -1,0 +1,295 @@
+<!doctype html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>HookParam</title>
+<link href="../../../images/logo-icon.svg" rel="icon" type="image/svg"><script>var pathToRoot = "../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../scripts/sourceset_dependencies.js" async></script>
+<link href="../../../styles/style.css" rel="Stylesheet">
+<link href="../../../styles/main.css" rel="Stylesheet">
+<link href="../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../scripts/navigation-loader.js" async></script>
+<script type="text/javascript" src="../../../scripts/platform-content-handler.js" async></script>
+<script type="text/javascript" src="../../../scripts/main.js" defer></script>
+<script type="text/javascript" src="../../../scripts/prism.js" async></script>
+<script type="text/javascript" src="../../../ui-kit/ui-kit.min.js" defer></script></head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+<a class="library-name--link" href="../../../index.html" tabindex="1">
+                    EzHookTool
+            </a>        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle" type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true" data-filter=":hook-xposed-82/release">release</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox" data-role="dropdown-toggle" aria-controls="platform-tags-listbox" aria-haspopup="listbox" aria-expanded="false" aria-label="Toggle source sets"></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option jvm-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":hook-xposed-82/release" data-filter=":hook-xposed-82/release">
+                                <span class="checkbox--icon"></span>
+                                release
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button" type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config="{&quot;defaultSize&quot;: 280, &quot;minSize&quot;: 200, &quot;maxSize&quot;: 400}">
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list" data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    EzHookTool
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageids="hook-xposed-82::io.github.lingqiqi5211.ezhooktool.xposed82/HookParam///PointingToDeclaration//480887446">
+  <div class="breadcrumbs"><a href="../../index.html">hook-xposed-82</a><span class="delimiter">/</span><a href="../index.html">io.github.lingqiqi5211.ezhooktool.xposed82</a><span class="delimiter">/</span><span class="current">HookParam</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span>Hook</span><wbr><span><span>Param</span></span></h1>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">HookParam</a></div><p class="paragraph">Xposed 82 hook 回调参数包装。</p><p class="paragraph">对 <code class="lang-kotlin">XC_MethodHook.MethodHookParam</code> 做了更适合 Kotlin/Java 的访问封装。</p></div></div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="-1532873%2FProperties%2F480887446" anchor-label="args" id="-1532873%2FProperties%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="args.html"><span><span>args</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1532873%2FProperties%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="args.html">args</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-array/index.html">Array</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">当前调用的参数数组。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="122714734%2FProperties%2F480887446" anchor-label="hasThrowable" id="122714734%2FProperties%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="has-throwable.html"><span>has</span><wbr><span><span>Throwable</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="122714734%2FProperties%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="has-throwable.html">hasThrowable</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">当前调用是否带有异常结果。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="460427098%2FProperties%2F480887446" anchor-label="member" id="460427098%2FProperties%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="member.html"><span><span>member</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="460427098%2FProperties%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="member.html">member</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/lang/reflect/Member.html">Member</a></div><div class="brief "><p class="paragraph">当前正在被 hook 的成员。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="826978046%2FProperties%2F480887446" anchor-label="raw" id="826978046%2FProperties%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="raw.html"><span><span>raw</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="826978046%2FProperties%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-field/index.html"><span class="token annotation builtin">JvmField</span></a></div></div><span class="token keyword">val </span><a href="raw.html">raw</a><span class="token operator">: </span><span data-unresolved-link="de.robv.android.xposed/XC_MethodHook.MethodHookParam///PointingToDeclaration/">XC_MethodHook.MethodHookParam</span></div><div class="brief "><p class="paragraph">原始的 Xposed 参数对象。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-263554249%2FProperties%2F480887446" anchor-label="result" id="-263554249%2FProperties%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="result.html"><span><span>result</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-263554249%2FProperties%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">var </span><a href="result.html">result</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">当前回调设置或读取的返回值。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-2116154281%2FProperties%2F480887446" anchor-label="thisObject" id="-2116154281%2FProperties%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="this-object.html"><span>this</span><wbr><span><span>Object</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2116154281%2FProperties%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="this-object.html">thisObject</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">当前实例方法的 <code class="lang-kotlin">this</code> 对象；静态方法时通常为 <code class="lang-kotlin">null</code>。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1169016358%2FProperties%2F480887446" anchor-label="throwable" id="1169016358%2FProperties%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="throwable.html"><span><span>throwable</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1169016358%2FProperties%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">var </span><a href="throwable.html">throwable</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-throwable/index.html">Throwable</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">当前回调设置或读取的异常。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="FUNCTION">
+        <h2 class="tableheader">Functions</h2>
+        <div class="table"><a data-name="-1487818788%2FFunctions%2F480887446" anchor-label="argAs" id="-1487818788%2FFunctions%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="arg-as.html"><span>arg</span><wbr><span><span>As</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1487818788%2FFunctions%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">fun </span><span class="token operator">&lt;</span><a href="arg-as.html">T</a><span class="token operator">&gt; </span><a href="arg-as.html"><span class="token function">argAs</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">index<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="arg-as.html">T</a></div><div class="brief "><p class="paragraph">按下标读取参数并转换成目标类型。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-2128077659%2FFunctions%2F480887446" anchor-label="resultAs" id="-2128077659%2FFunctions%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="result-as.html"><span>result</span><wbr><span><span>As</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2128077659%2FFunctions%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">fun </span><span class="token operator">&lt;</span><a href="result-as.html">T</a><span class="token operator">&gt; </span><a href="result-as.html"><span class="token function">resultAs</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="result-as.html">T</a></div><div class="brief "><p class="paragraph">把 <a href="result.html">result</a> 直接转换成目标类型。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-133200448%2FFunctions%2F480887446" anchor-label="resultOrThrow" id="-133200448%2FFunctions%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="result-or-throw.html"><span>result</span><wbr><span>Or</span><wbr><span><span>Throw</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-133200448%2FFunctions%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">fun </span><a href="result-or-throw.html"><span class="token function">resultOrThrow</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">返回结果；如果存在异常则直接抛出。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-65280571%2FFunctions%2F480887446" anchor-label="thisObjectAs" id="-65280571%2FFunctions%2F480887446" data-filterable-set=":hook-xposed-82/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-82/release" data-filterable-set=":hook-xposed-82/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="this-object-as.html"><span>this</span><wbr><span>Object</span><wbr><span><span>As</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-65280571%2FFunctions%2F480887446"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-82/release"><div class="symbol monospace"><span class="token keyword">fun </span><span class="token operator">&lt;</span><a href="this-object-as.html">T</a><span class="token operator">&gt; </span><a href="this-object-as.html"><span class="token function">thisObjectAs</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="this-object-as.html">T</a></div><div class="brief "><p class="paragraph">把 <a href="this-object.html">thisObject</a> 直接转换成目标类型。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>© 2026 Copyright</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
