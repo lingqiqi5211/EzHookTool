@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "io.github.lingqiqi5211.ezhooktool.xposed82"
+    namespace = "io.github.lingqiqi5211.ezhooktool.xposed"
     compileSdk = 37
     compileSdkMinor = 0
 
@@ -34,5 +34,6 @@ dokka {
 }
 
 mavenPublishing {
-    configure(AndroidSingleVariantLibrary(publishJavadocJar = false))
+    publishToMavenCentral()
+    signAllPublications()
 }
