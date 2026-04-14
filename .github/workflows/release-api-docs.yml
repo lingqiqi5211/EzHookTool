@@ -58,6 +58,8 @@ jobs:
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Generate API docs
         run: chmod +x ./gradlew && ./gradlew generateApiDocs
