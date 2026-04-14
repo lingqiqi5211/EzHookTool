@@ -90,6 +90,15 @@ object EzReflect {
     var classLoader: ClassLoader = ClassLoader.getSystemClassLoader()
         private set
 
+    /**
+     * 始终可用的 `ClassLoader`。
+     *
+     * 未初始化时会回退到 `SystemClassLoader`。
+     */
+    @JvmStatic
+    val safeClassLoader: ClassLoader
+        get() = if (_initialized) classLoader else ClassLoader.getSystemClassLoader()
+
     /** 是否已调用过 [init]。 */
     val isInitialized: Boolean get() = _initialized
 

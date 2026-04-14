@@ -8,7 +8,7 @@ import io.github.lingqiqi5211.ezhooktool.sample82.hooks.ExampleJavaHook
 import io.github.lingqiqi5211.ezhooktool.sample82.hooks.ExampleKotlinHook
 import io.github.lingqiqi5211.ezhooktool.sample82.hooks.ExampleReporterHook
 import io.github.lingqiqi5211.ezhooktool.sample82.hooks.ExampleVipHook
-import io.github.lingqiqi5211.ezhooktool.xposed82.EzXposed
+import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 
 private const val TargetApp = "com.example.target"
 

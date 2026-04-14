@@ -9,7 +9,7 @@ import io.github.lingqiqi5211.ezhooktool.sample101.hooks.BaseHook
 import io.github.lingqiqi5211.ezhooktool.sample101.hooks.ExampleCryptoHook
 import io.github.lingqiqi5211.ezhooktool.sample101.hooks.ExampleReporterHook
 import io.github.lingqiqi5211.ezhooktool.sample101.hooks.ExampleVipHook
-import io.github.lingqiqi5211.ezhooktool.xposed101.EzXposed
+import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 
 private const val TargetApp = "com.example.target"
 

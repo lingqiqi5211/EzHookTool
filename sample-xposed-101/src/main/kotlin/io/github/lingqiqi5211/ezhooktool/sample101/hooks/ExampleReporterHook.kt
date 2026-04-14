@@ -1,7 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.sample101.hooks
 
 import io.github.lingqiqi5211.ezhooktool.core.findMethod
-import io.github.lingqiqi5211.ezhooktool.xposed101.helper.hookBefore
+import io.github.lingqiqi5211.ezhooktool.xposed.helper.hookBefore
 
 object ExampleReporterHook : BaseHook() {
     override val name: String = "ExampleReporterHook"

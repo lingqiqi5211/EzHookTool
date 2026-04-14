@@ -6,8 +6,8 @@ import android.util.Log;
 import java.lang.reflect.Method;
 import java.util.function.Consumer;
 
-import io.github.lingqiqi5211.ezhooktool.xposed82.HookParam;
-import io.github.lingqiqi5211.ezhooktool.xposed82.helper.HookHelper;
+import io.github.lingqiqi5211.ezhooktool.xposed.HookParam;
+import io.github.lingqiqi5211.ezhooktool.xposed.helper.HookHelper;
 
 public final class ExampleJavaHook extends BaseHook {
     public static final ExampleJavaHook INSTANCE = new ExampleJavaHook();
