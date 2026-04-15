@@ -110,7 +110,7 @@ fun findConstructorOrNull(
  * @param clz 目标类
  * @param condition 条件 lambda，receiver 为 Constructor
  */
-fun findAllConstructors(clz: Class<*>, condition: ConstructorCondition): List<Constructor<*>> {
+fun findAllConstructorsBy(clz: Class<*>, condition: ConstructorCondition): List<Constructor<*>> {
     val results = mutableListOf<Constructor<*>>()
     for (ctor in EzReflect.memberResolver.constructorsOf(clz)) {
         if (condition(ctor)) {
@@ -120,6 +120,37 @@ fun findAllConstructors(clz: Class<*>, condition: ConstructorCondition): List<Co
     }
     return results
 }
+
+/**
+ * 查找全部构造器。
+ *
+ * @param clz 目标类
+ */
+fun findAllConstructors(clz: Class<*>): List<Constructor<*>> = findAllConstructorsBy(clz) { true }
+
+/**
+ * 按类名查找所有匹配的构造器。
+ *
+ * @param className 目标类名
+ * @param classLoader 用于加载目标类的 `ClassLoader`
+ * @param condition 条件 lambda，receiver 为 Constructor
+ */
+fun findAllConstructorsBy(
+    className: String,
+    classLoader: ClassLoader = EzReflect.classLoader,
+    condition: ConstructorCondition,
+): List<Constructor<*>> = findAllConstructorsBy(loadClass(className, classLoader), condition)
+
+/**
+ * 按类名查找全部构造器。
+ *
+ * @param className 目标类名
+ * @param classLoader 用于加载目标类的 `ClassLoader`
+ */
+fun findAllConstructors(
+    className: String,
+    classLoader: ClassLoader = EzReflect.classLoader,
+): List<Constructor<*>> = findAllConstructors(loadClass(className, classLoader))
 
 // ═══════════════════════ 组合态链式 (String 出发) ═══════════════════════
 
@@ -155,6 +186,28 @@ fun String.findConstructorOrNull(
     return findConstructorOrNull(clz, condition)
 }
 
+/**
+ * 从类名查找所有匹配的构造器。
+ *
+ * @param classLoader 用于加载当前类名的 `ClassLoader`
+ * @param condition 条件 lambda，receiver 为 Constructor
+ */
+@JvmName("findAllConstructorsByConditionByString")
+fun String.findAllConstructorsBy(
+    classLoader: ClassLoader = EzReflect.classLoader,
+    condition: ConstructorCondition,
+): List<Constructor<*>> = findAllConstructorsBy(this, classLoader, condition)
+
+/**
+ * 从类名查找全部构造器。
+ *
+ * @param classLoader 用于加载当前类名的 `ClassLoader`
+ */
+@JvmName("findAllConstructorsByString")
+fun String.findAllConstructors(
+    classLoader: ClassLoader = EzReflect.classLoader,
+): List<Constructor<*>> = findAllConstructors(loadClass(this, classLoader))
+
 // ═══════════════════════ 组合态链式 (Class 出发) ═══════════════════════
 
 /**
@@ -184,9 +237,16 @@ fun Class<*>.findConstructorOrNull(condition: ConstructorCondition): Constructor
  *
  * @param condition 条件 lambda，receiver 为 Constructor
  */
+@JvmName("findAllConstructorsByConditionByClass")
+fun Class<*>.findAllConstructorsBy(condition: ConstructorCondition): List<Constructor<*>> =
+    findAllConstructorsBy(this, condition)
+
+/**
+ * 从 Class 对象查找全部构造器。
+ */
 @JvmName("findAllConstructorsByClass")
-fun Class<*>.findAllConstructors(condition: ConstructorCondition): List<Constructor<*>> =
-    findAllConstructors(this, condition)
+fun Class<*>.findAllConstructors(): List<Constructor<*>> =
+    findAllConstructors(this)
 
 // ═══════════════════════ 创建实例 ═══════════════════════
 

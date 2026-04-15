@@ -186,11 +186,22 @@ fun findFieldOrNull(
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
  * @param condition 条件 lambda，receiver 为 Field
  */
-fun findAllFields(
+fun findAllFieldsBy(
     clz: Class<*>,
     findSuper: Boolean? = null,
     condition: FieldCondition,
 ): List<Field> = searchFields(clz, findSuper, collectAll = true, condition)
+
+/**
+ * 查找全部字段。
+ *
+ * @param clz 目标类
+ * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
+ */
+fun findAllFields(
+    clz: Class<*>,
+    findSuper: Boolean? = null,
+): List<Field> = findAllFieldsBy(clz, findSuper) { true }
 
 /**
  * 按类名查找所有匹配的字段。
@@ -200,12 +211,25 @@ fun findAllFields(
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
  * @param condition 条件 lambda，receiver 为 Field
  */
-fun findAllFields(
+fun findAllFieldsBy(
     className: String,
     classLoader: ClassLoader = EzReflect.classLoader,
     findSuper: Boolean? = null,
     condition: FieldCondition,
-): List<Field> = findAllFields(loadClass(className, classLoader), findSuper, condition)
+): List<Field> = findAllFieldsBy(loadClass(className, classLoader), findSuper, condition)
+
+/**
+ * 按类名查找全部字段。
+ *
+ * @param className 目标类名
+ * @param classLoader 用于加载目标类的 `ClassLoader`
+ * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
+ */
+fun findAllFields(
+    className: String,
+    classLoader: ClassLoader = EzReflect.classLoader,
+    findSuper: Boolean? = null,
+): List<Field> = findAllFields(loadClass(className, classLoader), findSuper)
 
 // ═══════════════════════ 按名称获取 ═══════════════════════
 
@@ -341,12 +365,24 @@ fun String.findFieldOrNull(
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
  * @param condition 条件 lambda，receiver 为 Field
  */
+@JvmName("findAllFieldsByConditionByString")
+fun String.findAllFieldsBy(
+    classLoader: ClassLoader = EzReflect.classLoader,
+    findSuper: Boolean? = null,
+    condition: FieldCondition,
+): List<Field> = findAllFieldsBy(this, classLoader, findSuper, condition)
+
+/**
+ * 从类名查找全部字段。
+ *
+ * @param classLoader 用于加载当前类名的 `ClassLoader`
+ * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
+ */
 @JvmName("findAllFieldsByString")
 fun String.findAllFields(
     classLoader: ClassLoader = EzReflect.classLoader,
     findSuper: Boolean? = null,
-    condition: FieldCondition,
-): List<Field> = findAllFields(loadClass(this, classLoader), findSuper, condition)
+): List<Field> = findAllFields(loadClass(this, classLoader), findSuper)
 
 // ═══════════════════════ 组合态链式 (Class 出发) ═══════════════════════
 
@@ -384,11 +420,21 @@ fun Class<*>.findFieldOrNull(
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
  * @param condition 条件 lambda，receiver 为 Field
  */
+@JvmName("findAllFieldsByConditionByClass")
+fun Class<*>.findAllFieldsBy(
+    findSuper: Boolean? = null,
+    condition: FieldCondition,
+): List<Field> = findAllFieldsBy(this, findSuper, condition)
+
+/**
+ * 从 Class 对象查找全部字段。
+ *
+ * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
+ */
 @JvmName("findAllFieldsByClass")
 fun Class<*>.findAllFields(
     findSuper: Boolean? = null,
-    condition: FieldCondition,
-): List<Field> = findAllFields(this, findSuper, condition)
+): List<Field> = findAllFields(this, findSuper)
 
 // ═══════════════════════ 实例字段读取 ═══════════════════════
 

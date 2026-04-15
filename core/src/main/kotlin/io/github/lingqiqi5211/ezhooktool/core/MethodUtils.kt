@@ -71,13 +71,13 @@ private fun searchMethods(
                 }
                 // 对于 collectAll=false (findMethod)，如果当前类没找到就继续向上
                 // 对于 collectAll=true (findAllMethods, null mode)，只搜到找到为止
-                if (!collectAll && results.isEmpty()) {
-                    current = current.superclass
+                current = if (!collectAll && results.isEmpty()) {
+                    current.superclass
                 } else if (collectAll && results.isNotEmpty()) {
                     // null mode + collectAll: 当前类有结果就停
                     return results
                 } else if (collectAll) {
-                    current = current.superclass
+                    current.superclass
                 } else {
                     break
                 }
@@ -200,24 +200,41 @@ fun findMethodOrNull(
  * 查找所有匹配的方法。
  *
  * ```kotlin
- * val methods = findAllMethods(clz) { isPublic && returnType == Void.TYPE }
+ * val methods = findAllMethodsBy(clz) { isPublic && returnType == Void.TYPE }
  * ```
  */
-fun findAllMethods(
+fun findAllMethodsBy(
     clz: Class<*>,
     findSuper: Boolean? = null,
     condition: MethodCondition,
 ): List<Method> = searchMethods(clz, findSuper, collectAll = true, condition)
 
 /**
+ * 查找全部方法。
+ */
+fun findAllMethods(
+    clz: Class<*>,
+    findSuper: Boolean? = null,
+): List<Method> = findAllMethodsBy(clz, findSuper) { true }
+
+/**
  * 按类名查找所有匹配的方法。
+ */
+fun findAllMethodsBy(
+    className: String,
+    classLoader: ClassLoader = EzReflect.classLoader,
+    findSuper: Boolean? = null,
+    condition: MethodCondition,
+): List<Method> = findAllMethodsBy(loadClass(className, classLoader), findSuper, condition)
+
+/**
+ * 按类名查找全部方法。
  */
 fun findAllMethods(
     className: String,
     classLoader: ClassLoader = EzReflect.classLoader,
     findSuper: Boolean? = null,
-    condition: MethodCondition,
-): List<Method> = findAllMethods(loadClass(className, classLoader), findSuper, condition)
+): List<Method> = findAllMethods(loadClass(className, classLoader), findSuper)
 
 // ═══════════════════════ 按名称直接获取 ═══════════════════════
 
@@ -322,12 +339,21 @@ fun String.findMethodOrNull(
 /**
  * 从类名查找所有匹配的方法。
  */
+@JvmName("findAllMethodsByConditionByString")
+fun String.findAllMethodsBy(
+    classLoader: ClassLoader = EzReflect.classLoader,
+    findSuper: Boolean? = null,
+    condition: MethodCondition,
+): List<Method> = findAllMethodsBy(this, classLoader, findSuper, condition)
+
+/**
+ * 从类名查找全部方法。
+ */
 @JvmName("findAllMethodsByString")
 fun String.findAllMethods(
     classLoader: ClassLoader = EzReflect.classLoader,
     findSuper: Boolean? = null,
-    condition: MethodCondition,
-): List<Method> = findAllMethods(loadClass(this, classLoader), findSuper, condition)
+): List<Method> = findAllMethods(loadClass(this, classLoader), findSuper)
 
 // ═══════════════════════ 组合态链式 (Class 出发) ═══════════════════════
 
@@ -356,11 +382,19 @@ fun Class<*>.findMethodOrNull(
 /**
  * 从 Class 对象查找所有匹配的方法。
  */
+@JvmName("findAllMethodsByConditionByClass")
+fun Class<*>.findAllMethodsBy(
+    findSuper: Boolean? = null,
+    condition: MethodCondition,
+): List<Method> = findAllMethodsBy(this, findSuper, condition)
+
+/**
+ * 从 Class 对象查找全部方法。
+ */
 @JvmName("findAllMethodsByClass")
 fun Class<*>.findAllMethods(
     findSuper: Boolean? = null,
-    condition: MethodCondition,
-): List<Method> = findAllMethods(this, findSuper, condition)
+): List<Method> = findAllMethods(this, findSuper)
 
 // ═══════════════════════ 实例方法调用 ═══════════════════════
 

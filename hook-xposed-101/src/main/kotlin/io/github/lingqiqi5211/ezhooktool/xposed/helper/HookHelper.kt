@@ -4,7 +4,7 @@ package io.github.lingqiqi5211.ezhooktool.xposed.helper
 
 import io.github.libxposed.api.XposedInterface
 import io.github.lingqiqi5211.ezhooktool.core.findAllConstructors
-import io.github.lingqiqi5211.ezhooktool.core.findAllMethods
+import io.github.lingqiqi5211.ezhooktool.core.findAllMethodsBy
 import io.github.lingqiqi5211.ezhooktool.xposed.HookParam
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookFactory
 import java.lang.reflect.Constructor
@@ -219,7 +219,7 @@ fun Class<*>.hookAllMethods(
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
     block: HookFactory.() -> Unit,
-): List<XposedInterface.HookHandle> = findAllMethods(this, findSuper = false) { name == methodName }
+): List<XposedInterface.HookHandle> = findAllMethodsBy(this, findSuper = false) { name == methodName }
     .createHooks(priority, exceptionMode, block)
 
 /**
@@ -233,7 +233,7 @@ fun Class<*>.hookAllConstructors(
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
     block: HookFactory.() -> Unit,
-): List<XposedInterface.HookHandle> = findAllConstructors(this) { true }
+): List<XposedInterface.HookHandle> = findAllConstructors(this)
     .map { it.createHook(priority, exceptionMode, block) }
 
 /**

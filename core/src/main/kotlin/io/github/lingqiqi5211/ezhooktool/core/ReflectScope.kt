@@ -72,9 +72,13 @@ class ReflectScope internal constructor(
     fun String.findMethodOrNull(findSuper: Boolean? = null, condition: MethodCondition): java.lang.reflect.Method? =
         findMethodOrNull(this, classLoader, findSuper, condition)
 
-    /** 在当前作用域的 [classLoader] 上查找所有匹配的方法。 */
-    fun String.findAllMethods(findSuper: Boolean? = null, condition: MethodCondition): List<java.lang.reflect.Method> =
-        findAllMethods(this, classLoader, findSuper, condition)
+    /** 在当前作用域的 [classLoader] 上按条件查找所有匹配的方法。 */
+    fun String.findAllMethodsBy(findSuper: Boolean? = null, condition: MethodCondition): List<java.lang.reflect.Method> =
+        findAllMethodsBy(this, classLoader, findSuper, condition)
+
+    /** 在当前作用域的 [classLoader] 上查找全部方法。 */
+    fun String.findAllMethods(findSuper: Boolean? = null): List<java.lang.reflect.Method> =
+        findAllMethods(this, classLoader, findSuper)
 
     /** 在当前作用域的 [classLoader] 上按条件查找字段。 */
     fun String.findField(findSuper: Boolean? = null, condition: FieldCondition): java.lang.reflect.Field =
@@ -84,9 +88,13 @@ class ReflectScope internal constructor(
     fun String.findFieldOrNull(findSuper: Boolean? = null, condition: FieldCondition): java.lang.reflect.Field? =
         findFieldOrNull(this, classLoader, findSuper, condition)
 
-    /** 在当前作用域的 [classLoader] 上查找所有匹配的字段。 */
-    fun String.findAllFields(findSuper: Boolean? = null, condition: FieldCondition): List<java.lang.reflect.Field> =
-        findAllFields(this, classLoader, findSuper, condition)
+    /** 在当前作用域的 [classLoader] 上按条件查找所有匹配的字段。 */
+    fun String.findAllFieldsBy(findSuper: Boolean? = null, condition: FieldCondition): List<java.lang.reflect.Field> =
+        findAllFieldsBy(this, classLoader, findSuper, condition)
+
+    /** 在当前作用域的 [classLoader] 上查找全部字段。 */
+    fun String.findAllFields(findSuper: Boolean? = null): List<java.lang.reflect.Field> =
+        findAllFields(this, classLoader, findSuper)
 
     /** 在当前作用域的 [classLoader] 上按条件查找构造器。 */
     fun String.findConstructor(condition: ConstructorCondition): java.lang.reflect.Constructor<*> =
@@ -95,6 +103,14 @@ class ReflectScope internal constructor(
     /** 在当前作用域的 [classLoader] 上按条件查找构造器，找不到返回 `null`。 */
     fun String.findConstructorOrNull(condition: ConstructorCondition): java.lang.reflect.Constructor<*>? =
         findConstructorOrNull(this, classLoader, condition)
+
+    /** 在当前作用域的 [classLoader] 上按条件查找所有匹配的构造器。 */
+    fun String.findAllConstructorsBy(condition: ConstructorCondition): List<java.lang.reflect.Constructor<*>> =
+        findAllConstructorsBy(this, classLoader, condition)
+
+    /** 在当前作用域的 [classLoader] 上查找全部构造器。 */
+    fun String.findAllConstructors(): List<java.lang.reflect.Constructor<*>> =
+        findAllConstructors(this, classLoader)
 }
 
 /**

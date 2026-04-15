@@ -71,7 +71,10 @@ class ResolveSession private constructor(
     fun methodOrNull(condition: MethodCondition): Method? = findMethodOrNull(targetClass, findSuper, condition)
 
     /** 按条件解析全部匹配的方法。 */
-    fun methods(condition: MethodCondition): List<Method> = findAllMethods(targetClass, findSuper, condition)
+    fun methods(condition: MethodCondition): List<Method> = findAllMethodsBy(targetClass, findSuper, condition)
+
+    /** 解析全部方法。 */
+    fun methods(): List<Method> = findAllMethods(targetClass, findSuper)
 
     /** 按条件解析单个字段。 */
     fun field(condition: FieldCondition): Field =
@@ -82,7 +85,10 @@ class ResolveSession private constructor(
     fun fieldOrNull(condition: FieldCondition): Field? = findFieldOrNull(targetClass, findSuper, condition)
 
     /** 按条件解析全部匹配的字段。 */
-    fun fields(condition: FieldCondition): List<Field> = findAllFields(targetClass, findSuper, condition)
+    fun fields(condition: FieldCondition): List<Field> = findAllFieldsBy(targetClass, findSuper, condition)
+
+    /** 解析全部字段。 */
+    fun fields(): List<Field> = findAllFields(targetClass, findSuper)
 
     /** 按条件解析单个构造器。 */
     fun constructor(condition: ConstructorCondition): Constructor<*> =
@@ -93,7 +99,10 @@ class ResolveSession private constructor(
     fun constructorOrNull(condition: ConstructorCondition): Constructor<*>? = findConstructorOrNull(targetClass, condition)
 
     /** 按条件解析全部匹配的构造器。 */
-    fun constructors(condition: ConstructorCondition): List<Constructor<*>> = findAllConstructors(targetClass, condition)
+    fun constructors(condition: ConstructorCondition): List<Constructor<*>> = findAllConstructorsBy(targetClass, condition)
+
+    /** 解析全部构造器。 */
+    fun constructors(): List<Constructor<*>> = findAllConstructors(targetClass)
 
     /**
      * 对绑定实例按名称执行实例方法自动匹配调用。

@@ -136,7 +136,7 @@ class HookFactory internal constructor(
         return EzXposed.base.hook(target)
             .setPriority(priority)
             .setExceptionMode(exceptionMode)
-            .intercept(XposedInterface.Hooker { chain ->
+            .intercept { chain ->
                 if (!EzXposed.safeMode) {
                     dispatchStages(chain, localStages)
                 } else {
@@ -146,6 +146,6 @@ class HookFactory internal constructor(
                             chain.proceed()
                         }
                 }
-            })
+            }
     }
 }

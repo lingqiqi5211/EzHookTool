@@ -5,6 +5,7 @@ package io.github.lingqiqi5211.ezhooktool.xposed.helper
 import de.robv.android.xposed.XC_MethodHook
 import io.github.lingqiqi5211.ezhooktool.core.findAllConstructors
 import io.github.lingqiqi5211.ezhooktool.core.findAllMethods
+import io.github.lingqiqi5211.ezhooktool.core.findAllMethodsBy
 import io.github.lingqiqi5211.ezhooktool.xposed.HookParam
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookFactory
 import java.lang.reflect.Constructor
@@ -142,13 +143,13 @@ fun Array<Constructor<*>>.hooks(block: HookFactory.() -> Unit): List<XC_MethodHo
  * @param block 对每个匹配方法应用的 hook DSL
  */
 fun Class<*>.hookAllMethods(methodName: String, block: HookFactory.() -> Unit): List<XC_MethodHook.Unhook> =
-    findAllMethods(this, findSuper = false) { name == methodName }.createHooks(block)
+findAllMethodsBy(this, findSuper = false) { name == methodName }.createHooks(block)
 
 fun Class<*>.hookAllMethodsBefore(methodName: String, callback: (HookParam) -> Unit): List<XC_MethodHook.Unhook> =
-    findAllMethods(this, findSuper = false) { name == methodName }.createBeforeHooks(callback)
+findAllMethodsBy(this, findSuper = false) { name == methodName }.createBeforeHooks(callback)
 
 fun Class<*>.hookAllMethodsAfter(methodName: String, callback: (HookParam) -> Unit): List<XC_MethodHook.Unhook> =
-    findAllMethods(this, findSuper = false) { name == methodName }.createAfterHooks(callback)
+findAllMethodsBy(this, findSuper = false) { name == methodName }.createAfterHooks(callback)
 
 /**
  * Hook 当前类的全部构造器。
@@ -156,13 +157,13 @@ fun Class<*>.hookAllMethodsAfter(methodName: String, callback: (HookParam) -> Un
  * @param block 对每个构造器应用的 hook DSL
  */
 fun Class<*>.hookAllConstructors(block: HookFactory.() -> Unit): List<XC_MethodHook.Unhook> =
-    findAllConstructors(this) { true }.createHooks(block)
+findAllConstructors(this).createHooks(block)
 
 fun Class<*>.hookAllConstructorsBefore(callback: (HookParam) -> Unit): List<XC_MethodHook.Unhook> =
-    findAllConstructors(this) { true }.createBeforeHooks(callback)
+findAllConstructors(this).createBeforeHooks(callback)
 
 fun Class<*>.hookAllConstructorsAfter(callback: (HookParam) -> Unit): List<XC_MethodHook.Unhook> =
-    findAllConstructors(this) { true }.createAfterHooks(callback)
+findAllConstructors(this).createAfterHooks(callback)
 
 /**
  * Java 入口：为 [method] 创建 hook DSL。
