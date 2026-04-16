@@ -30,3 +30,6 @@ desktop.ini
 
 # Local properties
 local.properties
+
+# Generated docs
+doc/api/

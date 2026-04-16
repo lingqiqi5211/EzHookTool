@@ -12,25 +12,22 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: release-api-docs
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  publish:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     env:
       REPOSITORY: ${{ github.repository }}
-      GITHUB_TOKEN: ${{ github.token }}
+      PAGES_DEPLOY_TOKEN: ${{ secrets.PAGES_DEPLOY_TOKEN }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Resolve release tag
         run: |
@@ -56,20 +53,15 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+      - name: Validate deploy token
+        run: |
+          if [ -z "${PAGES_DEPLOY_TOKEN}" ]; then
+            echo "::error::Missing secret PAGES_DEPLOY_TOKEN. Use a personal access token because commits pushed with GITHUB_TOKEN do not trigger a GitHub Pages build."
+            exit 1
+          fi
 
       - name: Generate API docs
         run: chmod +x ./gradlew && ./gradlew generateApiDocs
 
-      - name: Assemble versioned site
-        run: bash ./.github/scripts/prepare-api-site.sh
-
-      - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Publish docs to gh-pages
+        run: bash ./.github/scripts/publish-api-site.sh

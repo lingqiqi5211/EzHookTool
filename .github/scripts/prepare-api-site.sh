@@ -7,25 +7,22 @@ if [[ -z "${RELEASE_TAG:-}" ]]; then
   exit 1
 fi
 
-site_dir="site"
+source_dir="${API_DOCS_SOURCE_DIR:-doc/api}"
+site_dir="${SITE_DIR:-site}"
 api_dir="${site_dir}/api"
 
-rm -rf "${site_dir}"
-mkdir -p "${api_dir}"
-
-repo_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPOSITORY}.git"
-
-if git ls-remote --exit-code --heads "${repo_url}" gh-pages >/dev/null 2>&1; then
-  git clone --depth 1 --branch gh-pages "${repo_url}" "${site_dir}"
-  rm -rf "${site_dir}/.git"
-  mkdir -p "${api_dir}"
+if [[ ! -d "${source_dir}" ]]; then
+  echo "API docs source directory does not exist: ${source_dir}" >&2
+  exit 1
 fi
+
+mkdir -p "${api_dir}"
 
 rm -rf "${api_dir}/latest" "${api_dir}/${RELEASE_TAG}"
 mkdir -p "${api_dir}/latest" "${api_dir}/${RELEASE_TAG}"
 
-cp -R doc/api/. "${api_dir}/latest/"
-cp -R doc/api/. "${api_dir}/${RELEASE_TAG}/"
+cp -R "${source_dir}/." "${api_dir}/latest/"
+cp -R "${source_dir}/." "${api_dir}/${RELEASE_TAG}/"
 
 touch "${site_dir}/.nojekyll"
 
@@ -39,6 +36,11 @@ versions_markup=""
 for version in "${versions[@]}"; do
   versions_markup="${versions_markup}<li><a href=\"./api/${version}/\">${version}</a></li>"
 done
+
+releases_url="#"
+if [[ -n "${REPOSITORY:-}" ]]; then
+  releases_url="https://github.com/${REPOSITORY}/releases"
+fi
 
 cat > "${site_dir}/index.html" <<EOF
 <!DOCTYPE html>
@@ -170,7 +172,7 @@ cat > "${site_dir}/index.html" <<EOF
         </p>
         <div class="actions">
           <a class="primary" href="./api/latest/">Browse latest docs</a>
-          <a class="secondary" href="https://github.com/${REPOSITORY}/releases">View releases</a>
+          <a class="secondary" href="${releases_url}">View releases</a>
         </div>
       </section>
       <section class="panel">
