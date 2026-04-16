@@ -1,4 +1,4 @@
-package io.github.lingqiqi5211.ezhooktool.xposed
+package io.github.lingqiqi5211.ezhooktool.xposed.common
 
 import de.robv.android.xposed.XC_MethodHook
 import java.lang.reflect.Member

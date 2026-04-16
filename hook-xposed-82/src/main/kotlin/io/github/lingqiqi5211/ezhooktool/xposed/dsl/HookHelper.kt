@@ -1,17 +1,67 @@
 @file:JvmName("HookHelper")
 
-package io.github.lingqiqi5211.ezhooktool.xposed.helper
+package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 
 import de.robv.android.xposed.XC_MethodHook
+import io.github.lingqiqi5211.ezhooktool.core.argTypes
 import io.github.lingqiqi5211.ezhooktool.core.findAllConstructors
-import io.github.lingqiqi5211.ezhooktool.core.findAllMethods
 import io.github.lingqiqi5211.ezhooktool.core.findAllMethodsBy
-import io.github.lingqiqi5211.ezhooktool.xposed.HookParam
-import io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookFactory
+import io.github.lingqiqi5211.ezhooktool.core.findConstructorBestMatch
+import io.github.lingqiqi5211.ezhooktool.core.findMethodBestMatch
+import io.github.lingqiqi5211.ezhooktool.core.loadClass
+import io.github.lingqiqi5211.ezhooktool.core.methodOrNull
+import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.HookClassLoader
 import java.lang.reflect.Constructor
-import java.lang.reflect.Member
 import java.lang.reflect.Method
-import java.util.function.Consumer
+
+/**
+ * Kotlin 优先的 hook 扩展入口。
+ *
+ * Java 调用方请改用 `xposed.java.EzXposedHelpers`。
+ */
+
+typealias HookBlock = HookParam.() -> Unit
+typealias ReplaceHookBlock = HookParam.() -> Any?
+typealias HookDsl = HookFactory.() -> Unit
+
+fun beforeHook(block: HookBlock): HookFactory.() -> Unit = {
+    before { it.block() }
+}
+
+fun afterHook(block: HookBlock): HookFactory.() -> Unit = {
+    after { it.block() }
+}
+
+fun replaceHook(block: ReplaceHookBlock): HookFactory.() -> Unit = {
+    replace { it.block() }
+}
+
+private fun Class<*>.resolveHookParameterType(parameterType: Any): Class<*> = when (parameterType) {
+    is Class<*> -> parameterType
+    is String -> loadClass(parameterType, classLoader ?: HookClassLoader.currentOrDefault())
+    else -> parameterType.javaClass
+}
+
+private fun Class<*>.resolveHookMethod(methodName: String, parameterTypes: Array<out Any?>): Method {
+    require(parameterTypes.none { it == null }) { "Null parameter type is not supported in hook helpers" }
+    if (parameterTypes.any { it !is Class<*> && it !is String }) {
+        return findMethodBestMatch(this, methodName, *parameterTypes)
+    }
+    val resolvedTypes = Array(parameterTypes.size) { index -> resolveHookParameterType(parameterTypes[index]!!) }
+    return methodOrNull(methodName, argTypes(*resolvedTypes))
+        ?: findMethodBestMatch(this, methodName, *resolvedTypes)
+}
+
+private fun Class<*>.resolveHookConstructor(parameterTypes: Array<out Any?>): Constructor<*> {
+    require(parameterTypes.none { it == null }) { "Null parameter type is not supported in hook helpers" }
+    if (parameterTypes.any { it !is Class<*> && it !is String }) {
+        return findConstructorBestMatch(this, *parameterTypes)
+    }
+    val resolvedTypes = Array(parameterTypes.size) { index -> resolveHookParameterType(parameterTypes[index]!!) }
+    return runCatching { getDeclaredConstructor(*resolvedTypes).also { it.isAccessible = true } }.getOrNull()
+        ?: findConstructorBestMatch(this, *resolvedTypes)
+}
 
 /**
  * 基于 [Method] 创建 hook DSL。
@@ -165,51 +215,119 @@ findAllConstructors(this).createBeforeHooks(callback)
 fun Class<*>.hookAllConstructorsAfter(callback: (HookParam) -> Unit): List<XC_MethodHook.Unhook> =
 findAllConstructors(this).createAfterHooks(callback)
 
-/**
- * Java 入口：为 [method] 创建 hook DSL。
- *
- * @param method 要 hook 的方法
- * @param block 用于配置 hook 行为的 Java `Consumer`
- */
-@JvmName("createMethodHook")
-fun createHook(method: Method, block: Consumer<HookFactory>): XC_MethodHook.Unhook =
-    HookFactory(method).also { block.accept(it) }.create()
+fun Class<*>.beforeMethod(
+    methodName: String,
+    vararg parameterTypes: Any?,
+    callback: HookBlock,
+): XC_MethodHook.Unhook = resolveHookMethod(methodName, parameterTypes)
+    .hookBefore { it.callback() }
 
-@JvmName("createMethodBeforeHook")
-fun createBeforeHook(method: Method, callback: Consumer<HookParam>): XC_MethodHook.Unhook =
-    method.createBeforeHook { callback.accept(it) }
+fun Class<*>.afterMethod(
+    methodName: String,
+    vararg parameterTypes: Any?,
+    callback: HookBlock,
+): XC_MethodHook.Unhook = resolveHookMethod(methodName, parameterTypes)
+    .hookAfter { it.callback() }
 
-@JvmName("createMethodAfterHook")
-fun createAfterHook(method: Method, callback: Consumer<HookParam>): XC_MethodHook.Unhook =
-    method.createAfterHook { callback.accept(it) }
+fun Class<*>.hookMethod(
+    methodName: String,
+    vararg parameterTypes: Any?,
+    block: HookDsl,
+): XC_MethodHook.Unhook = resolveHookMethod(methodName, parameterTypes)
+    .createHook(block)
 
-/**
- * Java 入口：为 [constructor] 创建 hook DSL。
- *
- * @param constructor 要 hook 的构造器
- * @param block 用于配置 hook 行为的 Java `Consumer`
- */
-@JvmName("createConstructorHook")
-fun createHook(constructor: Constructor<*>, block: Consumer<HookFactory>): XC_MethodHook.Unhook =
-    HookFactory(constructor).also { block.accept(it) }.create()
+fun Class<*>.replaceMethod(
+    methodName: String,
+    vararg parameterTypes: Any?,
+    callback: ReplaceHookBlock,
+): XC_MethodHook.Unhook = resolveHookMethod(methodName, parameterTypes)
+    .hookReplace { it.callback() }
 
-@JvmName("hookMethodBefore")
-fun hookBefore(method: Method, callback: Consumer<HookParam>): XC_MethodHook.Unhook =
-    method.hookBefore { callback.accept(it) }
+fun Class<*>.beforeConstructor(
+    vararg parameterTypes: Any?,
+    callback: HookBlock,
+): XC_MethodHook.Unhook = resolveHookConstructor(parameterTypes)
+    .hookBefore { it.callback() }
 
-@JvmName("hookMethodAfter")
-fun hookAfter(method: Method, callback: Consumer<HookParam>): XC_MethodHook.Unhook =
-    method.hookAfter { callback.accept(it) }
+fun Class<*>.afterConstructor(
+    vararg parameterTypes: Any?,
+    callback: HookBlock,
+): XC_MethodHook.Unhook = resolveHookConstructor(parameterTypes)
+    .hookAfter { it.callback() }
 
-/**
- * Java 入口：Hook [clazz] 中所有名为 [methodName] 的方法。
- *
- * @param clazz 目标类
- * @param methodName 要批量匹配的方法名
- * @param block 应用于每个匹配方法的 hook 配置
- */
-@JvmName("hookMethodAll")
-fun hookAllMethods(clazz: Class<*>, methodName: String, block: Consumer<HookFactory>): List<XC_MethodHook.Unhook> =
-    clazz.hookAllMethods(methodName) { block.accept(this) }
+fun Class<*>.hookConstructor(
+    vararg parameterTypes: Any?,
+    block: HookDsl,
+): XC_MethodHook.Unhook = resolveHookConstructor(parameterTypes)
+    .createHook(block)
 
-internal fun Any.toMemberOrThrow(): Member = this as? Member ?: error("Expected Member, got $javaClass")
+fun Class<*>.beforeAllMethods(
+    methodName: String,
+    callback: HookBlock,
+): List<XC_MethodHook.Unhook> = hookAllMethodsBefore(methodName) { it.callback() }
+
+fun Class<*>.afterAllMethods(
+    methodName: String,
+    callback: HookBlock,
+): List<XC_MethodHook.Unhook> = hookAllMethodsAfter(methodName) { it.callback() }
+
+fun Class<*>.beforeAllConstructors(
+    callback: HookBlock,
+): List<XC_MethodHook.Unhook> = hookAllConstructorsBefore { it.callback() }
+
+fun Class<*>.afterAllConstructors(
+    callback: HookBlock,
+): List<XC_MethodHook.Unhook> = hookAllConstructorsAfter { it.callback() }
+
+fun String.beforeMethod(
+    methodName: String,
+    vararg parameterTypes: Any?,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: HookBlock,
+): XC_MethodHook.Unhook = loadClass(this, classLoader)
+    .beforeMethod(methodName, *parameterTypes, callback = callback)
+
+fun String.afterMethod(
+    methodName: String,
+    vararg parameterTypes: Any?,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: HookBlock,
+): XC_MethodHook.Unhook = loadClass(this, classLoader)
+    .afterMethod(methodName, *parameterTypes, callback = callback)
+
+fun String.hookMethod(
+    methodName: String,
+    vararg parameterTypes: Any?,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    block: HookDsl,
+): XC_MethodHook.Unhook = loadClass(this, classLoader)
+    .hookMethod(methodName, *parameterTypes, block = block)
+
+fun String.replaceMethod(
+    methodName: String,
+    vararg parameterTypes: Any?,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: ReplaceHookBlock,
+): XC_MethodHook.Unhook = loadClass(this, classLoader)
+    .replaceMethod(methodName, *parameterTypes, callback = callback)
+
+fun String.beforeConstructor(
+    vararg parameterTypes: Any?,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: HookBlock,
+): XC_MethodHook.Unhook = loadClass(this, classLoader)
+    .beforeConstructor(*parameterTypes, callback = callback)
+
+fun String.afterConstructor(
+    vararg parameterTypes: Any?,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: HookBlock,
+): XC_MethodHook.Unhook = loadClass(this, classLoader)
+    .afterConstructor(*parameterTypes, callback = callback)
+
+fun String.hookConstructor(
+    vararg parameterTypes: Any?,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    block: HookDsl,
+): XC_MethodHook.Unhook = loadClass(this, classLoader)
+    .hookConstructor(*parameterTypes, block = block)

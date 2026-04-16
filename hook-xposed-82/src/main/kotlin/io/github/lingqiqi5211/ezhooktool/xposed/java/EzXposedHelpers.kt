@@ -1,4 +1,4 @@
-package io.github.lingqiqi5211.ezhooktool.xposed.helper
+package io.github.lingqiqi5211.ezhooktool.xposed.java
 
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -13,7 +13,12 @@ import io.github.lingqiqi5211.ezhooktool.core.loadClassOrNull
 import io.github.lingqiqi5211.ezhooktool.core.newInstanceAuto
 import io.github.lingqiqi5211.ezhooktool.core.putField
 import io.github.lingqiqi5211.ezhooktool.core.putStaticField
-import io.github.lingqiqi5211.ezhooktool.xposed.HookParam
+import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookFactory
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createHook
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.hookAfter
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.hookBefore
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.hookReplace
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.AdditionalFields
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.DeoptimizeBridge
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.HookClassLoader
@@ -24,11 +29,11 @@ import java.util.function.Consumer
 import java.util.function.Function
 
 /**
- * 兼容经典 Xposed `XposedHelpers` 命名风格的桥接 API。
+ * 面向 Java 调用方的 Xposed 82 静态桥接 API。
  *
- * 内部实现委托给 EzHookTool 的反射与 hook helper，方便旧代码平滑迁移。
+ * Kotlin 代码优先使用 `dsl` 包下的 hook DSL 与扩展函数。
  */
-object XposedHelpers {
+object EzXposedHelpers {
     @JvmStatic
     /** 按类名加载类，失败时抛异常。 */
     fun findClass(className: String, classLoader: ClassLoader = HookClassLoader.currentOrDefault()): Class<*> =
@@ -90,6 +95,46 @@ object XposedHelpers {
     fun findFirstFieldByExactType(clazz: Class<*>, type: Class<*>): Field =
         clazz.declaredFields.firstOrNull { it.type == type }?.also { it.isAccessible = true }
             ?: throw NoSuchFieldError("${clazz.name} first field by type ${type.name}")
+
+    @JvmStatic
+    /**
+     * 为 Java 调用方创建方法 hook DSL。
+     *
+     * @param method 要 hook 的方法
+     * @param block 用于配置 hook 行为的 Java `Consumer`
+     */
+    fun createMethodHook(method: Method, block: Consumer<HookFactory>): XC_MethodHook.Unhook =
+        method.createHook { block.accept(this) }
+
+    @JvmStatic
+    /**
+     * 为 Java 调用方创建构造器 hook DSL。
+     *
+     * @param constructor 要 hook 的构造器
+     * @param block 用于配置 hook 行为的 Java `Consumer`
+     */
+    fun createConstructorHook(constructor: Constructor<*>, block: Consumer<HookFactory>): XC_MethodHook.Unhook =
+        constructor.createHook { block.accept(this) }
+
+    @JvmStatic
+    /**
+     * 为 Java 调用方安装方法 before hook。
+     *
+     * @param method 要 hook 的方法
+     * @param callback before 回调
+     */
+    fun createMethodBeforeHook(method: Method, callback: Consumer<HookParam>): XC_MethodHook.Unhook =
+        method.hookBefore { callback.accept(it) }
+
+    @JvmStatic
+    /**
+     * 为 Java 调用方安装方法 after hook。
+     *
+     * @param method 要 hook 的方法
+     * @param callback after 回调
+     */
+    fun createMethodAfterHook(method: Method, callback: Consumer<HookParam>): XC_MethodHook.Unhook =
+        method.hookAfter { callback.accept(it) }
 
     @JvmStatic
     /**
@@ -345,6 +390,19 @@ object XposedHelpers {
      */
     @JvmStatic
     fun deoptimizeMethods(clazz: Class<*>, vararg names: String) = DeoptimizeBridge.deoptimizeMethods(clazz, *names)
+
+    @JvmStatic
+    /**
+     * 为 Java 调用方批量 hook 当前类里所有同名方法。
+     *
+     * @param clazz 目标类
+     * @param methodName 要批量匹配的方法名
+     * @param block 用于配置 hook 行为的 Java `Consumer`
+     */
+    fun hookAllMethods(clazz: Class<*>, methodName: String, block: Consumer<HookFactory>): List<XC_MethodHook.Unhook> =
+        clazz.declaredMethods
+            .filter { it.name == methodName }
+            .map { method -> method.createHook { block.accept(this) } }
 
     private fun resolveMethod(clazz: Class<*>, methodName: String, args: Array<out Any>): Method {
         val types = args.dropLast(1).map { resolveType(clazz, it) }.toTypedArray()

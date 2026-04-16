@@ -4,7 +4,7 @@ import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
-import io.github.lingqiqi5211.ezhooktool.xposed.HookParam
+import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
 import java.lang.reflect.Member
 import java.util.function.Consumer
 import java.util.function.Function

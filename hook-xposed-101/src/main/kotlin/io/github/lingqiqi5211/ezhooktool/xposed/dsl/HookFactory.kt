@@ -3,8 +3,13 @@ package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 import io.github.libxposed.api.XposedInterface
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
-import io.github.lingqiqi5211.ezhooktool.xposed.HookParam
-import io.github.lingqiqi5211.ezhooktool.xposed.dispatchStages
+import io.github.lingqiqi5211.ezhooktool.xposed.common.AfterChainStage
+import io.github.lingqiqi5211.ezhooktool.xposed.common.BeforeChainStage
+import io.github.lingqiqi5211.ezhooktool.xposed.common.ChainStage
+import io.github.lingqiqi5211.ezhooktool.xposed.common.HookChain
+import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
+import io.github.lingqiqi5211.ezhooktool.xposed.common.InterceptChainStage
+import io.github.lingqiqi5211.ezhooktool.xposed.common.ReplaceChainStage
 import java.lang.reflect.Executable
 import java.util.function.Consumer
 import java.util.function.Function
@@ -12,18 +17,11 @@ import java.util.function.Function
 /** Hook 回调签名。 */
 typealias HookCallback = (HookParam) -> Unit
 
-internal sealed interface HookStage {
-    data class Before(val callback: HookCallback) : HookStage
-    data class After(val callback: HookCallback) : HookStage
-    data class Replace(val callback: (HookParam) -> Any?) : HookStage
-    data class Intercept(val callback: XposedInterface.Hooker) : HookStage
-}
-
 /** libxposed 101 hook DSL 构造器。 */
 class HookFactory internal constructor(
     private val target: Executable,
 ) {
-    private val stages = mutableListOf<HookStage>()
+    private val stages = mutableListOf<ChainStage>()
     private var priority: Int = XposedInterface.PRIORITY_DEFAULT
     private var exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT
 
@@ -33,7 +31,7 @@ class HookFactory internal constructor(
      * @param callback 原始调用前执行的回调
      */
     fun before(callback: HookCallback) {
-        stages += HookStage.Before(callback)
+        stages += BeforeChainStage(callback)
     }
 
     /**
@@ -42,7 +40,7 @@ class HookFactory internal constructor(
      * @param callback 原始调用前执行的 Java 回调
      */
     fun before(callback: Consumer<HookParam>) {
-        stages += HookStage.Before { callback.accept(it) }
+        stages += BeforeChainStage { callback.accept(it) }
     }
 
     /**
@@ -51,7 +49,7 @@ class HookFactory internal constructor(
      * @param callback 原始调用后执行的回调
      */
     fun after(callback: HookCallback) {
-        stages += HookStage.After(callback)
+        stages += AfterChainStage(callback)
     }
 
     /**
@@ -60,7 +58,7 @@ class HookFactory internal constructor(
      * @param callback 原始调用后执行的 Java 回调
      */
     fun after(callback: Consumer<HookParam>) {
-        stages += HookStage.After { callback.accept(it) }
+        stages += AfterChainStage { callback.accept(it) }
     }
 
     /**
@@ -69,7 +67,7 @@ class HookFactory internal constructor(
      * @param callback 生成替代返回值的回调
      */
     fun replace(callback: (HookParam) -> Any?) {
-        stages += HookStage.Replace(callback)
+        stages += ReplaceChainStage(callback)
     }
 
     /**
@@ -78,7 +76,7 @@ class HookFactory internal constructor(
      * @param callback 生成替代返回值的 Java 回调
      */
     fun replace(callback: Function<HookParam, Any?>) {
-        stages += HookStage.Replace { callback.apply(it) }
+        stages += ReplaceChainStage { callback.apply(it) }
     }
 
     /**
@@ -87,7 +85,7 @@ class HookFactory internal constructor(
      * @param callback 接收 [XposedInterface.Chain] 的 around 回调
      */
     fun intercept(callback: (XposedInterface.Chain) -> Any?) {
-        stages += HookStage.Intercept(XposedInterface.Hooker { callback(it) })
+        stages += InterceptChainStage(callback)
     }
 
     /**
@@ -96,12 +94,12 @@ class HookFactory internal constructor(
      * @param callback libxposed 原生 hooker
      */
     fun intercept(callback: XposedInterface.Hooker) {
-        stages += HookStage.Intercept(callback)
+        stages += InterceptChainStage { callback.intercept(it) }
     }
 
     /** 中断原始调用并返回 `null`。 */
     fun interrupt() {
-        stages += HookStage.Replace { null }
+        returnConstant(null)
     }
 
     /**
@@ -110,7 +108,7 @@ class HookFactory internal constructor(
      * @param value 要返回给调用方的固定值
      */
     fun returnConstant(value: Any?) {
-        stages += HookStage.Replace { value }
+        stages += ReplaceChainStage { value }
     }
 
     /**
@@ -132,15 +130,16 @@ class HookFactory internal constructor(
     }
 
     internal fun create(): XposedInterface.HookHandle {
-        val localStages = stages.toList()
+        require(stages.isNotEmpty()) { "No hook callback specified" }
+        val hookChain = HookChain(stages.toList())
         return EzXposed.base.hook(target)
             .setPriority(priority)
             .setExceptionMode(exceptionMode)
             .intercept { chain ->
                 if (!EzXposed.safeMode) {
-                    dispatchStages(chain, localStages)
+                    hookChain.invoke(chain)
                 } else {
-                    runCatching { dispatchStages(chain, localStages) }
+                    runCatching { hookChain.invoke(chain) }
                         .getOrElse {
                             EzReflect.logger.error("Hook", "hook failed for $target", it)
                             chain.proceed()

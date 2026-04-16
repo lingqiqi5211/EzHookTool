@@ -1,4 +1,4 @@
-package io.github.lingqiqi5211.ezhooktool.xposed.helper
+package io.github.lingqiqi5211.ezhooktool.xposed.java
 
 import io.github.libxposed.api.XposedInterface
 import io.github.lingqiqi5211.ezhooktool.core.findConstructorBestMatch as coreFindConstructorBestMatch
@@ -13,7 +13,13 @@ import io.github.lingqiqi5211.ezhooktool.core.newInstanceAuto
 import io.github.lingqiqi5211.ezhooktool.core.putField
 import io.github.lingqiqi5211.ezhooktool.core.putStaticField
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
-import io.github.lingqiqi5211.ezhooktool.xposed.HookParam
+import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookFactory
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createHook
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.hook
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.hookAfter
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.hookBefore
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.hookReplace
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.AdditionalFields
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.HookClassLoader
 import java.lang.reflect.Constructor
@@ -24,11 +30,11 @@ import java.util.function.Consumer
 import java.util.function.Function
 
 /**
- * 兼容 libxposed 101 场景下 `XposedHelpers` 命名风格的桥接 API。
+ * 面向 Java 调用方的 libxposed 101 静态桥接 API。
  *
- * 内部委托给 EzHookTool 的反射和 hook helper，方便旧风格调用迁移。
+ * Kotlin 代码优先使用 `dsl` 包下的 hook DSL 与扩展函数。
  */
-object XposedHelpers {
+object EzXposedHelpers {
     @JvmStatic
     /** 按类名加载类，失败时抛异常。 */
     fun findClass(className: String, classLoader: ClassLoader = HookClassLoader.currentOrDefault()): Class<*> =
@@ -93,6 +99,38 @@ object XposedHelpers {
 
     @JvmStatic
     /**
+     * 为 Java 调用方创建方法 hook DSL。
+     *
+     * @param method 要 hook 的方法
+     * @param priority hook 优先级，数值越大越先执行
+     * @param exceptionMode hook 过程中异常的处理策略
+     * @param block 用于配置 hook 行为的 Java `Consumer`
+     */
+    fun createMethodHook(
+        method: Method,
+        priority: Int = XposedInterface.PRIORITY_DEFAULT,
+        exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+        block: Consumer<HookFactory>,
+    ): XposedInterface.HookHandle = method.createHook(priority, exceptionMode) { block.accept(this) }
+
+    @JvmStatic
+    /**
+     * 为 Java 调用方创建构造器 hook DSL。
+     *
+     * @param constructor 要 hook 的构造器
+     * @param priority hook 优先级，数值越大越先执行
+     * @param exceptionMode hook 过程中异常的处理策略
+     * @param block 用于配置 hook 行为的 Java `Consumer`
+     */
+    fun createConstructorHook(
+        constructor: Constructor<*>,
+        priority: Int = XposedInterface.PRIORITY_DEFAULT,
+        exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+        block: Consumer<HookFactory>,
+    ): XposedInterface.HookHandle = constructor.createHook(priority, exceptionMode) { block.accept(this) }
+
+    @JvmStatic
+    /**
      * 直接为方法创建 DSL 风格 hook。
      *
      * @param method 要 hook 的方法
@@ -110,6 +148,70 @@ object XposedHelpers {
      */
     fun hookConstructor(constructor: Constructor<*>, block: io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookFactory.() -> Unit): XposedInterface.HookHandle =
         constructor.createHook(block = block)
+
+    @JvmStatic
+    /**
+     * 直接用原生 `Hooker` 为方法安装 around hook。
+     *
+     * @param method 要 hook 的方法
+     * @param priority hook 优先级，数值越大越先执行
+     * @param exceptionMode hook 过程中异常的处理策略
+     * @param callback libxposed 原生 hooker
+     */
+    fun hookMethod(
+        method: Method,
+        priority: Int = XposedInterface.PRIORITY_DEFAULT,
+        exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+        callback: XposedInterface.Hooker,
+    ): XposedInterface.HookHandle = method.hook(priority, exceptionMode) { callback.intercept(it) }
+
+    @JvmStatic
+    /**
+     * 为 Java 调用方安装方法 before hook。
+     *
+     * @param method 要 hook 的方法
+     * @param priority hook 优先级，数值越大越先执行
+     * @param exceptionMode hook 过程中异常的处理策略
+     * @param callback before 回调
+     */
+    fun hookMethodBefore(
+        method: Method,
+        priority: Int = XposedInterface.PRIORITY_DEFAULT,
+        exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+        callback: Consumer<HookParam>,
+    ): XposedInterface.HookHandle = method.hookBefore(priority, exceptionMode) { callback.accept(it) }
+
+    @JvmStatic
+    /**
+     * 为 Java 调用方安装方法 after hook。
+     *
+     * @param method 要 hook 的方法
+     * @param priority hook 优先级，数值越大越先执行
+     * @param exceptionMode hook 过程中异常的处理策略
+     * @param callback after 回调
+     */
+    fun hookMethodAfter(
+        method: Method,
+        priority: Int = XposedInterface.PRIORITY_DEFAULT,
+        exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+        callback: Consumer<HookParam>,
+    ): XposedInterface.HookHandle = method.hookAfter(priority, exceptionMode) { callback.accept(it) }
+
+    @JvmStatic
+    /**
+     * 为 Java 调用方安装方法 replace hook。
+     *
+     * @param method 要 hook 的方法
+     * @param priority hook 优先级，数值越大越先执行
+     * @param exceptionMode hook 过程中异常的处理策略
+     * @param callback replace 回调
+     */
+    fun hookMethodReplace(
+        method: Method,
+        priority: Int = XposedInterface.PRIORITY_DEFAULT,
+        exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+        callback: Function<HookParam, Any?>,
+    ): XposedInterface.HookHandle = method.hookReplace(priority, exceptionMode) { callback.apply(it) }
 
     @JvmStatic
     /**

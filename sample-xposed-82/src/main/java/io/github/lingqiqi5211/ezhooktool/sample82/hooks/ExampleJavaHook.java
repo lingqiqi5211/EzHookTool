@@ -6,8 +6,8 @@ import android.util.Log;
 import java.lang.reflect.Method;
 import java.util.function.Consumer;
 
-import io.github.lingqiqi5211.ezhooktool.xposed.HookParam;
-import io.github.lingqiqi5211.ezhooktool.xposed.helper.HookHelper;
+import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam;
+import io.github.lingqiqi5211.ezhooktool.xposed.java.EzXposedHelpers;
 
 public final class ExampleJavaHook extends BaseHook {
     public static final ExampleJavaHook INSTANCE = new ExampleJavaHook();
@@ -24,7 +24,7 @@ public final class ExampleJavaHook extends BaseHook {
             throw new IllegalStateException("Cannot find Application#onCreate", e);
         }
 
-        HookHelper.createMethodHook(onCreate, hookFactory -> {
+        EzXposedHelpers.createMethodHook(onCreate, hookFactory -> {
             hookFactory.before((Consumer<HookParam>) param -> Log.i(getName(), "Hello, Java before hook!"));
             hookFactory.after((Consumer<HookParam>) param -> Log.i(getName(), "Hello, Java after hook!"));
         });

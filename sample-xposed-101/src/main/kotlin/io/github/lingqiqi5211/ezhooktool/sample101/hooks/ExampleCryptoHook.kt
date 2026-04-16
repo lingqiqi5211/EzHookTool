@@ -1,7 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.sample101.hooks
 
 import io.github.lingqiqi5211.ezhooktool.core.findMethod
-import io.github.lingqiqi5211.ezhooktool.xposed.helper.hookIntercept
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.hookIntercept
 
 object ExampleCryptoHook : BaseHook() {
     override val name: String = "ExampleCryptoHook"

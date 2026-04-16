@@ -3,7 +3,7 @@ package io.github.lingqiqi5211.ezhooktool.sample82.hooks
 import android.app.Application
 import android.util.Log
 import io.github.lingqiqi5211.ezhooktool.core.findMethod
-import io.github.lingqiqi5211.ezhooktool.xposed.helper.createHook
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createHook
 
 object ExampleKotlinHook : BaseHook() {
     override val name: String = "ExampleKotlinHook"
