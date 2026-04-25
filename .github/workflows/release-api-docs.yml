@@ -24,12 +24,8 @@ jobs:
       REPOSITORY: ${{ github.repository }}
       PAGES_DEPLOY_TOKEN: ${{ secrets.PAGES_DEPLOY_TOKEN }}
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
       - name: Resolve release tag
+        id: release
         run: |
           release_tag="${{ github.event.release.tag_name }}"
           if [ -z "${release_tag}" ]; then
@@ -40,6 +36,13 @@ jobs:
             exit 1
           fi
           echo "RELEASE_TAG=${release_tag}" >> "$GITHUB_ENV"
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.release_tag }}
+          persist-credentials: false
 
       - name: Set up Java
         uses: actions/setup-java@v4

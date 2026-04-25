@@ -119,7 +119,7 @@ EzReflect.init(yourClassLoader)
 
 - `doc/api/index.html`
 
-发布后的在线文档会跟随 GitHub Release 自动构建，并写入 `gh-pages` 分支，再由 GitHub Pages 提供：
+发布后的在线文档会跟随 GitHub Release 自动构建，并写入 `gh-pages` 分支的 `api/latest/` 与 `api/<tag>/`：
 
 - 最新版：`https://lingqiqi5211.github.io/EzHookTool/api/latest/`
 - 指定 release：`https://lingqiqi5211.github.io/EzHookTool/api/<tag>/`

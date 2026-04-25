@@ -25,12 +25,23 @@ export API_DOCS_SOURCE_DIR="${API_DOCS_SOURCE_DIR:-doc/api}"
 
 rm -rf "${site_dir}"
 
-if git ls-remote --exit-code --heads "${repo_url}" gh-pages >/dev/null 2>&1; then
+ls_remote_error="$(mktemp)"
+if git ls-remote --exit-code --heads "${repo_url}" gh-pages >/dev/null 2>"${ls_remote_error}"; then
+  rm -f "${ls_remote_error}"
   git clone --depth 1 --branch gh-pages "${repo_url}" "${site_dir}"
 else
-  mkdir -p "${site_dir}"
-  git -C "${site_dir}" init --initial-branch=gh-pages
-  git -C "${site_dir}" remote add origin "${repo_url}"
+  ls_remote_status=$?
+  if [[ "${ls_remote_status}" -eq 2 ]]; then
+    rm -f "${ls_remote_error}"
+    mkdir -p "${site_dir}"
+    git -C "${site_dir}" init --initial-branch=gh-pages
+    git -C "${site_dir}" remote add origin "${repo_url}"
+  else
+    echo "Cannot query gh-pages branch. Check PAGES_DEPLOY_TOKEN and repository access." >&2
+    sed -E 's#x-access-token:[^@]+@#x-access-token:***@#g' "${ls_remote_error}" >&2
+    rm -f "${ls_remote_error}"
+    exit "${ls_remote_status}"
+  fi
 fi
 
 bash ./.github/scripts/prepare-api-site.sh

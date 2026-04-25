@@ -16,6 +16,11 @@ if [[ ! -d "${source_dir}" ]]; then
   exit 1
 fi
 
+if [[ ! -f "${source_dir}/index.html" ]]; then
+  echo "API docs index does not exist: ${source_dir}/index.html" >&2
+  exit 1
+fi
+
 mkdir -p "${api_dir}"
 
 rm -rf "${api_dir}/latest" "${api_dir}/${RELEASE_TAG}"
