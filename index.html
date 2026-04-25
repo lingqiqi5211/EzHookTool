@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EzHookTool API Docs</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4efe7;
+        --card: rgba(255, 255, 255, 0.92);
+        --ink: #1d1b16;
+        --muted: #5b5448;
+        --accent: #a64b2a;
+        --border: rgba(29, 27, 22, 0.08);
+        --shadow: 0 18px 50px rgba(77, 47, 23, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "Noto Sans", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(245, 199, 110, 0.35), transparent 30%),
+          radial-gradient(circle at bottom right, rgba(166, 75, 42, 0.18), transparent 30%),
+          linear-gradient(135deg, #f8f3ea 0%, #efe4d6 100%);
+        min-height: 100vh;
+      }
+
+      main {
+        width: min(920px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 56px 0 72px;
+      }
+
+      .hero {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        padding: 32px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(10px);
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(2rem, 5vw, 3.5rem);
+        line-height: 1.05;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.7;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .actions a {
+        text-decoration: none;
+        padding: 12px 18px;
+        border-radius: 999px;
+        font-weight: 600;
+      }
+
+      .primary {
+        background: var(--accent);
+        color: #fff7f1;
+      }
+
+      .secondary {
+        color: var(--accent);
+        border: 1px solid rgba(166, 75, 42, 0.28);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .panel {
+        margin-top: 24px;
+        background: rgba(255, 255, 255, 0.84);
+        border-radius: 24px;
+        border: 1px solid var(--border);
+        padding: 28px 32px;
+        box-shadow: var(--shadow);
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 1.2rem;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 20px;
+        line-height: 1.9;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      code {
+        font-family: "Cascadia Code", "JetBrains Mono", monospace;
+        background: rgba(29, 27, 22, 0.06);
+        border-radius: 6px;
+        padding: 0.1em 0.35em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p>EzHookTool</p>
+        <h1>API documentation published with every release</h1>
+        <p>
+          Each published GitHub Release builds a fresh Dokka site, updates <code>latest</code>,
+          and keeps a versioned copy under its release tag so the docs can be browsed directly on GitHub Pages.
+        </p>
+        <div class="actions">
+          <a class="primary" href="./api/latest/">Browse latest docs</a>
+          <a class="secondary" href="https://github.com/lingqiqi5211/EzHookTool/releases">View releases</a>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Available versions</h2>
+        <ul><li><a href="./api/1.0.0-rc03-test/">1.0.0-rc03-test</a></li></ul>
+      </section>
+    </main>
+  </body>
+</html>

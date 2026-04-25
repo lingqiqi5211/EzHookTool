@@ -1,0 +1,15 @@
+$dokka.format:html-v1
+$dokka.linkExtension:html
+
+module:core
+io.github.lingqiqi5211.ezhooktool.core
+module:hook-xposed-101
+io.github.lingqiqi5211.ezhooktool.xposed
+io.github.lingqiqi5211.ezhooktool.xposed.common
+io.github.lingqiqi5211.ezhooktool.xposed.dsl
+io.github.lingqiqi5211.ezhooktool.xposed.java
+module:hook-xposed-82
+io.github.lingqiqi5211.ezhooktool.xposed
+io.github.lingqiqi5211.ezhooktool.xposed.common
+io.github.lingqiqi5211.ezhooktool.xposed.dsl
+io.github.lingqiqi5211.ezhooktool.xposed.java
