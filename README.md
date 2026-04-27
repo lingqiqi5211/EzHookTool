@@ -3,6 +3,8 @@
 一个让 Android / Xposed / libxposed 场景下的反射与 hook 编写更直接的 Kotlin 工具库。  
 当前拆分为 `core`、`hook-xposed-82`、`hook-xposed-101` 三个主模块，其中 `core` 可以单独用于纯反射场景。
 
+当前 Maven 最新构建版本为: ![Maven Central Version](https://img.shields.io/maven-central/v/io.github.lingqiqi5211.ezhooktool/core)
+
 ### 快速开始
 
 `build.gradle`
