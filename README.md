@@ -115,6 +115,10 @@ EzReflect.init(yourClassLoader)
 
 已接入 Dokka。
 
+推荐用法和参数说明见：
+
+- `doc/overview.md`
+
 本地生成后的文档位于：
 
 - `doc/api/index.html`
@@ -134,7 +138,7 @@ EzReflect.init(yourClassLoader)
 
 1. 先看 `core`
 2. 再根据运行时选择 `hook-xposed-82` 或 `hook-xposed-101`
-3. 需要兼容旧写法时，再看对应模块里的 `XposedHelpers`
+3. Java 写法入口看 `core.java` 包下的 `Classes`、`Methods`、`Fields`、`Constructors`，以及 hook 模块里的 `xposed.java.Hooks`
 
 ### 构建
 

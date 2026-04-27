@@ -2,6 +2,10 @@
 
 package io.github.lingqiqi5211.ezhooktool.core
 
+private data class ClassNameCacheKey(val name: String)
+
+private data class FirstClassNameCacheKey(val names: List<String>)
+
 // ═══════════════════════ 基础加载 ═══════════════════════
 
 /**
@@ -19,6 +23,12 @@ fun loadClass(name: String, classLoader: ClassLoader = EzReflect.classLoader): C
         ?: throw ClassNotFoundError(name, classLoader.toString())
 
 /**
+ * 查找类。找不到时抛出 [ClassNotFoundError]。
+ */
+fun findClass(name: String, classLoader: ClassLoader = EzReflect.classLoader): Class<*> =
+    loadClass(name, classLoader)
+
+/**
  * 加载类。找不到时返回 null。
  *
  * ```kotlin
@@ -28,12 +38,26 @@ fun loadClass(name: String, classLoader: ClassLoader = EzReflect.classLoader): C
  * @param name 目标类名
  * @param classLoader 用于加载目标类的 `ClassLoader`
  */
-fun loadClassOrNull(name: String, classLoader: ClassLoader = EzReflect.classLoader): Class<*>? =
-    try {
+fun loadClassOrNull(name: String, classLoader: ClassLoader = EzReflect.classLoader): Class<*>? {
+    val key = ClassNameCacheKey(name)
+    EzReflect.classCacheGet(classLoader, key)?.let { return it }
+
+    val clz = try {
         Class.forName(name, false, classLoader)
     } catch (_: ClassNotFoundException) {
         null
     }
+    if (clz != null) {
+        EzReflect.classCachePut(classLoader, key, clz)
+    }
+    return clz
+}
+
+/**
+ * 查找类。找不到时返回 null。
+ */
+fun findClassOrNull(name: String, classLoader: ClassLoader = EzReflect.classLoader): Class<*>? =
+    loadClassOrNull(name, classLoader)
 
 // ═══════════════════════ 多名称兜底 ═══════════════════════
 
@@ -58,6 +82,12 @@ fun loadClassFirst(vararg names: String, classLoader: ClassLoader = EzReflect.cl
         )
 
 /**
+ * 依次尝试多个类名，返回第一个成功加载的类。
+ */
+fun findFirstClass(vararg names: String, classLoader: ClassLoader = EzReflect.classLoader): Class<*> =
+    loadClassFirst(*names, classLoader = classLoader)
+
+/**
  * 同 [loadClassFirst]，全部找不到时返回 null。
  *
  * ```kotlin
@@ -68,12 +98,24 @@ fun loadClassFirst(vararg names: String, classLoader: ClassLoader = EzReflect.cl
  * @param classLoader 用于加载候选类的 `ClassLoader`
  */
 fun loadClassFirstOrNull(vararg names: String, classLoader: ClassLoader = EzReflect.classLoader): Class<*>? {
+    val key = FirstClassNameCacheKey(names.toList())
+    EzReflect.classCacheGet(classLoader, key)?.let { return it }
+
     for (name in names) {
         val clz = loadClassOrNull(name, classLoader)
-        if (clz != null) return clz
+        if (clz != null) {
+            EzReflect.classCachePut(classLoader, key, clz)
+            return clz
+        }
     }
     return null
 }
+
+/**
+ * 依次尝试多个类名，全部找不到时返回 null。
+ */
+fun findFirstClassOrNull(vararg names: String, classLoader: ClassLoader = EzReflect.classLoader): Class<*>? =
+    loadClassFirstOrNull(*names, classLoader = classLoader)
 
 // ═══════════════════════ 批量加载 ═══════════════════════
 
@@ -106,6 +148,13 @@ fun String.toClass(classLoader: ClassLoader = EzReflect.classLoader): Class<*> =
     loadClass(this, classLoader)
 
 /**
+ * 字符串直接查找 Class。
+ */
+@JvmName("findClassFromString")
+fun String.findClass(classLoader: ClassLoader = EzReflect.classLoader): Class<*> =
+    findClass(this, classLoader)
+
+/**
  * 字符串直接转 Class，找不到返回 null。
  *
  * ```kotlin
@@ -116,6 +165,13 @@ fun String.toClass(classLoader: ClassLoader = EzReflect.classLoader): Class<*> =
  */
 fun String.toClassOrNull(classLoader: ClassLoader = EzReflect.classLoader): Class<*>? =
     loadClassOrNull(this, classLoader)
+
+/**
+ * 字符串直接查找 Class，找不到返回 null。
+ */
+@JvmName("findClassOrNullFromString")
+fun String.findClassOrNull(classLoader: ClassLoader = EzReflect.classLoader): Class<*>? =
+    findClassOrNull(this, classLoader)
 
 // ═══════════════════════ Class 工具扩展 ═══════════════════════
 

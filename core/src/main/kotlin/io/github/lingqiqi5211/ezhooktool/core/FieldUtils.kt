@@ -2,13 +2,20 @@
 
 package io.github.lingqiqi5211.ezhooktool.core
 
+import io.github.lingqiqi5211.ezhooktool.core.query.FieldQuery
+import io.github.lingqiqi5211.ezhooktool.core.query.fieldCondition
+import io.github.lingqiqi5211.ezhooktool.core.query.fieldExactCacheKeys
+import io.github.lingqiqi5211.ezhooktool.core.query.fieldQuery
 import java.lang.reflect.Field
 
 /**
  * 字段查找条件。以 Field 为 receiver。
  *
  * ```kotlin
- * findField(clz) { name == "mValue" && type == String::class.java }
+ * findField(clz) {
+ *     name("mValue")
+ *     type(String::class.java)
+ * }
  * ```
  */
 typealias FieldCondition = Field.() -> Boolean
@@ -81,67 +88,117 @@ private fun getFieldCandidates(clz: Class<*>): List<String> {
 // ═══════════════════════ Cache Keys ═══════════════════════
 
 private data class FieldCacheKey(
-    val clz: Class<*>,
-    val conditionIdentity: Any,
+    val queryKey: List<Any>,
     val findSuper: Boolean?,
 )
 
 private data class FieldNameCacheKey(
-    val clz: Class<*>,
     val name: String,
     val isStatic: Boolean?,
     val fieldType: Class<*>?,
 )
 
-// ═══════════════════════ 按条件查找 (Class) ═══════════════════════
+private data class DeclaringFieldCacheKey(
+    val owner: Class<*>,
+    val key: FieldCacheKey,
+)
+
+private fun cacheExactFields(
+    searchClass: Class<*>,
+    findSuper: Boolean?,
+    fields: List<Field>,
+    cacheSearchClass: Boolean,
+) {
+    if (!EzReflect.cacheEnabled) return
+    val searchKeys = HashSet<FieldCacheKey>()
+    val declaringKeys = HashSet<DeclaringFieldCacheKey>()
+
+    for (field in fields) {
+        for (queryKey in fieldExactCacheKeys(field)) {
+            if (cacheSearchClass) {
+                val key = FieldCacheKey(queryKey, findSuper)
+                if (searchKeys.add(key)) {
+                    EzReflect.cachePut(searchClass, ReflectCacheBucket.FIELD, key, field)
+                }
+            }
+
+            val currentClassKey = FieldCacheKey(queryKey, false)
+            val smartKey = FieldCacheKey(queryKey, null)
+            if (declaringKeys.add(DeclaringFieldCacheKey(field.declaringClass, currentClassKey))) {
+                EzReflect.cachePut(field.declaringClass, ReflectCacheBucket.FIELD, currentClassKey, field)
+            }
+            if (declaringKeys.add(DeclaringFieldCacheKey(field.declaringClass, smartKey))) {
+                EzReflect.cachePut(field.declaringClass, ReflectCacheBucket.FIELD, smartKey, field)
+            }
+        }
+    }
+}
+
+// ═══════════════════════ 按查询条件查找 (Class) ═══════════════════════
 
 /**
- * 按条件查找字段。
+ * 按查询条件查找字段。
  *
  * ```kotlin
- * val f = findField(clz) { name == "mCallback" && type == Runnable::class.java }
+ * val f = findField(clz) {
+ *     name("mCallback")
+ *     type(Runnable::class.java)
+ * }
  * ```
  *
  * @param clz        目标类
  * @param findSuper  null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition  条件 lambda，receiver 为 Field
+ * @param query      查询条件块
  * @return 第一个匹配的 Field（已 setAccessible）
  * @throws MemberNotFoundException 找不到时
  */
 fun findField(
     clz: Class<*>,
     findSuper: Boolean? = null,
-    condition: FieldCondition,
+    query: FieldQuery.() -> Unit,
 ): Field {
-    return findFieldOrNull(clz, findSuper, condition)
+    val builtQuery = fieldQuery(query)
+    val effectiveFindSuper = builtQuery.effectiveFindSuper(findSuper)
+    return findFieldOrNull(clz, findSuper, builtQuery)
         ?: throw MemberNotFoundException(
             memberType = MemberType.FIELD,
             targetClass = clz.name,
-            searchedSuper = findSuper != false,
+            searchedSuper = effectiveFindSuper != false,
             candidates = getFieldCandidates(clz)
         )
 }
 
 /**
- * 按条件查找字段，找不到返回 null。
+ * 按查询条件查找字段，找不到返回 null。
  *
  * @param clz 目标类
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
+ * @param query 查询条件块
  */
 fun findFieldOrNull(
     clz: Class<*>,
     findSuper: Boolean? = null,
-    condition: FieldCondition,
+    query: FieldQuery.() -> Unit,
 ): Field? {
-    if (EzReflect.cacheEnabled) {
-        val key = FieldCacheKey(clz, condition, findSuper)
-        val cached = EzReflect.cache[key]
+    return findFieldOrNull(clz, findSuper, fieldQuery(query))
+}
+
+private fun findFieldOrNull(
+    clz: Class<*>,
+    findSuper: Boolean?,
+    query: FieldQuery,
+): Field? {
+    val effectiveFindSuper = query.effectiveFindSuper(findSuper)
+    val condition = fieldCondition(query)
+    val queryKey = query.cacheKeyOrNull()
+    if (EzReflect.cacheEnabled && queryKey != null) {
+        val key = FieldCacheKey(queryKey, effectiveFindSuper)
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.FIELD, key)
         if (cached is Field) return cached
     }
-    val result = searchFields(clz, findSuper, collectAll = false, condition).firstOrNull()
-    if (result != null && EzReflect.cacheEnabled) {
-        EzReflect.cache[FieldCacheKey(clz, condition, findSuper)] = result
+    val result = searchFields(clz, effectiveFindSuper, collectAll = false, condition).firstOrNull()
+    if (result != null && EzReflect.cacheEnabled && queryKey != null) {
+        EzReflect.cachePut(clz, ReflectCacheBucket.FIELD, FieldCacheKey(queryKey, effectiveFindSuper), result)
     }
     return result
 }
@@ -152,14 +209,14 @@ fun findFieldOrNull(
  * @param className 目标类名
  * @param classLoader 用于加载目标类的 `ClassLoader`
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
+ * @param query 查询条件块
  */
 fun findField(
     className: String,
     classLoader: ClassLoader = EzReflect.classLoader,
     findSuper: Boolean? = null,
-    condition: FieldCondition,
-): Field = findField(loadClass(className, classLoader), findSuper, condition)
+    query: FieldQuery.() -> Unit,
+): Field = findField(loadClass(className, classLoader), findSuper, query)
 
 /**
  * 按类名查找字段，找不到返回 null。
@@ -167,26 +224,19 @@ fun findField(
  * @param className 目标类名
  * @param classLoader 用于加载目标类的 `ClassLoader`
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
+ * @param query 查询条件块
  */
 fun findFieldOrNull(
     className: String,
     classLoader: ClassLoader = EzReflect.classLoader,
     findSuper: Boolean? = null,
-    condition: FieldCondition,
+    query: FieldQuery.() -> Unit,
 ): Field? {
     val clz = loadClassOrNull(className, classLoader) ?: return null
-    return findFieldOrNull(clz, findSuper, condition)
+    return findFieldOrNull(clz, findSuper, query)
 }
 
-/**
- * 查找所有匹配的字段。
- *
- * @param clz 目标类
- * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
- */
-fun findAllFieldsBy(
+private fun findAllFieldsMatching(
     clz: Class<*>,
     findSuper: Boolean? = null,
     condition: FieldCondition,
@@ -201,22 +251,32 @@ fun findAllFieldsBy(
 fun findAllFields(
     clz: Class<*>,
     findSuper: Boolean? = null,
-): List<Field> = findAllFieldsBy(clz, findSuper) { true }
+): List<Field> = findAllFieldsMatching(clz, findSuper) { true }
 
 /**
- * 按类名查找所有匹配的字段。
+ * 按查询条件查找字段。
  *
- * @param className 目标类名
- * @param classLoader 用于加载目标类的 `ClassLoader`
+ * @param clz 目标类
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
+ * @param query 查询条件块
  */
-fun findAllFieldsBy(
-    className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+fun findAllFields(
+    clz: Class<*>,
     findSuper: Boolean? = null,
-    condition: FieldCondition,
-): List<Field> = findAllFieldsBy(loadClass(className, classLoader), findSuper, condition)
+    query: FieldQuery.() -> Unit,
+): List<Field> {
+    val builtQuery = fieldQuery(query)
+    val effectiveFindSuper = builtQuery.effectiveFindSuper(findSuper)
+    val cacheSearchClass = builtQuery.cacheKeyOrNull() != null
+    findFieldOrNull(clz, findSuper, builtQuery) ?: return emptyList()
+    val results = findAllFieldsMatching(
+        clz = clz,
+        findSuper = effectiveFindSuper,
+        condition = fieldCondition(builtQuery),
+    )
+    cacheExactFields(clz, effectiveFindSuper, results, cacheSearchClass)
+    return results
+}
 
 /**
  * 按类名查找全部字段。
@@ -230,6 +290,21 @@ fun findAllFields(
     classLoader: ClassLoader = EzReflect.classLoader,
     findSuper: Boolean? = null,
 ): List<Field> = findAllFields(loadClass(className, classLoader), findSuper)
+
+/**
+ * 按类名和查询条件查找字段。
+ *
+ * @param className 目标类名
+ * @param classLoader 用于加载目标类的 `ClassLoader`
+ * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
+ * @param query 查询条件块
+ */
+fun findAllFields(
+    className: String,
+    classLoader: ClassLoader = EzReflect.classLoader,
+    findSuper: Boolean? = null,
+    query: FieldQuery.() -> Unit,
+): List<Field> = findAllFields(loadClass(className, classLoader), findSuper, query)
 
 // ═══════════════════════ 按名称获取 ═══════════════════════
 
@@ -274,8 +349,8 @@ fun Any.fieldOrNull(
 ): Field? {
     val clz = if (this is Class<*>) this else javaClass
     if (EzReflect.cacheEnabled) {
-        val key = FieldNameCacheKey(clz, fieldName, isStatic, fieldType)
-        val cached = EzReflect.cache[key]
+        val key = FieldNameCacheKey(fieldName, isStatic, fieldType)
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.FIELD, key)
         if (cached is Field) return cached
     }
     var current: Class<*>? = clz
@@ -288,7 +363,12 @@ fun Any.fieldOrNull(
             }
             f.isAccessible = true
             if (EzReflect.cacheEnabled) {
-                EzReflect.cache[FieldNameCacheKey(clz, fieldName, isStatic, fieldType)] = f
+                EzReflect.cachePut(
+                    clz,
+                    ReflectCacheBucket.FIELD,
+                    FieldNameCacheKey(fieldName, isStatic, fieldType),
+                    f,
+                )
             }
             return f
         } catch (_: NoSuchFieldException) {
@@ -327,50 +407,36 @@ fun Class<*>.staticFieldOrNull(name: String, type: Class<*>? = null): Field? =
  * 适合一次性查找场景；多次操作同一个类时推荐先显式 loadClass / loadClassFirst。
  *
  * ```kotlin
- * val f = "com.example.Target".findField { name == "mValue" }
+ * val f = "com.example.Target".findField { name("mValue") }
  * ```
  *
  * @param classLoader 用于加载当前类名的 `ClassLoader`
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
+ * @param query 查询条件块
  */
-@JvmName("findFieldByString")
+@JvmName("findFieldFromString")
 fun String.findField(
     classLoader: ClassLoader = EzReflect.classLoader,
     findSuper: Boolean? = null,
-    condition: FieldCondition,
-): Field = findField(loadClass(this, classLoader), findSuper, condition)
+    query: FieldQuery.() -> Unit,
+): Field = findField(loadClass(this, classLoader), findSuper, query)
 
 /**
  * 从类名查找字段，找不到返回 null。
  *
  * @param classLoader 用于加载当前类名的 `ClassLoader`
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
+ * @param query 查询条件块
  */
-@JvmName("findFieldOrNullByString")
+@JvmName("findFieldOrNullFromString")
 fun String.findFieldOrNull(
     classLoader: ClassLoader = EzReflect.classLoader,
     findSuper: Boolean? = null,
-    condition: FieldCondition,
+    query: FieldQuery.() -> Unit,
 ): Field? {
     val clz = loadClassOrNull(this, classLoader) ?: return null
-    return findFieldOrNull(clz, findSuper, condition)
+    return findFieldOrNull(clz, findSuper, query)
 }
-
-/**
- * 从类名查找所有匹配的字段。
- *
- * @param classLoader 用于加载当前类名的 `ClassLoader`
- * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
- */
-@JvmName("findAllFieldsByConditionByString")
-fun String.findAllFieldsBy(
-    classLoader: ClassLoader = EzReflect.classLoader,
-    findSuper: Boolean? = null,
-    condition: FieldCondition,
-): List<Field> = findAllFieldsBy(this, classLoader, findSuper, condition)
 
 /**
  * 从类名查找全部字段。
@@ -378,11 +444,25 @@ fun String.findAllFieldsBy(
  * @param classLoader 用于加载当前类名的 `ClassLoader`
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
  */
-@JvmName("findAllFieldsByString")
+@JvmName("findAllFieldsFromString")
 fun String.findAllFields(
     classLoader: ClassLoader = EzReflect.classLoader,
     findSuper: Boolean? = null,
 ): List<Field> = findAllFields(loadClass(this, classLoader), findSuper)
+
+/**
+ * 从类名按查询条件查找字段。
+ *
+ * @param classLoader 用于加载当前类名的 `ClassLoader`
+ * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
+ * @param query 查询条件块
+ */
+@JvmName("findAllFieldsFromStringWithQuery")
+fun String.findAllFields(
+    classLoader: ClassLoader = EzReflect.classLoader,
+    findSuper: Boolean? = null,
+    query: FieldQuery.() -> Unit,
+): List<Field> = findAllFields(loadClass(this, classLoader), findSuper, query)
 
 // ═══════════════════════ 组合态链式 (Class 出发) ═══════════════════════
 
@@ -390,51 +470,54 @@ fun String.findAllFields(
  * 从 Class 对象直接查找字段。
  *
  * ```kotlin
- * val f = clz.findField { name == "mCallback" && type == Runnable::class.java }
+ * val f = clz.findField {
+ *     name("mCallback")
+ *     type(Runnable::class.java)
+ * }
  * ```
  *
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
+ * @param query 查询条件块
  */
-@JvmName("findFieldByClass")
+@JvmName("findFieldFromClass")
 fun Class<*>.findField(
     findSuper: Boolean? = null,
-    condition: FieldCondition,
-): Field = findField(this, findSuper, condition)
+    query: FieldQuery.() -> Unit,
+): Field = findField(this, findSuper, query)
 
 /**
  * 从 Class 对象查找字段，找不到返回 null。
  *
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
+ * @param query 查询条件块
  */
-@JvmName("findFieldOrNullByClass")
+@JvmName("findFieldOrNullFromClass")
 fun Class<*>.findFieldOrNull(
     findSuper: Boolean? = null,
-    condition: FieldCondition,
-): Field? = findFieldOrNull(this, findSuper, condition)
-
-/**
- * 从 Class 对象查找所有匹配的字段。
- *
- * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
- */
-@JvmName("findAllFieldsByConditionByClass")
-fun Class<*>.findAllFieldsBy(
-    findSuper: Boolean? = null,
-    condition: FieldCondition,
-): List<Field> = findAllFieldsBy(this, findSuper, condition)
+    query: FieldQuery.() -> Unit,
+): Field? = findFieldOrNull(this, findSuper, query)
 
 /**
  * 从 Class 对象查找全部字段。
  *
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
  */
-@JvmName("findAllFieldsByClass")
+@JvmName("findAllFieldsFromClass")
 fun Class<*>.findAllFields(
     findSuper: Boolean? = null,
 ): List<Field> = findAllFields(this, findSuper)
+
+/**
+ * 从 Class 对象按查询条件查找字段。
+ *
+ * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
+ * @param query 查询条件块
+ */
+@JvmName("findAllFieldsFromClassWithQuery")
+fun Class<*>.findAllFields(
+    findSuper: Boolean? = null,
+    query: FieldQuery.() -> Unit,
+): List<Field> = findAllFields(this, findSuper, query)
 
 // ═══════════════════════ 实例字段读取 ═══════════════════════
 
@@ -523,28 +606,31 @@ fun <T> Any.getFieldByTypeOrNull(type: Class<*>, isStatic: Boolean = false): T? 
 }
 
 /**
- * 按条件查找字段并直接获取值。
+ * 按查询条件查找字段并直接获取值。
  *
  * ```kotlin
- * val value = instance.findFieldValue { name.startsWith("m") && type == String::class.java }
+ * val value = instance.findFieldValue {
+ *     filter { name.startsWith("m") }
+ *     type(String::class.java)
+ * }
  * ```
  *
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
+ * @param query 查询条件块
  */
-fun Any.findFieldValue(findSuper: Boolean? = null, condition: FieldCondition): Any? {
-    return readFieldValue(findField(ownerClass(), findSuper, condition), if (this is Class<*>) null else this)
+fun Any.findFieldValue(findSuper: Boolean? = null, query: FieldQuery.() -> Unit): Any? {
+    return readFieldValue(findField(ownerClass(), findSuper, query), if (this is Class<*>) null else this)
 }
 
 /**
- * 类型安全的条件查找字段值。
+ * 类型安全的查询条件查找字段值。
  *
  * @param findSuper null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
- * @param condition 条件 lambda，receiver 为 Field
+ * @param query 查询条件块
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Any.findFieldValueAs(findSuper: Boolean? = null, condition: FieldCondition): T? =
-    findFieldValue(findSuper, condition) as T?
+fun <T> Any.findFieldValueAs(findSuper: Boolean? = null, query: FieldQuery.() -> Unit): T? =
+    findFieldValue(findSuper, query) as T?
 
 // ═══════════════════════ 静态字段读取 ═══════════════════════
 

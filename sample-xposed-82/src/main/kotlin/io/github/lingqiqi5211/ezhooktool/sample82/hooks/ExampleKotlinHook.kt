@@ -10,7 +10,8 @@ object ExampleKotlinHook : BaseHook() {
 
     override fun init() {
         Application::class.java.findMethod(findSuper = false) {
-            name == "onCreate" && parameterCount == 0
+            name("onCreate")
+            paramCount(0)
         }.createHook {
             before {
                 Log.i(name, "Hello, Kotlin before hook!")

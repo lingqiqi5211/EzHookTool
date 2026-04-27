@@ -162,6 +162,11 @@ object EzXposed {
         addModuleAssetPath(context.resources)
     }
 
+    /**
+     * 将模块资源路径注入到指定 [resources]。
+     *
+     * 调用前需要先完成 [initModuleResources]。
+     */
     @JvmStatic
     fun addModuleAssetPath(resources: Resources) {
         addAssetPathMethod.invoke(resources.assets, modulePath)

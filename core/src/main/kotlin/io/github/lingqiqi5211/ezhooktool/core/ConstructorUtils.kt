@@ -2,19 +2,16 @@
 
 package io.github.lingqiqi5211.ezhooktool.core
 
+import io.github.lingqiqi5211.ezhooktool.core.query.ConstructorQuery
+import io.github.lingqiqi5211.ezhooktool.core.query.constructorCondition
+import io.github.lingqiqi5211.ezhooktool.core.query.constructorExactCacheKeys
+import io.github.lingqiqi5211.ezhooktool.core.query.constructorQuery
 import java.lang.reflect.Constructor
 
 /**
  * 构造器查找条件。以 Constructor 为 receiver。
- *
- * ```kotlin
- * findConstructor(clz) { hasEmptyParam }
- * findConstructor(clz) { paramCount == 2 && parameterTypes[0] == String::class.java }
- * ```
  */
 typealias ConstructorCondition = Constructor<*>.() -> Boolean
-
-// ═══════════════════════ Internal ═══════════════════════
 
 private fun getConstructorCandidates(clz: Class<*>): List<String> {
     if (!EzReflect.debugMode) return emptyList()
@@ -22,95 +19,26 @@ private fun getConstructorCandidates(clz: Class<*>): List<String> {
 }
 
 private data class ConstructorCacheKey(
-    val clz: Class<*>,
-    val conditionIdentity: Any,
+    val queryKey: List<Any>,
 )
 
-// ═══════════════════════ 按条件查找 ═══════════════════════
-
-/**
- * 按条件查找构造器。
- *
- * ```kotlin
- * val ctor = findConstructor(clz) { hasEmptyParam }
- * val ctor = findConstructor(clz) { paramCount == 2 && parameterTypes[0] == String::class.java }
- * ```
- *
- * @param clz       目标类
- * @param condition 条件 lambda，receiver 为 Constructor
- * @return 第一个匹配的 Constructor（已 setAccessible）
- * @throws MemberNotFoundException 找不到时
- */
-fun findConstructor(clz: Class<*>, condition: ConstructorCondition): Constructor<*> {
-    return findConstructorOrNull(clz, condition)
-        ?: throw MemberNotFoundException(
-            memberType = MemberType.CONSTRUCTOR,
-            targetClass = clz.name,
-            searchedSuper = false,
-            candidates = getConstructorCandidates(clz)
-        )
-}
-
-/**
- * 按条件查找构造器，找不到返回 null。
- *
- * @param clz 目标类
- * @param condition 条件 lambda，receiver 为 Constructor
- */
-fun findConstructorOrNull(clz: Class<*>, condition: ConstructorCondition): Constructor<*>? {
-    if (EzReflect.cacheEnabled) {
-        val key = ConstructorCacheKey(clz, condition)
-        val cached = EzReflect.cache[key]
-        if (cached is Constructor<*>) return cached
-    }
-    for (ctor in EzReflect.memberResolver.constructorsOf(clz)) {
-        if (condition(ctor)) {
-            ctor.isAccessible = true
-            if (EzReflect.cacheEnabled) {
-                EzReflect.cache[ConstructorCacheKey(clz, condition)] = ctor
+private fun cacheExactConstructors(clz: Class<*>, constructors: List<Constructor<*>>) {
+    if (!EzReflect.cacheEnabled) return
+    val seenKeys = HashSet<ConstructorCacheKey>()
+    for (constructor in constructors) {
+        for (queryKey in constructorExactCacheKeys(constructor)) {
+            val key = ConstructorCacheKey(queryKey)
+            if (seenKeys.add(key)) {
+                EzReflect.cachePut(clz, ReflectCacheBucket.CONSTRUCTOR, key, constructor)
             }
-            return ctor
         }
     }
-    return null
 }
 
-/**
- * 按类名查找构造器。
- *
- * @param className 目标类名
- * @param classLoader 用于加载目标类的 `ClassLoader`
- * @param condition 条件 lambda，receiver 为 Constructor
- */
-fun findConstructor(
-    className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+private fun findAllConstructorsMatching(
+    clz: Class<*>,
     condition: ConstructorCondition,
-): Constructor<*> = findConstructor(loadClass(className, classLoader), condition)
-
-/**
- * 按类名查找构造器，找不到返回 null。
- *
- * @param className 目标类名
- * @param classLoader 用于加载目标类的 `ClassLoader`
- * @param condition 条件 lambda，receiver 为 Constructor
- */
-fun findConstructorOrNull(
-    className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
-    condition: ConstructorCondition,
-): Constructor<*>? {
-    val clz = loadClassOrNull(className, classLoader) ?: return null
-    return findConstructorOrNull(clz, condition)
-}
-
-/**
- * 查找所有匹配的构造器。
- *
- * @param clz 目标类
- * @param condition 条件 lambda，receiver 为 Constructor
- */
-fun findAllConstructorsBy(clz: Class<*>, condition: ConstructorCondition): List<Constructor<*>> {
+): List<Constructor<*>> {
     val results = mutableListOf<Constructor<*>>()
     for (ctor in EzReflect.memberResolver.constructorsOf(clz)) {
         if (condition(ctor)) {
@@ -122,133 +50,186 @@ fun findAllConstructorsBy(clz: Class<*>, condition: ConstructorCondition): List<
 }
 
 /**
- * 查找全部构造器。
+ * 按查询条件查找构造器。
+ *
+ * ```kotlin
+ * val ctor = findConstructor(clz) {
+ *     paramCount(2)
+ *     params(String::class.java, Int::class.java)
+ * }
+ * ```
  *
  * @param clz 目标类
+ * @param query 查询条件块
  */
-fun findAllConstructors(clz: Class<*>): List<Constructor<*>> = findAllConstructorsBy(clz) { true }
+fun findConstructor(
+    clz: Class<*>,
+    query: ConstructorQuery.() -> Unit,
+): Constructor<*> {
+    return findConstructorOrNull(clz, constructorQuery(query))
+        ?: throw MemberNotFoundException(
+            memberType = MemberType.CONSTRUCTOR,
+            targetClass = clz.name,
+            searchedSuper = false,
+            candidates = getConstructorCandidates(clz)
+        )
+}
 
 /**
- * 按类名查找所有匹配的构造器。
+ * 按查询条件查找构造器，找不到返回 null。
+ */
+fun findConstructorOrNull(
+    clz: Class<*>,
+    query: ConstructorQuery.() -> Unit,
+): Constructor<*>? {
+    return findConstructorOrNull(clz, constructorQuery(query))
+}
+
+private fun findConstructorOrNull(
+    clz: Class<*>,
+    query: ConstructorQuery,
+): Constructor<*>? {
+    val condition = constructorCondition(query)
+    val queryKey = query.cacheKeyOrNull()
+    if (EzReflect.cacheEnabled && queryKey != null) {
+        val key = ConstructorCacheKey(queryKey)
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, key)
+        if (cached is Constructor<*>) return cached
+    }
+    val result = findAllConstructorsMatching(clz, condition).firstOrNull()
+    if (result != null && EzReflect.cacheEnabled && queryKey != null) {
+        EzReflect.cachePut(clz, ReflectCacheBucket.CONSTRUCTOR, ConstructorCacheKey(queryKey), result)
+    }
+    return result
+}
+
+/**
+ * 按类名查找构造器。
  *
  * @param className 目标类名
  * @param classLoader 用于加载目标类的 `ClassLoader`
- * @param condition 条件 lambda，receiver 为 Constructor
+ * @param query 查询条件块
  */
-fun findAllConstructorsBy(
+fun findConstructor(
     className: String,
     classLoader: ClassLoader = EzReflect.classLoader,
-    condition: ConstructorCondition,
-): List<Constructor<*>> = findAllConstructorsBy(loadClass(className, classLoader), condition)
+    query: ConstructorQuery.() -> Unit,
+): Constructor<*> = findConstructor(loadClass(className, classLoader), query)
+
+/**
+ * 按类名查找构造器，找不到返回 null。
+ */
+fun findConstructorOrNull(
+    className: String,
+    classLoader: ClassLoader = EzReflect.classLoader,
+    query: ConstructorQuery.() -> Unit,
+): Constructor<*>? {
+    val clz = loadClassOrNull(className, classLoader) ?: return null
+    return findConstructorOrNull(clz, query)
+}
+
+/**
+ * 查找全部构造器。
+ */
+fun findAllConstructors(clz: Class<*>): List<Constructor<*>> =
+    findAllConstructorsMatching(clz) { true }
+
+/**
+ * 按查询条件查找构造器。
+ */
+fun findAllConstructors(
+    clz: Class<*>,
+    query: ConstructorQuery.() -> Unit,
+): List<Constructor<*>> {
+    val builtQuery = constructorQuery(query)
+    findConstructorOrNull(clz, builtQuery) ?: return emptyList()
+    val results = findAllConstructorsMatching(clz, constructorCondition(builtQuery))
+    cacheExactConstructors(clz, results)
+    return results
+}
 
 /**
  * 按类名查找全部构造器。
- *
- * @param className 目标类名
- * @param classLoader 用于加载目标类的 `ClassLoader`
  */
 fun findAllConstructors(
     className: String,
     classLoader: ClassLoader = EzReflect.classLoader,
 ): List<Constructor<*>> = findAllConstructors(loadClass(className, classLoader))
 
-// ═══════════════════════ 组合态链式 (String 出发) ═══════════════════════
+/**
+ * 按类名和查询条件查找构造器。
+ */
+fun findAllConstructors(
+    className: String,
+    classLoader: ClassLoader = EzReflect.classLoader,
+    query: ConstructorQuery.() -> Unit,
+): List<Constructor<*>> = findAllConstructors(loadClass(className, classLoader), query)
 
 /**
- * 从类名直接查找构造器的便捷写法，等价于 `loadClass(name).findConstructor { ... }`。
- * 适合一次性查找场景；多次操作同一个类时推荐先显式 loadClass / loadClassFirst。
- *
- * ```kotlin
- * val ctor = "com.example.Target".findConstructor { hasEmptyParam }
- * ```
- *
- * @param classLoader 用于加载当前类名的 `ClassLoader`
- * @param condition 条件 lambda，receiver 为 Constructor
+ * 从类名直接查找构造器。
  */
 @JvmName("findConstructorByString")
 fun String.findConstructor(
     classLoader: ClassLoader = EzReflect.classLoader,
-    condition: ConstructorCondition,
-): Constructor<*> = findConstructor(loadClass(this, classLoader), condition)
+    query: ConstructorQuery.() -> Unit,
+): Constructor<*> = findConstructor(loadClass(this, classLoader), query)
 
 /**
  * 从类名查找构造器，找不到返回 null。
- *
- * @param classLoader 用于加载当前类名的 `ClassLoader`
- * @param condition 条件 lambda，receiver 为 Constructor
  */
 @JvmName("findConstructorOrNullByString")
 fun String.findConstructorOrNull(
     classLoader: ClassLoader = EzReflect.classLoader,
-    condition: ConstructorCondition,
+    query: ConstructorQuery.() -> Unit,
 ): Constructor<*>? {
     val clz = loadClassOrNull(this, classLoader) ?: return null
-    return findConstructorOrNull(clz, condition)
+    return findConstructorOrNull(clz, query)
 }
 
 /**
- * 从类名查找所有匹配的构造器。
- *
- * @param classLoader 用于加载当前类名的 `ClassLoader`
- * @param condition 条件 lambda，receiver 为 Constructor
- */
-@JvmName("findAllConstructorsByConditionByString")
-fun String.findAllConstructorsBy(
-    classLoader: ClassLoader = EzReflect.classLoader,
-    condition: ConstructorCondition,
-): List<Constructor<*>> = findAllConstructorsBy(this, classLoader, condition)
-
-/**
  * 从类名查找全部构造器。
- *
- * @param classLoader 用于加载当前类名的 `ClassLoader`
  */
-@JvmName("findAllConstructorsByString")
+@JvmName("findAllConstructorsFromString")
 fun String.findAllConstructors(
     classLoader: ClassLoader = EzReflect.classLoader,
 ): List<Constructor<*>> = findAllConstructors(loadClass(this, classLoader))
 
-// ═══════════════════════ 组合态链式 (Class 出发) ═══════════════════════
+/**
+ * 从类名按查询条件查找构造器。
+ */
+@JvmName("findAllConstructorsFromStringWithQuery")
+fun String.findAllConstructors(
+    classLoader: ClassLoader = EzReflect.classLoader,
+    query: ConstructorQuery.() -> Unit,
+): List<Constructor<*>> = findAllConstructors(loadClass(this, classLoader), query)
 
 /**
  * 从 Class 对象直接查找构造器。
- *
- * ```kotlin
- * val ctor = clz.findConstructor { paramCount == 2 }
- * ```
- *
- * @param condition 条件 lambda，receiver 为 Constructor
  */
 @JvmName("findConstructorByClass")
-fun Class<*>.findConstructor(condition: ConstructorCondition): Constructor<*> =
-    findConstructor(this, condition)
+fun Class<*>.findConstructor(query: ConstructorQuery.() -> Unit): Constructor<*> =
+    findConstructor(this, query)
 
 /**
  * 从 Class 对象查找构造器，找不到返回 null。
- *
- * @param condition 条件 lambda，receiver 为 Constructor
  */
 @JvmName("findConstructorOrNullByClass")
-fun Class<*>.findConstructorOrNull(condition: ConstructorCondition): Constructor<*>? =
-    findConstructorOrNull(this, condition)
-
-/**
- * 从 Class 对象查找所有匹配的构造器。
- *
- * @param condition 条件 lambda，receiver 为 Constructor
- */
-@JvmName("findAllConstructorsByConditionByClass")
-fun Class<*>.findAllConstructorsBy(condition: ConstructorCondition): List<Constructor<*>> =
-    findAllConstructorsBy(this, condition)
+fun Class<*>.findConstructorOrNull(query: ConstructorQuery.() -> Unit): Constructor<*>? =
+    findConstructorOrNull(this, query)
 
 /**
  * 从 Class 对象查找全部构造器。
  */
-@JvmName("findAllConstructorsByClass")
+@JvmName("findAllConstructorsFromClass")
 fun Class<*>.findAllConstructors(): List<Constructor<*>> =
     findAllConstructors(this)
 
-// ═══════════════════════ 创建实例 ═══════════════════════
+/**
+ * 从 Class 对象按查询条件查找构造器。
+ */
+@JvmName("findAllConstructorsFromClassWithQuery")
+fun Class<*>.findAllConstructors(query: ConstructorQuery.() -> Unit): List<Constructor<*>> =
+    findAllConstructors(this, query)
 
 /**
  * 创建实例（精确参数类型）。
@@ -273,10 +254,6 @@ fun Class<*>.newInstance(args: Args = args(), argTypes: ArgTypes = argTypes()): 
 /**
  * 类型安全的实例创建。
  *
- * ```kotlin
- * val config: Config = configClass.newInstanceAs()
- * ```
- *
  * @param args 构造器参数值包装
  * @param argTypes 构造器参数类型；为空时会根据 [args] 自动推断
  */
@@ -286,10 +263,6 @@ fun <T> Class<*>.newInstanceAs(args: Args = args(), argTypes: ArgTypes = argType
 
 /**
  * 自动匹配构造器参数类型。
- *
- * ```kotlin
- * val obj = clz.newInstanceAuto("hello", 42)
- * ```
  *
  * @param args 用于匹配构造器的运行时参数
  */
@@ -308,11 +281,6 @@ fun <T> Class<*>.newInstanceAutoAs(vararg args: Any?): T =
 
 /**
  * 按类名创建实例。
- *
- * ```kotlin
- * val obj = newInstance("com.example.Config")
- * val obj = newInstance("com.example.Config", args("param"))
- * ```
  *
  * @param className 目标类名
  * @param args 构造器参数值包装

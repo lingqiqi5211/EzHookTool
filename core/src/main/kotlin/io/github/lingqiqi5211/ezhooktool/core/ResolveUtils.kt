@@ -2,6 +2,9 @@
 
 package io.github.lingqiqi5211.ezhooktool.core
 
+import io.github.lingqiqi5211.ezhooktool.core.query.ConstructorQuery
+import io.github.lingqiqi5211.ezhooktool.core.query.FieldQuery
+import io.github.lingqiqi5211.ezhooktool.core.query.MethodQuery
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
 import java.lang.reflect.Method
@@ -62,44 +65,44 @@ class ResolveSession private constructor(
      */
     fun superclass(enabled: Boolean? = true): ResolveSession = copy(findSuper = enabled)
 
-    /** 按条件解析单个方法。 */
-    fun method(condition: MethodCondition): Method =
-        if (optionalMode) methodOrNull(condition) ?: throw MemberNotFoundException(MemberType.METHOD, targetClass.name, findSuper != false)
-        else findMethod(targetClass, findSuper, condition)
+    /** 按查询条件解析单个方法。 */
+    fun method(query: MethodQuery.() -> Unit): Method =
+        if (optionalMode) methodOrNull(query) ?: throw MemberNotFoundException(MemberType.METHOD, targetClass.name, findSuper != false)
+        else findMethod(targetClass, findSuper, query)
 
-    /** 按条件解析单个方法，未命中时返回 `null`。 */
-    fun methodOrNull(condition: MethodCondition): Method? = findMethodOrNull(targetClass, findSuper, condition)
+    /** 按查询条件解析单个方法，未命中时返回 `null`。 */
+    fun methodOrNull(query: MethodQuery.() -> Unit): Method? = findMethodOrNull(targetClass, findSuper, query)
 
-    /** 按条件解析全部匹配的方法。 */
-    fun methods(condition: MethodCondition): List<Method> = findAllMethodsBy(targetClass, findSuper, condition)
+    /** 按查询条件解析全部匹配的方法。 */
+    fun methods(query: MethodQuery.() -> Unit): List<Method> = findAllMethods(targetClass, findSuper, query)
 
     /** 解析全部方法。 */
     fun methods(): List<Method> = findAllMethods(targetClass, findSuper)
 
-    /** 按条件解析单个字段。 */
-    fun field(condition: FieldCondition): Field =
-        if (optionalMode) fieldOrNull(condition) ?: throw MemberNotFoundException(MemberType.FIELD, targetClass.name, findSuper != false)
-        else findField(targetClass, findSuper, condition)
+    /** 按查询条件解析单个字段。 */
+    fun field(query: FieldQuery.() -> Unit): Field =
+        if (optionalMode) fieldOrNull(query) ?: throw MemberNotFoundException(MemberType.FIELD, targetClass.name, findSuper != false)
+        else findField(targetClass, findSuper, query)
 
-    /** 按条件解析单个字段，未命中时返回 `null`。 */
-    fun fieldOrNull(condition: FieldCondition): Field? = findFieldOrNull(targetClass, findSuper, condition)
+    /** 按查询条件解析单个字段，未命中时返回 `null`。 */
+    fun fieldOrNull(query: FieldQuery.() -> Unit): Field? = findFieldOrNull(targetClass, findSuper, query)
 
-    /** 按条件解析全部匹配的字段。 */
-    fun fields(condition: FieldCondition): List<Field> = findAllFieldsBy(targetClass, findSuper, condition)
+    /** 按查询条件解析全部匹配的字段。 */
+    fun fields(query: FieldQuery.() -> Unit): List<Field> = findAllFields(targetClass, findSuper, query)
 
     /** 解析全部字段。 */
     fun fields(): List<Field> = findAllFields(targetClass, findSuper)
 
-    /** 按条件解析单个构造器。 */
-    fun constructor(condition: ConstructorCondition): Constructor<*> =
-        if (optionalMode) constructorOrNull(condition) ?: throw MemberNotFoundException(MemberType.CONSTRUCTOR, targetClass.name, false)
-        else findConstructor(targetClass, condition)
+    /** 按查询条件解析单个构造器。 */
+    fun constructor(query: ConstructorQuery.() -> Unit): Constructor<*> =
+        if (optionalMode) constructorOrNull(query) ?: throw MemberNotFoundException(MemberType.CONSTRUCTOR, targetClass.name, false)
+        else findConstructor(targetClass, query)
 
-    /** 按条件解析单个构造器，未命中时返回 `null`。 */
-    fun constructorOrNull(condition: ConstructorCondition): Constructor<*>? = findConstructorOrNull(targetClass, condition)
+    /** 按查询条件解析单个构造器，未命中时返回 `null`。 */
+    fun constructorOrNull(query: ConstructorQuery.() -> Unit): Constructor<*>? = findConstructorOrNull(targetClass, query)
 
-    /** 按条件解析全部匹配的构造器。 */
-    fun constructors(condition: ConstructorCondition): List<Constructor<*>> = findAllConstructorsBy(targetClass, condition)
+    /** 按查询条件解析全部匹配的构造器。 */
+    fun constructors(query: ConstructorQuery.() -> Unit): List<Constructor<*>> = findAllConstructors(targetClass, query)
 
     /** 解析全部构造器。 */
     fun constructors(): List<Constructor<*>> = findAllConstructors(targetClass)

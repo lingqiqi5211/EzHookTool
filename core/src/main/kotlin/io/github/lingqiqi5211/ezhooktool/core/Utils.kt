@@ -125,7 +125,8 @@ internal fun Any.ownerClass(): Class<*> = if (this is Class<*>) this else javaCl
 internal fun findFirstFieldByType(owner: Any, type: Class<*>, isStatic: Boolean): Field? {
     val clz = owner.ownerClass()
     return findFieldOrNull(clz) {
-        this.type == type && this.isStatic == isStatic
+        this.type(type)
+        this.isStatic(isStatic)
     }
 }
 

@@ -7,13 +7,12 @@ import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 
 private data class BestMethodCacheKey(
-    val clz: Class<*>,
     val name: String,
     val types: List<Class<*>>,
+    val nullMask: List<Boolean> = List(types.size) { false },
 )
 
 private data class BestConstructorCacheKey(
-    val clz: Class<*>,
     val types: List<Class<*>>,
     val nullMask: List<Boolean>,
 )
@@ -78,15 +77,20 @@ fun findMethodBestMatch(
     vararg parameterTypes: Class<*>,
 ): Method {
     if (EzReflect.cacheEnabled) {
-        val key = BestMethodCacheKey(clz, methodName, parameterTypes.toList())
-        val cached = EzReflect.cache[key]
+        val key = BestMethodCacheKey(methodName, parameterTypes.toList())
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, key)
         if (cached is Method) return cached
     }
 
     val exact = clz.methodOrNull(methodName, argTypes(*parameterTypes))
     if (exact != null) {
         if (EzReflect.cacheEnabled) {
-            EzReflect.cache[BestMethodCacheKey(clz, methodName, parameterTypes.toList())] = exact
+            EzReflect.cachePut(
+                clz,
+                ReflectCacheBucket.METHOD,
+                BestMethodCacheKey(methodName, parameterTypes.toList()),
+                exact,
+            )
         }
         return exact
     }
@@ -96,7 +100,7 @@ fun findMethodBestMatch(
     var current: Class<*>? = clz
     var considerPrivate = true
     while (current != null) {
-        for (method in current.declaredMethods) {
+        for (method in EzReflect.memberResolver.methodsOf(current)) {
             if (method.name != methodName) continue
             if (!considerPrivate && Modifier.isPrivate(method.modifiers)) continue
             if (!paramTypesMatch(parameterTypes.toList().toTypedArray(), method.parameterTypes)) continue
@@ -113,7 +117,12 @@ fun findMethodBestMatch(
 
     return best?.also {
         if (EzReflect.cacheEnabled) {
-            EzReflect.cache[BestMethodCacheKey(clz, methodName, parameterTypes.toList())] = it
+            EzReflect.cachePut(
+                clz,
+                ReflectCacheBucket.METHOD,
+                BestMethodCacheKey(methodName, parameterTypes.toList()),
+                it,
+            )
         }
     } ?: throw MemberNotFoundException(
         memberType = MemberType.METHOD,
@@ -139,6 +148,16 @@ fun findMethodBestMatch(
     vararg args: Any?,
 ): Method {
     val actual = inferBestMatchArgs(args)
+    if (EzReflect.cacheEnabled) {
+        val key = BestMethodCacheKey(
+            name = methodName,
+            types = actual.map { it.type ?: Any::class.java },
+            nullMask = actual.map { it.isNull },
+        )
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, key)
+        if (cached is Method) return cached
+    }
+
     var best: Method? = null
     var bestScore = Int.MAX_VALUE
     var current: Class<*>? = clz
@@ -158,7 +177,20 @@ fun findMethodBestMatch(
         current = current.superclass
         considerPrivate = false
     }
-    return best ?: throw MemberNotFoundException(
+    return best?.also {
+        if (EzReflect.cacheEnabled) {
+            EzReflect.cachePut(
+                clz,
+                ReflectCacheBucket.METHOD,
+                BestMethodCacheKey(
+                    name = methodName,
+                    types = actual.map { it.type ?: Any::class.java },
+                    nullMask = actual.map { it.isNull },
+                ),
+                it,
+            )
+        }
+    } ?: throw MemberNotFoundException(
         memberType = MemberType.METHOD,
         targetClass = clz.name,
         searchedSuper = true,
@@ -180,8 +212,8 @@ fun findConstructorBestMatch(
     vararg parameterTypes: Class<*>,
 ): Constructor<*> {
     if (EzReflect.cacheEnabled) {
-        val key = BestConstructorCacheKey(clz, parameterTypes.toList(), List(parameterTypes.size) { false })
-        val cached = EzReflect.cache[key]
+        val key = BestConstructorCacheKey(parameterTypes.toList(), List(parameterTypes.size) { false })
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, key)
         if (cached is Constructor<*>) return cached
     }
 
@@ -192,7 +224,12 @@ fun findConstructorBestMatch(
     }
     if (exact != null) {
         if (EzReflect.cacheEnabled) {
-            EzReflect.cache[BestConstructorCacheKey(clz, parameterTypes.toList(), List(parameterTypes.size) { false })] = exact
+            EzReflect.cachePut(
+                clz,
+                ReflectCacheBucket.CONSTRUCTOR,
+                BestConstructorCacheKey(parameterTypes.toList(), List(parameterTypes.size) { false }),
+                exact,
+            )
         }
         return exact
     }
@@ -211,7 +248,12 @@ fun findConstructorBestMatch(
 
     return best?.also {
         if (EzReflect.cacheEnabled) {
-            EzReflect.cache[BestConstructorCacheKey(clz, parameterTypes.toList(), List(parameterTypes.size) { false })] = it
+            EzReflect.cachePut(
+                clz,
+                ReflectCacheBucket.CONSTRUCTOR,
+                BestConstructorCacheKey(parameterTypes.toList(), List(parameterTypes.size) { false }),
+                it,
+            )
         }
     } ?: throw MemberNotFoundException(
         memberType = MemberType.CONSTRUCTOR,
@@ -237,11 +279,10 @@ fun findConstructorBestMatch(
     val actual = inferBestMatchArgs(args)
     if (EzReflect.cacheEnabled) {
         val key = BestConstructorCacheKey(
-            clz,
             actual.map { it.type ?: Any::class.java },
             actual.map { it.isNull },
         )
-        val cached = EzReflect.cache[key]
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, key)
         if (cached is Constructor<*>) return cached
     }
 
@@ -259,7 +300,12 @@ fun findConstructorBestMatch(
 
     return best?.also {
         if (EzReflect.cacheEnabled) {
-            EzReflect.cache[BestConstructorCacheKey(clz, actual.map { it.type ?: Any::class.java }, actual.map { it.isNull })] = it
+            EzReflect.cachePut(
+                clz,
+                ReflectCacheBucket.CONSTRUCTOR,
+                BestConstructorCacheKey(actual.map { it.type ?: Any::class.java }, actual.map { it.isNull }),
+                it,
+            )
         }
     } ?: throw MemberNotFoundException(
         memberType = MemberType.CONSTRUCTOR,
