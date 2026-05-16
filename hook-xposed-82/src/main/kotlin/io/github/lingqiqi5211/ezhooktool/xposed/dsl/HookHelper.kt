@@ -3,7 +3,11 @@
 package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 
 import de.robv.android.xposed.XC_MethodHook
+import io.github.lingqiqi5211.ezhooktool.core.findAllConstructors
+import io.github.lingqiqi5211.ezhooktool.core.findAllMethods
+import io.github.lingqiqi5211.ezhooktool.core.loadClass
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.HookClassLoader
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 
@@ -125,6 +129,56 @@ fun Constructor<*>.createAfterHook(callback: (HookParam) -> Unit): XC_MethodHook
  */
 fun Constructor<*>.createReplaceHook(callback: (HookParam) -> Any?): XC_MethodHook.Unhook =
     createHook { replace(callback) }
+
+/**
+ * 为指定类中同名的全部方法批量创建 hook。
+ *
+ * 仅匹配当前类声明的方法，不包含父类继承而来的方法。
+ *
+ * @param methodName 目标方法名
+ * @param block 每个方法都会使用同一份 hook 声明
+ */
+fun Class<*>.hookAllMethods(
+    methodName: String,
+    block: HookFactory.() -> Unit,
+): List<XC_MethodHook.Unhook> =
+    findAllMethods(this, findSuper = false) { name(methodName) }.createHooks(block)
+
+/**
+ * 按类名为同名的全部方法批量创建 hook。
+ *
+ * 默认使用当前 hook 运行时的 `ClassLoader`。
+ *
+ * @param methodName 目标方法名
+ * @param classLoader 用于加载目标类的 `ClassLoader`
+ * @param block 每个方法都会使用同一份 hook 声明
+ */
+fun String.hookAllMethods(
+    methodName: String,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    block: HookFactory.() -> Unit,
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).hookAllMethods(methodName, block)
+
+/**
+ * 为指定类的全部构造器批量创建 hook。
+ *
+ * @param block 每个构造器都会使用同一份 hook 声明
+ */
+fun Class<*>.hookAllConstructors(block: HookFactory.() -> Unit): List<XC_MethodHook.Unhook> =
+    findAllConstructors(this).createHooks(block)
+
+/**
+ * 按类名为全部构造器批量创建 hook。
+ *
+ * 默认使用当前 hook 运行时的 `ClassLoader`。
+ *
+ * @param classLoader 用于加载目标类的 `ClassLoader`
+ * @param block 每个构造器都会使用同一份 hook 声明
+ */
+fun String.hookAllConstructors(
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    block: HookFactory.() -> Unit,
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).hookAllConstructors(block)
 
 /**
  * 为方法列表批量创建 hook。

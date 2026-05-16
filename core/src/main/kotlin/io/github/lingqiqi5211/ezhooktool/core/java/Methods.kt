@@ -3,7 +3,9 @@ package io.github.lingqiqi5211.ezhooktool.core.java
 import io.github.lingqiqi5211.ezhooktool.core.MemberNotFoundException
 import io.github.lingqiqi5211.ezhooktool.core.MemberType
 import io.github.lingqiqi5211.ezhooktool.core.callMethod
+import io.github.lingqiqi5211.ezhooktool.core.callMethodAs
 import io.github.lingqiqi5211.ezhooktool.core.callStaticMethod
+import io.github.lingqiqi5211.ezhooktool.core.callStaticMethodAs
 import io.github.lingqiqi5211.ezhooktool.core.findAllMethods
 import io.github.lingqiqi5211.ezhooktool.core.findMethodOrNull
 import io.github.lingqiqi5211.ezhooktool.core.query.MethodQuery
@@ -55,6 +57,17 @@ object Methods {
         obj.callMethod(methodName, *args)
 
     /**
+     * 自动匹配参数并调用实例方法，并将结果转为指定类型。
+     *
+     * @param obj 目标实例
+     * @param methodName 方法名
+     * @param args 实参
+     */
+    @JvmStatic
+    fun <T> callMethodAs(obj: Any, methodName: String, vararg args: Any?): T? =
+        obj.callMethodAs(methodName, *args)
+
+    /**
      * 自动匹配参数并调用静态方法。
      *
      * @param clazz 目标类
@@ -64,6 +77,17 @@ object Methods {
     @JvmStatic
     fun callStaticMethod(clazz: Class<*>, methodName: String, vararg args: Any?): Any? =
         clazz.callStaticMethod(methodName, *args)
+
+    /**
+     * 自动匹配参数并调用静态方法，并将结果转为指定类型。
+     *
+     * @param clazz 目标类
+     * @param methodName 方法名
+     * @param args 实参
+     */
+    @JvmStatic
+    fun <T> callStaticMethodAs(clazz: Class<*>, methodName: String, vararg args: Any?): T? =
+        clazz.callStaticMethodAs(methodName, *args)
 }
 
 /**

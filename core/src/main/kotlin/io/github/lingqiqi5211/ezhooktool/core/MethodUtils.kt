@@ -524,6 +524,17 @@ fun Any.callMethod(methodName: String, vararg args: Any?): Any? =
     invokeMethodAuto(methodName, *args)
 
 /**
+ * 类型安全的自动匹配实例方法调用。
+ *
+ * ```kotlin
+ * val name: String = instance.callMethodAs("getName")
+ * ```
+ */
+@Suppress("UNCHECKED_CAST")
+fun <T> Any.callMethodAs(methodName: String, vararg args: Any?): T? =
+    callMethod(methodName, *args) as T?
+
+/**
  * 类型安全的自动匹配调用。
  *
  * ```kotlin
@@ -604,6 +615,13 @@ fun Class<*>.invokeStaticMethodAuto(methodName: String, vararg args: Any?): Any?
  */
 fun Class<*>.callStaticMethod(methodName: String, vararg args: Any?): Any? =
     invokeStaticMethodAuto(methodName, *args)
+
+/**
+ * 类型安全的自动匹配静态方法调用。
+ */
+@Suppress("UNCHECKED_CAST")
+fun <T> Class<*>.callStaticMethodAs(methodName: String, vararg args: Any?): T? =
+    callStaticMethod(methodName, *args) as T?
 
 /**
  * 类型安全的自动匹配静态方法调用。
