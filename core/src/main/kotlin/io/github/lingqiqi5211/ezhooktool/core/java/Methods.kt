@@ -64,7 +64,7 @@ object Methods {
      * @param args 实参
      */
     @JvmStatic
-    fun <T> callMethodAs(obj: Any, methodName: String, vararg args: Any?): T? =
+    fun <T> callMethodAs(obj: Any, methodName: String, vararg args: Any?): T =
         obj.callMethodAs(methodName, *args)
 
     /**
@@ -86,7 +86,7 @@ object Methods {
      * @param args 实参
      */
     @JvmStatic
-    fun <T> callStaticMethodAs(clazz: Class<*>, methodName: String, vararg args: Any?): T? =
+    fun <T> callStaticMethodAs(clazz: Class<*>, methodName: String, vararg args: Any?): T =
         clazz.callStaticMethodAs(methodName, *args)
 }
 

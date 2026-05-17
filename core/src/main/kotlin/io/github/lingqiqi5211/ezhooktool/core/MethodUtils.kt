@@ -477,12 +477,12 @@ fun Class<*>.findAllMethods(
  * 按名称调用实例方法。
  *
  * ```kotlin
- * val result = instance.invokeMethod("doTask", args("hello", 42))
+ * val result = instance.callMethod("doTask", args("hello", 42))
  * ```
  */
-fun Any.invokeMethod(
+fun Any.callMethod(
     methodName: String,
-    args: Args = args(),
+    args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
 ): Any? {
@@ -492,70 +492,81 @@ fun Any.invokeMethod(
 }
 
 /**
- * 类型安全的方法调用。
- *
- * ```kotlin
- * val name: String = instance.invokeMethodAs("getName")
- * ```
+ * 按名称调用实例方法，返回可空结果。
  */
-@Suppress("UNCHECKED_CAST")
-fun <T> Any.invokeMethodAs(
+fun Any.callMethodOrNull(
     methodName: String,
-    args: Args = args(),
+    args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): T? = invokeMethod(methodName, args, argTypes, returnType) as T?
+): Any? = callMethod(methodName, args, argTypes, returnType)
 
 /**
- * 自动匹配参数类型的方法调用。
- *
- * ```kotlin
- * val result = instance.invokeMethodAuto("doTask", "hello", 42)
- * ```
- */
-fun Any.invokeMethodAuto(methodName: String, vararg args: Any?): Any? {
-    return invokeAutoMatchedMethod(javaClass, this, methodName, args)
-}
-
-/**
- * 自动匹配参数并调用实例方法。
- */
-fun Any.callMethod(methodName: String, vararg args: Any?): Any? =
-    invokeMethodAuto(methodName, *args)
-
-/**
- * 类型安全的自动匹配实例方法调用。
+ * 类型安全的方法调用。
  *
  * ```kotlin
  * val name: String = instance.callMethodAs("getName")
  * ```
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Any.callMethodAs(methodName: String, vararg args: Any?): T? =
-    callMethod(methodName, *args) as T?
+fun <T> Any.callMethodAs(
+    methodName: String,
+    args: Args,
+    argTypes: ArgTypes = argTypes(),
+    returnType: Class<*>? = null,
+): T = callMethod(methodName, args, argTypes, returnType) as T
 
 /**
- * 类型安全的自动匹配调用。
+ * 类型安全的方法调用，类型不匹配时返回 null。
+ */
+inline fun <reified T> Any.callMethodAsOrNull(
+    methodName: String,
+    args: Args,
+    argTypes: ArgTypes = argTypes(),
+    returnType: Class<*>? = null,
+): T? = callMethod(methodName, args, argTypes, returnType) as? T
+
+/**
+ * 自动匹配参数并调用实例方法。
  *
  * ```kotlin
- * val name: String = instance.invokeMethodAutoAs("getName")
+ * val result = instance.callMethod("doTask", "hello", 42)
+ * val name = instance.callMethodAsOrNull<String>("getName")
  * ```
  */
+fun Any.callMethod(methodName: String, vararg args: Any?): Any? =
+    invokeAutoMatchedMethod(javaClass, this, methodName, args)
+
+/**
+ * 自动匹配参数并调用实例方法，返回可空结果。
+ */
+fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? =
+    callMethod(methodName, *args)
+
+/**
+ * 自动匹配参数并调用实例方法。
+ */
 @Suppress("UNCHECKED_CAST")
-fun <T> Any.invokeMethodAutoAs(methodName: String, vararg args: Any?): T? =
-    invokeMethodAuto(methodName, *args) as T?
+fun <T> Any.callMethodAs(methodName: String, vararg args: Any?): T =
+    callMethod(methodName, *args) as T
+
+/**
+ * 自动匹配参数并调用实例方法，类型不匹配时返回 null。
+ */
+inline fun <reified T> Any.callMethodAsOrNull(methodName: String, vararg args: Any?): T? =
+    callMethod(methodName, *args) as? T
 
 /**
  * 按查询条件查找并调用。
  *
  * ```kotlin
- * val result = instance.invokeMethodBy(args = arrayOf("hello")) {
+ * val result = instance.callMethodBy(args = arrayOf("hello")) {
  *     name("doTask")
  *     paramCount(1)
  * }
  * ```
  */
-fun Any.invokeMethodBy(
+fun Any.callMethodBy(
     args: Array<out Any?> = emptyArray(),
     query: MethodQuery.() -> Unit,
 ): Any? {
@@ -564,13 +575,13 @@ fun Any.invokeMethodBy(
 }
 
 /**
- * 按条件查找并调用（类型安全）。
+ * 按条件查找并调用。
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Any.invokeMethodByAs(
+fun <T> Any.callMethodByAs(
     args: Array<out Any?> = emptyArray(),
     query: MethodQuery.() -> Unit,
-): T? = invokeMethodBy(args, query) as T?
+): T = callMethodBy(args, query) as T
 
 // ═══════════════════════ 静态方法调用 ═══════════════════════
 
@@ -578,12 +589,12 @@ fun <T> Any.invokeMethodByAs(
  * 调用静态方法。
  *
  * ```kotlin
- * val result = targetClass.invokeStaticMethod("getInstance")
+ * val result = targetClass.callStaticMethod("getInstance", args())
  * ```
  */
-fun Class<*>.invokeStaticMethod(
+fun Class<*>.callStaticMethod(
     methodName: String,
-    args: Args = args(),
+    args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
 ): Any? {
@@ -593,42 +604,64 @@ fun Class<*>.invokeStaticMethod(
 }
 
 /**
- * 类型安全的静态方法调用。
+ * 调用静态方法，返回可空结果。
  */
-@Suppress("UNCHECKED_CAST")
-fun <T> Class<*>.invokeStaticMethodAs(
+fun Class<*>.callStaticMethodOrNull(
     methodName: String,
-    args: Args = args(),
+    args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): T? = invokeStaticMethod(methodName, args, argTypes, returnType) as T?
+): Any? = callStaticMethod(methodName, args, argTypes, returnType)
 
 /**
- * 自动匹配参数类型的静态方法调用。
+ * 静态方法调用。
  */
-fun Class<*>.invokeStaticMethodAuto(methodName: String, vararg args: Any?): Any? {
-    return invokeAutoMatchedMethod(this, null, methodName, args)
-}
+@Suppress("UNCHECKED_CAST")
+fun <T> Class<*>.callStaticMethodAs(
+    methodName: String,
+    args: Args,
+    argTypes: ArgTypes = argTypes(),
+    returnType: Class<*>? = null,
+): T = callStaticMethod(methodName, args, argTypes, returnType) as T
+
+/**
+ * 静态方法调用，类型不匹配时返回 null。
+ */
+inline fun <reified T> Class<*>.callStaticMethodAsOrNull(
+    methodName: String,
+    args: Args,
+    argTypes: ArgTypes = argTypes(),
+    returnType: Class<*>? = null,
+): T? = callStaticMethod(methodName, args, argTypes, returnType) as? T
+
+/**
+ * 自动匹配参数并调用静态方法。
+ *
+ * ```kotlin
+ * val result = targetClass.callStaticMethod("getInstance")
+ * ```
+ */
+fun Class<*>.callStaticMethod(methodName: String, vararg args: Any?): Any? =
+    invokeAutoMatchedMethod(this, null, methodName, args)
+
+/**
+ * 自动匹配参数并调用静态方法，返回可空结果。
+ */
+fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any? =
+    callStaticMethod(methodName, *args)
 
 /**
  * 自动匹配参数并调用静态方法。
  */
-fun Class<*>.callStaticMethod(methodName: String, vararg args: Any?): Any? =
-    invokeStaticMethodAuto(methodName, *args)
+@Suppress("UNCHECKED_CAST")
+fun <T> Class<*>.callStaticMethodAs(methodName: String, vararg args: Any?): T =
+    callStaticMethod(methodName, *args) as T
 
 /**
- * 类型安全的自动匹配静态方法调用。
+ * 自动匹配参数并调用静态方法，类型不匹配时返回 null。
  */
-@Suppress("UNCHECKED_CAST")
-fun <T> Class<*>.callStaticMethodAs(methodName: String, vararg args: Any?): T? =
-    callStaticMethod(methodName, *args) as T?
-
-/**
- * 类型安全的自动匹配静态方法调用。
- */
-@Suppress("UNCHECKED_CAST")
-fun <T> Class<*>.invokeStaticMethodAutoAs(methodName: String, vararg args: Any?): T? =
-    invokeStaticMethodAuto(methodName, *args) as T?
+inline fun <reified T> Class<*>.callStaticMethodAsOrNull(methodName: String, vararg args: Any?): T? =
+    callStaticMethod(methodName, *args) as? T
 
 // ═══════════════════════ Method 扩展 ═══════════════════════
 

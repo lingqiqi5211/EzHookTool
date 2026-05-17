@@ -17,27 +17,43 @@ private class MethodCallAliasTarget {
 
 class MethodCallAliasTest {
     @Test
-    fun `callMethodAs returns typed instance result`() {
+    fun `callMethod returns instance result`() {
         val target = MethodCallAliasTarget()
 
-        val result: String? = target.callMethodAs("greet", "EzHookTool")
+        val result = target.callMethodAsOrNull<String>("greet", "EzHookTool")
 
         assertEquals("Hello, EzHookTool", result)
     }
 
     @Test
-    fun `callStaticMethodAs returns typed static result`() {
-        val result: Int? = MethodCallAliasTarget::class.java.callStaticMethodAs("sum", 1, 2)
+    fun `callMethodAs returns typed instance result`() {
+        val target = MethodCallAliasTarget()
+
+        val result: String = target.callMethodAs("greet", "EzHookTool")
+
+        assertEquals("Hello, EzHookTool", result)
+    }
+
+    @Test
+    fun `callStaticMethod returns static result`() {
+        val result = MethodCallAliasTarget::class.java.callStaticMethodAsOrNull<Int>("sum", 1, 2)
 
         assertEquals(3, result)
     }
 
     @Test
-    fun `java Methods wrappers expose typed call aliases`() {
+    fun `callStaticMethodAs returns typed static result`() {
+        val result: Int = MethodCallAliasTarget::class.java.callStaticMethodAs("sum", 1, 2)
+
+        assertEquals(3, result)
+    }
+
+    @Test
+    fun `java Methods wrappers expose call aliases`() {
         val target = MethodCallAliasTarget()
 
-        val instanceResult: String? = Methods.callMethodAs(target, "greet", "World")
-        val staticResult: Int? = Methods.callStaticMethodAs(MethodCallAliasTarget::class.java, "sum", 4, 5)
+        val instanceResult: String = Methods.callMethodAs(target, "greet", "World")
+        val staticResult: Int = Methods.callStaticMethodAs(MethodCallAliasTarget::class.java, "sum", 4, 5)
 
         assertEquals("Hello, World", instanceResult)
         assertEquals(9, staticResult)

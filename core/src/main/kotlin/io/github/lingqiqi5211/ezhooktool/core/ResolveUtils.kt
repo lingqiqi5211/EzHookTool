@@ -115,7 +115,7 @@ class ResolveSession private constructor(
      */
     fun call(methodName: String, vararg args: Any?): Any? {
         val instance = targetInstance ?: error("ResolveSession.call requires bound instance")
-        return instance.invokeMethodAuto(methodName, *args)
+        return instance.callMethod(methodName, *args)
     }
 
     /**
@@ -124,7 +124,7 @@ class ResolveSession private constructor(
      * @param methodName 目标静态方法名
      * @param args 传给目标方法的实参
      */
-    fun callStatic(methodName: String, vararg args: Any?): Any? = targetClass.invokeStaticMethodAuto(methodName, *args)
+    fun callStatic(methodName: String, vararg args: Any?): Any? = targetClass.callStaticMethod(methodName, *args)
 
     private fun copy(
         targetClass: Class<*> = this.targetClass,

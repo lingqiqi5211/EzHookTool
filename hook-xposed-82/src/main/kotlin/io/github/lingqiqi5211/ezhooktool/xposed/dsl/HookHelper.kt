@@ -145,6 +145,54 @@ fun Class<*>.hookAllMethods(
     findAllMethods(this, findSuper = false) { name(methodName) }.createHooks(block)
 
 /**
+ * 为指定类中同名的全部方法批量创建 hook。
+ */
+fun Class<*>.hookMethod(
+    methodName: String,
+    block: HookFactory.() -> Unit,
+): List<XC_MethodHook.Unhook> = hookAllMethods(methodName, block)
+
+/**
+ * 为指定类中同名的全部方法批量创建 before hook。
+ */
+fun Class<*>.beforeHookMethod(
+    methodName: String,
+    callback: HookBlock,
+): List<XC_MethodHook.Unhook> = hookMethod(methodName) {
+    before { it.callback() }
+}
+
+/**
+ * 为指定类中同名的全部方法批量创建 after hook。
+ */
+fun Class<*>.afterHookMethod(
+    methodName: String,
+    callback: HookBlock,
+): List<XC_MethodHook.Unhook> = hookMethod(methodName) {
+    after { it.callback() }
+}
+
+/**
+ * 为指定类中同名的全部方法批量创建 replace hook。
+ */
+fun Class<*>.replaceHookMethod(
+    methodName: String,
+    callback: ReplaceHookBlock,
+): List<XC_MethodHook.Unhook> = hookMethod(methodName) {
+    replace { it.callback() }
+}
+
+/**
+ * 让指定类中同名的全部方法直接返回固定值。
+ */
+fun Class<*>.returnConstantHookMethod(
+    methodName: String,
+    value: Any?,
+): List<XC_MethodHook.Unhook> = hookMethod(methodName) {
+    returnConstant(value)
+}
+
+/**
  * 按类名为同名的全部方法批量创建 hook。
  *
  * 默认使用当前 hook 运行时的 `ClassLoader`。
@@ -160,12 +208,81 @@ fun String.hookAllMethods(
 ): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).hookAllMethods(methodName, block)
 
 /**
+ * 按类名为同名的全部方法批量创建 hook。
+ */
+fun String.hookMethod(
+    methodName: String,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    block: HookFactory.() -> Unit,
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).hookMethod(methodName, block)
+
+/**
+ * 按类名为同名的全部方法批量创建 before hook。
+ */
+fun String.beforeHookMethod(
+    methodName: String,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: HookBlock,
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).beforeHookMethod(methodName, callback)
+
+/**
+ * 按类名为同名的全部方法批量创建 after hook。
+ */
+fun String.afterHookMethod(
+    methodName: String,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: HookBlock,
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).afterHookMethod(methodName, callback)
+
+/**
+ * 按类名为同名的全部方法批量创建 replace hook。
+ */
+fun String.replaceHookMethod(
+    methodName: String,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: ReplaceHookBlock,
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).replaceHookMethod(methodName, callback)
+
+/**
+ * 让指定类名中同名的全部方法直接返回固定值。
+ */
+fun String.returnConstantHookMethod(
+    methodName: String,
+    value: Any?,
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).returnConstantHookMethod(methodName, value)
+
+/**
  * 为指定类的全部构造器批量创建 hook。
  *
  * @param block 每个构造器都会使用同一份 hook 声明
  */
 fun Class<*>.hookAllConstructors(block: HookFactory.() -> Unit): List<XC_MethodHook.Unhook> =
     findAllConstructors(this).createHooks(block)
+
+/**
+ * 为指定类的全部构造器批量创建 hook。
+ */
+fun Class<*>.hookConstructor(block: HookFactory.() -> Unit): List<XC_MethodHook.Unhook> =
+    hookAllConstructors(block)
+
+/**
+ * 为指定类的全部构造器批量创建 before hook。
+ */
+fun Class<*>.beforeHookConstructor(callback: HookBlock): List<XC_MethodHook.Unhook> =
+    hookConstructor { before { it.callback() } }
+
+/**
+ * 为指定类的全部构造器批量创建 after hook。
+ */
+fun Class<*>.afterHookConstructor(callback: HookBlock): List<XC_MethodHook.Unhook> =
+    hookConstructor { after { it.callback() } }
+
+/**
+ * 为指定类的全部构造器批量创建 replace hook。
+ */
+fun Class<*>.replaceHookConstructor(callback: ReplaceHookBlock): List<XC_MethodHook.Unhook> =
+    hookConstructor { replace { it.callback() } }
 
 /**
  * 按类名为全部构造器批量创建 hook。
@@ -179,6 +296,38 @@ fun String.hookAllConstructors(
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
     block: HookFactory.() -> Unit,
 ): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).hookAllConstructors(block)
+
+/**
+ * 按类名为全部构造器批量创建 hook。
+ */
+fun String.hookConstructor(
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    block: HookFactory.() -> Unit,
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).hookConstructor(block)
+
+/**
+ * 按类名为全部构造器批量创建 before hook。
+ */
+fun String.beforeHookConstructor(
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: HookBlock,
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).beforeHookConstructor(callback)
+
+/**
+ * 按类名为全部构造器批量创建 after hook。
+ */
+fun String.afterHookConstructor(
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: HookBlock,
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).afterHookConstructor(callback)
+
+/**
+ * 按类名为全部构造器批量创建 replace hook。
+ */
+fun String.replaceHookConstructor(
+    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
+    callback: ReplaceHookBlock,
+): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).replaceHookConstructor(callback)
 
 /**
  * 为方法列表批量创建 hook。

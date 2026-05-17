@@ -8,7 +8,7 @@ package io.github.lingqiqi5211.ezhooktool.core
  * 解决 Kotlin `vararg Any?` 在多参数重载时的歧义。
  *
  * ```kotlin
- * instance.invokeMethod("doTask", args("hello", 42))
+ * instance.callMethod("doTask", args("hello", 42))
  * ```
  *
  * @property args 实际要传给目标方法或构造器的参数数组
@@ -30,7 +30,7 @@ value class Args(val args: Array<out Any?>) {
  * 方法参数类型包装。
  *
  * ```kotlin
- * instance.invokeMethod("doTask", args("hello", 42), argTypes(String::class.java, Int::class.java))
+ * instance.callMethod("doTask", args("hello", 42), argTypes(String::class.java, Int::class.java))
  * ```
  *
  * @property types 参数类型数组
