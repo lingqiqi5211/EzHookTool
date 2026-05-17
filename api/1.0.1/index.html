@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>All modules</title>
+    <link href="images/logo-icon.svg" rel="icon" type="image/svg">
+        <script>var pathToRoot = "";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="scripts/sourceset_dependencies.js" async="async"></script>
+<link href="styles/style.css" rel="Stylesheet">
+<link href="styles/main.css" rel="Stylesheet">
+<link href="styles/prism.css" rel="Stylesheet">
+<link href="styles/logo-styles.css" rel="Stylesheet">
+<link href="ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="scripts/navigation-loader.js" async="async"></script>
+<script type="text/javascript" src="scripts/platform-content-handler.js" async="async"></script>
+<script type="text/javascript" src="scripts/main.js" defer="defer"></script>
+<script type="text/javascript" src="scripts/prism.js" async="async"></script>
+<script type="text/javascript" src="ui-kit/ui-kit.min.js" defer="defer"></script>
+</head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+            <a class="library-name--link" href="index.html" tabindex="1">
+                    EzHookTool
+            </a>
+        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle"
+                type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+        </div>
+        <div class="navigation-controls">
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button"
+                    type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config='{"defaultSize": 280, "minSize": 200, "maxSize": 400}'>
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list"
+                    data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    EzHookTool
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" id="content" pageIds="EzHookTool::.ext/allModules///PointingToDeclaration//0">
+  <div class="breadcrumbs"></div>
+  <div class="cover ">
+    <div class="cover ">
+      <h1 class="">EzHookTool API Guide</h1>
+      <p class="paragraph">EzHookTool 的 API 分成三类：</p>
+      <ul>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">core</code>：反射、类查找、方法查找、字段读写、实例创建。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">core.java</code>：给 Java 调用的入口，例如 <code class="lang-kotlin">Classes</code>、<code class="lang-kotlin">Methods</code>、<code class="lang-kotlin">Fields</code>、<code class="lang-kotlin">Constructors</code>。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">xposed.dsl</code> / <code class="lang-kotlin">xposed.java</code>：给 Kotlin / Java 使用的 hook 入口。</p>
+        </li>
+      </ul>
+      <p class="paragraph">本项目不做 dex 扫描。类查找只处理已知类名或候选类名；成员查找只在给定 <code class="lang-kotlin">Class</code> 的成员和父类成员中查找。</p>
+      <h2 class="">Kotlin</h2>
+      <p class="paragraph">查找单个方法：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val method = clazz.findMethod {<br>    name(&quot;foo&quot;)<br>    paramCount(2)<br>    returnType(String::class.java)<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">查找多个方法：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val methods = clazz.findAllMethods {<br>    name(&quot;foo&quot;)<br>    paramCount(2)<br>    includeSuper()<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">不写条件时会返回当前查找范围内的全部结果：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val methods = clazz.findAllMethods()<br>val declaredFields = clazz.findAllFields {<br>    currentClassOnly()<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">常用方法条件：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val method = clazz.findMethod {<br>    nameContains(&quot;open&quot;)<br>    paramCountIn(1..3)<br>    paramsAssignableFrom(String::class.java)<br>    returnTypeExtendsFrom(CharSequence::class.java)<br>    isPublic()<br>    notStatic()<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">查找字段：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val field = clazz.findField {<br>    name(&quot;mContext&quot;)<br>    type(Context::class.java)<br>    currentClassOnly()<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">查找构造器：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val constructor = clazz.findConstructor {<br>    noParams()<br>    isPublic()<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">安装 hook：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">method.createHook {<br>    before {<br>        val text = argAs&lt;String&gt;(0)<br>        args[0] = text.trim()<br>    }<br><br>    after {<br>        result = &quot;done&quot;<br>    }<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">批量 hook：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">clazz.findAllMethods {<br>    name(&quot;foo&quot;)<br>    paramCount(1)<br>}.createHooks {<br>    before {<br>        // ...<br>    }<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <h2 class="">Java</h2>
+      <p class="paragraph">Java 代码建议使用 <code class="lang-kotlin">core.java</code> 包里的入口。链式查询方法使用 <code class="lang-kotlin">filterBy...</code> 命名，能直接看出每一步是在追加查找条件。</p>
+      <p class="paragraph">查找类：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">import io.github.lingqiqi5211.ezhooktool.core.java.Classes;<br><br>Class&lt;?&gt; target = Classes.findClass(&quot;com.example.Target&quot;);</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">多个候选类名按顺序兜底：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">Class&lt;?&gt; target = Classes.findFirstClass(<br>        &quot;com.example.Target&quot;,<br>        &quot;com.example.a&quot;<br>);</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">查找方法：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">import io.github.lingqiqi5211.ezhooktool.core.java.Methods;<br><br>Method method = Methods.find(target)<br>        .filterByName(&quot;foo&quot;)<br>        .filterByParamCount(2)<br>        .filterByReturnType(String.class)<br>        .includeSuper()<br>        .first();</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">更宽松的参数匹配：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">Method method = Methods.find(target)<br>        .filterByNameContains(&quot;open&quot;)<br>        .filterByAssignableParamTypes(String.class)<br>        .filterByReturnTypeExtendsFrom(CharSequence.class)<br>        .filterPublic()<br>        .first();</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">查找字段：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">import io.github.lingqiqi5211.ezhooktool.core.java.Fields;<br><br>Field field = Fields.find(target)<br>        .filterByName(&quot;mContext&quot;)<br>        .filterByType(Context.class)<br>        .currentClassOnly()<br>        .first();</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">查找构造器：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">import io.github.lingqiqi5211.ezhooktool.core.java.Constructors;<br><br>Constructor&lt;?&gt; constructor = Constructors.find(target)<br>        .filterEmptyParam()<br>        .filterPublic()<br>        .first();</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">安装 before / after hook：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam;<br>import io.github.lingqiqi5211.ezhooktool.xposed.java.Hooks;<br>import io.github.lingqiqi5211.ezhooktool.xposed.java.IMethodHook;<br><br>Hooks.createHook(method, new IMethodHook() {<br>    @Override<br>    public void before(HookParam param) {<br>        Object[] args = param.getArgs();<br>        args[0] = ((String) args[0]).trim();<br>    }<br><br>    @Override<br>    public void after(HookParam param) {<br>        param.setResult(&quot;done&quot;);<br>    }<br>});</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">安装 replace hook：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">import io.github.lingqiqi5211.ezhooktool.xposed.java.IReplaceHook;<br><br>Hooks.createHook(method, new IReplaceHook() {<br>    @Override<br>    public Object replace(HookParam param) {<br>        return null;<br>    }<br>});</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">查找并 hook 单个方法：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">Hooks.findAndHookMethod(target, &quot;foo&quot;, String.class, new IMethodHook() {<br>    @Override<br>    public void before(HookParam param) {<br>        // ...<br>    }<br>});</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">批量 hook：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">List&lt;Method&gt; methods = Methods.find(target)<br>        .filterByName(&quot;foo&quot;)<br>        .filterByParamCount(1)<br>        .toList();<br><br>Hooks.createHooks(methods, new IMethodHook() {<br>    @Override<br>    public void before(HookParam param) {<br>        // ...<br>    }<br>});</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <h2 class="">查找范围</h2>
+      <p class="paragraph">方法和字段默认使用智能查找：先查当前类，找不到再查父类。</p>
+      <ul>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">currentClassOnly()</code>：只查当前类。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">includeSuper()</code>：查当前类和全部父类。</p>
+        </li>
+      </ul>
+      <p class="paragraph">不写这两个开关时，就是默认智能查找。</p>
+      <p class="paragraph">也可以在函数参数里直接指定：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">clazz.findMethod(findSuper = false) {<br>    name(&quot;foo&quot;)<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <h2 class="">查询条件</h2>
+      <p class="paragraph">方法查询常用条件：</p>
+      <ul>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">name(&quot;foo&quot;)</code> / <code class="lang-kotlin">nameContains(&quot;foo&quot;)</code> / <code class="lang-kotlin">nameStartsWith(&quot;get&quot;)</code> / <code class="lang-kotlin">nameEndsWith(&quot;Locked&quot;)</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">paramCount(2)</code> / <code class="lang-kotlin">paramCountIn(1..3)</code> / <code class="lang-kotlin">noParams()</code> / <code class="lang-kotlin">hasParams()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">params(String::class.java)</code>：完整参数类型，数量和顺序必须一致。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">paramsAssignableFrom(String::class.java)</code>：目标方法参数能接收这些类型。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">returnType(String::class.java)</code> / <code class="lang-kotlin">returnTypeExtendsFrom(CharSequence::class.java)</code> / <code class="lang-kotlin">voidReturnType()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">isStatic()</code> / <code class="lang-kotlin">notStatic()</code> / <code class="lang-kotlin">isPublic()</code> / <code class="lang-kotlin">isPrivate()</code> / <code class="lang-kotlin">isProtected()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">isFinal()</code> / <code class="lang-kotlin">isAbstract()</code> / <code class="lang-kotlin">isNative()</code> / <code class="lang-kotlin">isSynchronized()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">isVarArgs()</code> / <code class="lang-kotlin">isSynthetic()</code> / <code class="lang-kotlin">isBridge()</code> / <code class="lang-kotlin">isDefault()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">filter { ... }</code>：自定义条件。</p>
+        </li>
+      </ul>
+      <p class="paragraph">字段查询常用条件：</p>
+      <ul>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">name(&quot;mContext&quot;)</code> / <code class="lang-kotlin">nameContains(&quot;context&quot;)</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">type(Context::class.java)</code> / <code class="lang-kotlin">typeExtendsFrom(Context::class.java)</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">isStatic()</code> / <code class="lang-kotlin">notStatic()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">isPublic()</code> / <code class="lang-kotlin">isPrivate()</code> / <code class="lang-kotlin">isProtected()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">isFinal()</code> / <code class="lang-kotlin">isVolatile()</code> / <code class="lang-kotlin">isTransient()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">isEnumConstant()</code> / <code class="lang-kotlin">isSynthetic()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">filter { ... }</code>：自定义条件。</p>
+        </li>
+      </ul>
+      <p class="paragraph">构造器查询常用条件：</p>
+      <ul>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">paramCount(2)</code> / <code class="lang-kotlin">paramCountIn(1..3)</code> / <code class="lang-kotlin">noParams()</code> / <code class="lang-kotlin">hasParams()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">params(String::class.java)</code>：完整参数类型，数量和顺序必须一致。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">paramsAssignableFrom(String::class.java)</code>：目标构造器参数能接收这些类型。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">isPublic()</code> / <code class="lang-kotlin">isPrivate()</code> / <code class="lang-kotlin">isProtected()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">isVarArgs()</code> / <code class="lang-kotlin">isSynthetic()</code></p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">filter { ... }</code>：自定义条件。</p>
+        </li>
+      </ul>
+      <p class="paragraph">Java 入口使用同义的 <code class="lang-kotlin">filterBy...</code>、<code class="lang-kotlin">filterPublic()</code>、<code class="lang-kotlin">filterStatic()</code> 等方法。</p>
+      <h2 class="">查询缓存</h2>
+      <p class="paragraph">缓存保存的是最终查找结果，不保存查找过程。</p>
+      <p class="paragraph">会缓存的结果：</p>
+      <ul>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">findClass</code> / <code class="lang-kotlin">findClassOrNull</code>：按 <code class="lang-kotlin">ClassLoader + 类名</code> 缓存成功加载的类。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">findFirstClass</code> / <code class="lang-kotlin">findFirstClassOrNull</code>：按 <code class="lang-kotlin">ClassLoader + 候选类名列表</code> 缓存第一个成功结果。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">findMethod</code> / <code class="lang-kotlin">findField</code> / <code class="lang-kotlin">findConstructor</code>：按结构化查询条件缓存第一个匹配结果。</p>
+        </li>
+        <li>
+          <p class="paragraph">best-match 查找：按名称和参数类型缓存匹配结果。</p>
+        </li>
+      </ul>
+      <p class="paragraph">不会缓存的内容：</p>
+      <ul>
+        <li>
+          <p class="paragraph">找不到的类或成员。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">findAllMethods</code> / <code class="lang-kotlin">findAllFields</code> / <code class="lang-kotlin">findAllConstructors</code> 的列表本身。</p>
+        </li>
+        <li>
+          <p class="paragraph">自定义 <code class="lang-kotlin">filter { ... }</code> 的结果。</p>
+        </li>
+      </ul>
+      <p class="paragraph"><code class="lang-kotlin">findAll</code> 的行为：</p>
+      <ol>
+        <li>
+          <p class="paragraph">带查询条件的 <code class="lang-kotlin">findAll</code> 会先走一次对应的单个查找，让单个查找缓存先命中或预热。</p>
+        </li>
+        <li>
+          <p class="paragraph">随后再查出完整列表。</p>
+        </li>
+        <li>
+          <p class="paragraph">列表里的每个结果会按精确签名写入单个查找缓存。</p>
+        </li>
+      </ol>
+      <p class="paragraph">缓存只保存在当前运行期内。高频命中的缓存会刷新访问记录；低频缓存会在内部清理条件达成后自动释放。</p>
+      <p class="paragraph">关闭缓存会释放已有缓存，也可以手动清除：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">EzReflect.cacheEnabled = false<br>EzReflect.clearCache()</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph"><code class="lang-kotlin">init()</code>、<code class="lang-kotlin">reset()</code> 和 <code class="lang-kotlin">clearCache()</code> 都会清空缓存。</p>
+      <h2 class="">调用和字段读写</h2>
+      <p class="paragraph">Kotlin：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val value = obj.callMethod(&quot;getValue&quot;)<br>obj.putField(&quot;enabled&quot;, true)</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">Java：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">Object value = Methods.callMethod(obj, &quot;getValue&quot;);<br>Fields.setBooleanField(obj, &quot;enabled&quot;, true);</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <h2 class="">libxposed 101 intercept</h2>
+      <p class="paragraph"><code class="lang-kotlin">intercept</code> 只用于需要直接操作 <code class="lang-kotlin">XposedInterface.Chain</code> 的场景。</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">Hooks.intercept(method, chain -&gt; {<br>    Object[] args = chain.getArgs().toArray();<br>    return chain.proceed(args);<br>});</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+    </div>
+    <h2 class="">All modules:</h2>
+    <div class="table"><a data-name="-387464810%2FMain%2F0" anchor-label="core" id="-387464810%2FMain%2F0" data-filterable-set=""></a>
+      <div class="table-row table-row_multimodule">
+        <div class="main-subrow ">
+          <div class="w-100"><span class="inline-flex">
+              <div><a href="core/index.html">core</a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-387464810%2FMain%2F0"></span>
+                <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+              </span></span></div>
+          <div><span class="brief-comment"></span></div>
+        </div>
+      </div>
+<a data-name="-1836672957%2FMain%2F0" anchor-label="hook-xposed-101" id="-1836672957%2FMain%2F0" data-filterable-set=""></a>
+      <div class="table-row table-row_multimodule">
+        <div class="main-subrow ">
+          <div class="w-100"><span class="inline-flex">
+              <div><a href="hook-xposed-101/index.html">hook-xposed-101</a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1836672957%2FMain%2F0"></span>
+                <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+              </span></span></div>
+          <div><span class="brief-comment"></span></div>
+        </div>
+      </div>
+<a data-name="-1371543501%2FMain%2F0" anchor-label="hook-xposed-82" id="-1371543501%2FMain%2F0" data-filterable-set=""></a>
+      <div class="table-row table-row_multimodule">
+        <div class="main-subrow ">
+          <div class="w-100"><span class="inline-flex">
+              <div><a href="hook-xposed-82/index.html">hook-xposed-82</a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1371543501%2FMain%2F0"></span>
+                <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+              </span></span></div>
+          <div><span class="brief-comment"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>© 2026 Copyright</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
