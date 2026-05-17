@@ -144,43 +144,42 @@ fun Class<*>.hookAllMethods(
 ): List<XC_MethodHook.Unhook> =
     findAllMethods(this, findSuper = false) { name(methodName) }.createHooks(block)
 
-/**
- * 为指定类中同名的全部方法批量创建 hook。
- */
-fun Class<*>.hookMethod(
+private fun Class<*>.findHookMethods(
     methodName: String,
-    block: HookFactory.() -> Unit,
-): List<XC_MethodHook.Unhook> = hookAllMethods(methodName, block)
+    argTypes: Array<out Class<*>>,
+): List<Method> = findAllMethods(this, findSuper = false) {
+    name(methodName)
+    if (argTypes.isNotEmpty()) {
+        parameterTypes(*argTypes)
+    }
+}
 
 /**
  * 为指定类中同名的全部方法批量创建 before hook。
  */
 fun Class<*>.beforeHookMethod(
     methodName: String,
-    callback: HookBlock,
-): List<XC_MethodHook.Unhook> = hookMethod(methodName) {
-    before { it.callback() }
-}
+    vararg argTypes: Class<*>,
+    callback: (HookParam) -> Unit,
+): List<XC_MethodHook.Unhook> = findHookMethods(methodName, argTypes).createBeforeHooks(callback)
 
 /**
  * 为指定类中同名的全部方法批量创建 after hook。
  */
 fun Class<*>.afterHookMethod(
     methodName: String,
-    callback: HookBlock,
-): List<XC_MethodHook.Unhook> = hookMethod(methodName) {
-    after { it.callback() }
-}
+    vararg argTypes: Class<*>,
+    callback: (HookParam) -> Unit,
+): List<XC_MethodHook.Unhook> = findHookMethods(methodName, argTypes).createAfterHooks(callback)
 
 /**
  * 为指定类中同名的全部方法批量创建 replace hook。
  */
 fun Class<*>.replaceHookMethod(
     methodName: String,
-    callback: ReplaceHookBlock,
-): List<XC_MethodHook.Unhook> = hookMethod(methodName) {
-    replace { it.callback() }
-}
+    vararg argTypes: Class<*>,
+    callback: (HookParam) -> Any?,
+): List<XC_MethodHook.Unhook> = findHookMethods(methodName, argTypes).createReplaceHooks(callback)
 
 /**
  * 让指定类中同名的全部方法直接返回固定值。
@@ -188,7 +187,8 @@ fun Class<*>.replaceHookMethod(
 fun Class<*>.returnConstantHookMethod(
     methodName: String,
     value: Any?,
-): List<XC_MethodHook.Unhook> = hookMethod(methodName) {
+    vararg argTypes: Class<*>,
+): List<XC_MethodHook.Unhook> = findHookMethods(methodName, argTypes).createHooks {
     returnConstant(value)
 }
 
@@ -208,40 +208,37 @@ fun String.hookAllMethods(
 ): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).hookAllMethods(methodName, block)
 
 /**
- * 按类名为同名的全部方法批量创建 hook。
- */
-fun String.hookMethod(
-    methodName: String,
-    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    block: HookFactory.() -> Unit,
-): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).hookMethod(methodName, block)
-
-/**
  * 按类名为同名的全部方法批量创建 before hook。
  */
 fun String.beforeHookMethod(
     methodName: String,
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    callback: HookBlock,
-): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).beforeHookMethod(methodName, callback)
+    callback: (HookParam) -> Unit,
+): List<XC_MethodHook.Unhook> =
+    loadClass(this, classLoader).beforeHookMethod(methodName, *argTypes, callback = callback)
 
 /**
  * 按类名为同名的全部方法批量创建 after hook。
  */
 fun String.afterHookMethod(
     methodName: String,
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    callback: HookBlock,
-): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).afterHookMethod(methodName, callback)
+    callback: (HookParam) -> Unit,
+): List<XC_MethodHook.Unhook> =
+    loadClass(this, classLoader).afterHookMethod(methodName, *argTypes, callback = callback)
 
 /**
  * 按类名为同名的全部方法批量创建 replace hook。
  */
 fun String.replaceHookMethod(
     methodName: String,
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    callback: ReplaceHookBlock,
-): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).replaceHookMethod(methodName, callback)
+    callback: (HookParam) -> Any?,
+): List<XC_MethodHook.Unhook> =
+    loadClass(this, classLoader).replaceHookMethod(methodName, *argTypes, callback = callback)
 
 /**
  * 让指定类名中同名的全部方法直接返回固定值。
@@ -249,8 +246,10 @@ fun String.replaceHookMethod(
 fun String.returnConstantHookMethod(
     methodName: String,
     value: Any?,
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).returnConstantHookMethod(methodName, value)
+): List<XC_MethodHook.Unhook> =
+    loadClass(this, classLoader).returnConstantHookMethod(methodName, value, *argTypes)
 
 /**
  * 为指定类的全部构造器批量创建 hook。
@@ -260,29 +259,36 @@ fun String.returnConstantHookMethod(
 fun Class<*>.hookAllConstructors(block: HookFactory.() -> Unit): List<XC_MethodHook.Unhook> =
     findAllConstructors(this).createHooks(block)
 
-/**
- * 为指定类的全部构造器批量创建 hook。
- */
-fun Class<*>.hookConstructor(block: HookFactory.() -> Unit): List<XC_MethodHook.Unhook> =
-    hookAllConstructors(block)
+private fun Class<*>.findHookConstructors(argTypes: Array<out Class<*>>): List<Constructor<*>> =
+    findAllConstructors(this) {
+        if (argTypes.isNotEmpty()) {
+            parameterTypes(*argTypes)
+        }
+    }
 
 /**
  * 为指定类的全部构造器批量创建 before hook。
  */
-fun Class<*>.beforeHookConstructor(callback: HookBlock): List<XC_MethodHook.Unhook> =
-    hookConstructor { before { it.callback() } }
+fun Class<*>.beforeHookConstructor(
+    vararg argTypes: Class<*>,
+    callback: (HookParam) -> Unit,
+): List<XC_MethodHook.Unhook> = findHookConstructors(argTypes).createBeforeHooks(callback)
 
 /**
  * 为指定类的全部构造器批量创建 after hook。
  */
-fun Class<*>.afterHookConstructor(callback: HookBlock): List<XC_MethodHook.Unhook> =
-    hookConstructor { after { it.callback() } }
+fun Class<*>.afterHookConstructor(
+    vararg argTypes: Class<*>,
+    callback: (HookParam) -> Unit,
+): List<XC_MethodHook.Unhook> = findHookConstructors(argTypes).createAfterHooks(callback)
 
 /**
  * 为指定类的全部构造器批量创建 replace hook。
  */
-fun Class<*>.replaceHookConstructor(callback: ReplaceHookBlock): List<XC_MethodHook.Unhook> =
-    hookConstructor { replace { it.callback() } }
+fun Class<*>.replaceHookConstructor(
+    vararg argTypes: Class<*>,
+    callback: (HookParam) -> Any?,
+): List<XC_MethodHook.Unhook> = findHookConstructors(argTypes).createReplaceHooks(callback)
 
 /**
  * 按类名为全部构造器批量创建 hook。
@@ -298,36 +304,34 @@ fun String.hookAllConstructors(
 ): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).hookAllConstructors(block)
 
 /**
- * 按类名为全部构造器批量创建 hook。
- */
-fun String.hookConstructor(
-    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    block: HookFactory.() -> Unit,
-): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).hookConstructor(block)
-
-/**
  * 按类名为全部构造器批量创建 before hook。
  */
 fun String.beforeHookConstructor(
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    callback: HookBlock,
-): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).beforeHookConstructor(callback)
+    callback: (HookParam) -> Unit,
+): List<XC_MethodHook.Unhook> =
+    loadClass(this, classLoader).beforeHookConstructor(*argTypes, callback = callback)
 
 /**
  * 按类名为全部构造器批量创建 after hook。
  */
 fun String.afterHookConstructor(
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    callback: HookBlock,
-): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).afterHookConstructor(callback)
+    callback: (HookParam) -> Unit,
+): List<XC_MethodHook.Unhook> =
+    loadClass(this, classLoader).afterHookConstructor(*argTypes, callback = callback)
 
 /**
  * 按类名为全部构造器批量创建 replace hook。
  */
 fun String.replaceHookConstructor(
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    callback: ReplaceHookBlock,
-): List<XC_MethodHook.Unhook> = loadClass(this, classLoader).replaceHookConstructor(callback)
+    callback: (HookParam) -> Any?,
+): List<XC_MethodHook.Unhook> =
+    loadClass(this, classLoader).replaceHookConstructor(*argTypes, callback = callback)
 
 /**
  * 为方法列表批量创建 hook。

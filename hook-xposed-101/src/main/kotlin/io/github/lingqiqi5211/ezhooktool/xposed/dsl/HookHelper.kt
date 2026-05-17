@@ -244,63 +244,57 @@ fun Class<*>.hookAllMethods(
 ): List<XposedInterface.HookHandle> =
     findAllMethods(this, findSuper = false) { name(methodName) }.createHooks(priority, exceptionMode, block)
 
-/**
- * 为指定类中同名的全部方法批量创建 hook。
- */
-fun Class<*>.hookMethod(
+private fun Class<*>.findHookMethods(
     methodName: String,
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    block: HookFactory.() -> Unit,
-): List<XposedInterface.HookHandle> = hookAllMethods(methodName, priority, exceptionMode, block)
+    argTypes: Array<out Class<*>>,
+): List<Method> = findAllMethods(this, findSuper = false) {
+    name(methodName)
+    if (argTypes.isNotEmpty()) {
+        parameterTypes(*argTypes)
+    }
+}
 
 /**
  * 为指定类中同名的全部方法批量创建 before hook。
  */
 fun Class<*>.beforeHookMethod(
     methodName: String,
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: HookBlock,
-): List<XposedInterface.HookHandle> = hookMethod(methodName, priority, exceptionMode) {
-    before { it.callback() }
-}
+    vararg argTypes: Class<*>,
+    callback: (HookParam) -> Unit,
+): List<XposedInterface.HookHandle> = findHookMethods(methodName, argTypes).createBeforeHooks(callback = callback)
 
 /**
  * 为指定类中同名的全部方法批量创建 after hook。
  */
 fun Class<*>.afterHookMethod(
     methodName: String,
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: HookBlock,
-): List<XposedInterface.HookHandle> = hookMethod(methodName, priority, exceptionMode) {
-    after { it.callback() }
-}
+    vararg argTypes: Class<*>,
+    callback: (HookParam) -> Unit,
+): List<XposedInterface.HookHandle> = findHookMethods(methodName, argTypes).createAfterHooks(callback = callback)
 
 /**
  * 为指定类中同名的全部方法批量创建 replace hook。
  */
 fun Class<*>.replaceHookMethod(
     methodName: String,
+    vararg argTypes: Class<*>,
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: ReplaceHookBlock,
-): List<XposedInterface.HookHandle> = hookMethod(methodName, priority, exceptionMode) {
-    replace { it.callback() }
-}
+    callback: (HookParam) -> Any?,
+): List<XposedInterface.HookHandle> =
+    findHookMethods(methodName, argTypes).createReplaceHooks(priority, exceptionMode, callback)
 
 /**
  * 为指定类中同名的全部方法批量创建 intercept hook。
  */
 fun Class<*>.interceptHookMethod(
     methodName: String,
+    vararg argTypes: Class<*>,
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: ChainInterceptor,
-): List<XposedInterface.HookHandle> = hookMethod(methodName, priority, exceptionMode) {
-    intercept { it.callback() }
-}
+    callback: (XposedInterface.Chain) -> Any?,
+): List<XposedInterface.HookHandle> =
+    findHookMethods(methodName, argTypes).createInterceptHooks(priority, exceptionMode, callback)
 
 /**
  * 让指定类中同名的全部方法直接返回固定值。
@@ -308,9 +302,10 @@ fun Class<*>.interceptHookMethod(
 fun Class<*>.returnConstantHookMethod(
     methodName: String,
     value: Any?,
+    vararg argTypes: Class<*>,
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-): List<XposedInterface.HookHandle> = hookMethod(methodName, priority, exceptionMode) {
+): List<XposedInterface.HookHandle> = findHookMethods(methodName, argTypes).createHooks(priority, exceptionMode) {
     returnConstant(value)
 }
 
@@ -335,64 +330,64 @@ fun String.hookAllMethods(
     loadClass(this, classLoader).hookAllMethods(methodName, priority, exceptionMode, block)
 
 /**
- * 按类名为同名的全部方法批量创建 hook。
- */
-fun String.hookMethod(
-    methodName: String,
-    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    block: HookFactory.() -> Unit,
-): List<XposedInterface.HookHandle> =
-    loadClass(this, classLoader).hookMethod(methodName, priority, exceptionMode, block)
-
-/**
  * 按类名为同名的全部方法批量创建 before hook。
  */
 fun String.beforeHookMethod(
     methodName: String,
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: HookBlock,
+    callback: (HookParam) -> Unit,
 ): List<XposedInterface.HookHandle> =
-    loadClass(this, classLoader).beforeHookMethod(methodName, priority, exceptionMode, callback)
+    loadClass(this, classLoader).beforeHookMethod(methodName, *argTypes, callback = callback)
 
 /**
  * 按类名为同名的全部方法批量创建 after hook。
  */
 fun String.afterHookMethod(
     methodName: String,
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: HookBlock,
+    callback: (HookParam) -> Unit,
 ): List<XposedInterface.HookHandle> =
-    loadClass(this, classLoader).afterHookMethod(methodName, priority, exceptionMode, callback)
+    loadClass(this, classLoader).afterHookMethod(methodName, *argTypes, callback = callback)
 
 /**
  * 按类名为同名的全部方法批量创建 replace hook。
  */
 fun String.replaceHookMethod(
     methodName: String,
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: ReplaceHookBlock,
+    callback: (HookParam) -> Any?,
 ): List<XposedInterface.HookHandle> =
-    loadClass(this, classLoader).replaceHookMethod(methodName, priority, exceptionMode, callback)
+    loadClass(this, classLoader).replaceHookMethod(
+        methodName,
+        *argTypes,
+        priority = priority,
+        exceptionMode = exceptionMode,
+        callback = callback,
+    )
 
 /**
  * 按类名为同名的全部方法批量创建 intercept hook。
  */
 fun String.interceptHookMethod(
     methodName: String,
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: ChainInterceptor,
+    callback: (XposedInterface.Chain) -> Any?,
 ): List<XposedInterface.HookHandle> =
-    loadClass(this, classLoader).interceptHookMethod(methodName, priority, exceptionMode, callback)
+    loadClass(this, classLoader).interceptHookMethod(
+        methodName,
+        *argTypes,
+        priority = priority,
+        exceptionMode = exceptionMode,
+        callback = callback,
+    )
 
 /**
  * 让指定类名中同名的全部方法直接返回固定值。
@@ -400,11 +395,18 @@ fun String.interceptHookMethod(
 fun String.returnConstantHookMethod(
     methodName: String,
     value: Any?,
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
 ): List<XposedInterface.HookHandle> =
-    loadClass(this, classLoader).returnConstantHookMethod(methodName, value, priority, exceptionMode)
+    loadClass(this, classLoader).returnConstantHookMethod(
+        methodName,
+        value,
+        *argTypes,
+        priority = priority,
+        exceptionMode = exceptionMode,
+    )
 
 /**
  * 为指定类的全部构造器批量创建 hook。
@@ -419,58 +421,50 @@ fun Class<*>.hookAllConstructors(
     block: HookFactory.() -> Unit,
 ): List<XposedInterface.HookHandle> = findAllConstructors(this).createHooks(priority, exceptionMode, block)
 
-/**
- * 为指定类的全部构造器批量创建 hook。
- */
-fun Class<*>.hookConstructor(
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    block: HookFactory.() -> Unit,
-): List<XposedInterface.HookHandle> = hookAllConstructors(priority, exceptionMode, block)
+private fun Class<*>.findHookConstructors(argTypes: Array<out Class<*>>): List<Constructor<*>> =
+    findAllConstructors(this) {
+        if (argTypes.isNotEmpty()) {
+            parameterTypes(*argTypes)
+        }
+    }
 
 /**
  * 为指定类的全部构造器批量创建 before hook。
  */
 fun Class<*>.beforeHookConstructor(
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: HookBlock,
-): List<XposedInterface.HookHandle> = hookConstructor(priority, exceptionMode) {
-    before { it.callback() }
-}
+    vararg argTypes: Class<*>,
+    callback: (HookParam) -> Unit,
+): List<XposedInterface.HookHandle> = findHookConstructors(argTypes).createBeforeHooks(callback = callback)
 
 /**
  * 为指定类的全部构造器批量创建 after hook。
  */
 fun Class<*>.afterHookConstructor(
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: HookBlock,
-): List<XposedInterface.HookHandle> = hookConstructor(priority, exceptionMode) {
-    after { it.callback() }
-}
+    vararg argTypes: Class<*>,
+    callback: (HookParam) -> Unit,
+): List<XposedInterface.HookHandle> = findHookConstructors(argTypes).createAfterHooks(callback = callback)
 
 /**
  * 为指定类的全部构造器批量创建 replace hook。
  */
 fun Class<*>.replaceHookConstructor(
+    vararg argTypes: Class<*>,
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: ReplaceHookBlock,
-): List<XposedInterface.HookHandle> = hookConstructor(priority, exceptionMode) {
-    replace { it.callback() }
-}
+    callback: (HookParam) -> Any?,
+): List<XposedInterface.HookHandle> =
+    findHookConstructors(argTypes).createReplaceHooks(priority, exceptionMode, callback)
 
 /**
  * 为指定类的全部构造器批量创建 intercept hook。
  */
 fun Class<*>.interceptHookConstructor(
+    vararg argTypes: Class<*>,
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: ChainInterceptor,
-): List<XposedInterface.HookHandle> = hookConstructor(priority, exceptionMode) {
-    intercept { it.callback() }
-}
+    callback: (XposedInterface.Chain) -> Any?,
+): List<XposedInterface.HookHandle> =
+    findHookConstructors(argTypes).createInterceptHooks(priority, exceptionMode, callback)
 
 /**
  * 按类名为全部构造器批量创建 hook。
@@ -490,58 +484,58 @@ fun String.hookAllConstructors(
 ): List<XposedInterface.HookHandle> = loadClass(this, classLoader).hookAllConstructors(priority, exceptionMode, block)
 
 /**
- * 按类名为全部构造器批量创建 hook。
- */
-fun String.hookConstructor(
-    classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    block: HookFactory.() -> Unit,
-): List<XposedInterface.HookHandle> = loadClass(this, classLoader).hookConstructor(priority, exceptionMode, block)
-
-/**
  * 按类名为全部构造器批量创建 before hook。
  */
 fun String.beforeHookConstructor(
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: HookBlock,
+    callback: (HookParam) -> Unit,
 ): List<XposedInterface.HookHandle> =
-    loadClass(this, classLoader).beforeHookConstructor(priority, exceptionMode, callback)
+    loadClass(this, classLoader).beforeHookConstructor(*argTypes, callback = callback)
 
 /**
  * 按类名为全部构造器批量创建 after hook。
  */
 fun String.afterHookConstructor(
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: HookBlock,
+    callback: (HookParam) -> Unit,
 ): List<XposedInterface.HookHandle> =
-    loadClass(this, classLoader).afterHookConstructor(priority, exceptionMode, callback)
+    loadClass(this, classLoader).afterHookConstructor(*argTypes, callback = callback)
 
 /**
  * 按类名为全部构造器批量创建 replace hook。
  */
 fun String.replaceHookConstructor(
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: ReplaceHookBlock,
+    callback: (HookParam) -> Any?,
 ): List<XposedInterface.HookHandle> =
-    loadClass(this, classLoader).replaceHookConstructor(priority, exceptionMode, callback)
+    loadClass(this, classLoader).replaceHookConstructor(
+        *argTypes,
+        priority = priority,
+        exceptionMode = exceptionMode,
+        callback = callback,
+    )
 
 /**
  * 按类名为全部构造器批量创建 intercept hook。
  */
 fun String.interceptHookConstructor(
+    vararg argTypes: Class<*>,
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
-    callback: ChainInterceptor,
+    callback: (XposedInterface.Chain) -> Any?,
 ): List<XposedInterface.HookHandle> =
-    loadClass(this, classLoader).interceptHookConstructor(priority, exceptionMode, callback)
+    loadClass(this, classLoader).interceptHookConstructor(
+        *argTypes,
+        priority = priority,
+        exceptionMode = exceptionMode,
+        callback = callback,
+    )
 
 /**
  * 为方法列表批量创建 hook。
