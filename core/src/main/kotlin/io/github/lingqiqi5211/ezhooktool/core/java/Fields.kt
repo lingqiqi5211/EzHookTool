@@ -1,8 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.core.java
 
-import io.github.lingqiqi5211.ezhooktool.core.MemberNotFoundException
-import io.github.lingqiqi5211.ezhooktool.core.MemberType
 import io.github.lingqiqi5211.ezhooktool.core.findAllFields
+import io.github.lingqiqi5211.ezhooktool.core.findField
 import io.github.lingqiqi5211.ezhooktool.core.findFieldOrNull
 import io.github.lingqiqi5211.ezhooktool.core.getField
 import io.github.lingqiqi5211.ezhooktool.core.getStaticField
@@ -273,8 +272,12 @@ class FieldSearch internal constructor(
     fun filter(predicate: Predicate<Field>): FieldSearch = add { filter(predicate) }
 
     /** 返回第一个匹配的字段，找不到时抛出异常。 */
-    fun first(): Field = firstOrNull()
-        ?: throw MemberNotFoundException(MemberType.FIELD, clazz.name, findSuper != false)
+    fun first(): Field {
+        val query = conditions.toList()
+        return findField(clazz, findSuper) {
+            query.forEach { it() }
+        }
+    }
 
     /** 返回第一个匹配的字段，找不到时返回 `null`。 */
     fun firstOrNull(): Field? {

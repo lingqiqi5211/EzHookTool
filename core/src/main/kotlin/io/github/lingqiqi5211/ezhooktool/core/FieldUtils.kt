@@ -164,6 +164,7 @@ fun findField(
             memberType = MemberType.FIELD,
             targetClass = clz.name,
             searchedSuper = effectiveFindSuper != false,
+            conditionDesc = builtQuery.describe(),
             candidates = getFieldCandidates(clz)
         )
 }

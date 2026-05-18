@@ -187,6 +187,7 @@ fun findMethod(
             memberType = MemberType.METHOD,
             targetClass = clz.name,
             searchedSuper = effectiveFindSuper != false,
+            conditionDesc = builtQuery.describe(),
             candidates = getCandidates(clz)
         )
 }

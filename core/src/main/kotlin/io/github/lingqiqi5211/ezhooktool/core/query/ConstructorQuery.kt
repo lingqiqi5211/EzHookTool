@@ -3,6 +3,7 @@ package io.github.lingqiqi5211.ezhooktool.core.query
 import io.github.lingqiqi5211.ezhooktool.core.ConstructorCondition
 import io.github.lingqiqi5211.ezhooktool.core.isTypeMatch
 import io.github.lingqiqi5211.ezhooktool.core.paramCount
+import io.github.lingqiqi5211.ezhooktool.core.toReadableTypeName
 import java.lang.reflect.Constructor
 import java.lang.reflect.Modifier
 import java.util.function.Predicate
@@ -47,6 +48,9 @@ private fun Array<Class<*>>.canAcceptAll(types: Array<out Class<*>>): Boolean {
 
 private fun Constructor<*>.isSyntheticConstructor(): Boolean = modifiers and 0x00001000 != 0
 
+private fun Array<out Class<*>>.describeTypes(): String =
+    joinToString(prefix = "[", postfix = "]") { it.toReadableTypeName() }
+
 /**
  * 构造器查询条件。
  *
@@ -63,6 +67,7 @@ private fun Constructor<*>.isSyntheticConstructor(): Boolean = modifiers and 0x0
 class ConstructorQuery internal constructor() {
     private val conditions = mutableListOf<ConstructorCondition>()
     private val cacheParts = mutableMapOf<ConstructorCachePart, Any>()
+    private val descriptions = mutableListOf<String>()
     private val flags = mutableMapOf<String, Boolean>()
     private var cacheable = true
 
@@ -70,12 +75,14 @@ class ConstructorQuery internal constructor() {
     fun paramCount(value: Int) {
         conditions += { paramCount == value }
         cacheParts[ConstructorCachePart.PARAM_COUNT] = value
+        descriptions += "paramCount=$value"
     }
 
     /** 限定参数数量范围。 */
     fun paramCountIn(range: IntRange) {
         conditions += { paramCount in range }
         cacheParts[ConstructorCachePart.PARAM_COUNT_RANGE] = ConstructorIntRangeKey(range.first, range.last)
+        descriptions += "paramCount=${range.first}..${range.last}"
     }
 
     /** 限定为无参数构造器。 */
@@ -85,7 +92,9 @@ class ConstructorQuery internal constructor() {
 
     /** 限定为有参数构造器。 */
     fun hasParams() {
-        paramCountIn(1..Int.MAX_VALUE)
+        conditions += { paramCount > 0 }
+        cacheParts[ConstructorCachePart.PARAM_COUNT_RANGE] = ConstructorIntRangeKey(1, Int.MAX_VALUE)
+        descriptions += "paramCount>=1"
     }
 
     /**
@@ -96,6 +105,7 @@ class ConstructorQuery internal constructor() {
     fun parameterTypes(vararg types: Class<*>) {
         conditions += { parameterTypes.contentEquals(types) }
         cacheParts[ConstructorCachePart.PARAMETER_TYPES] = types.toList()
+        descriptions += "params=${types.describeTypes()}"
     }
 
     /** [parameterTypes] 的短名称。 */
@@ -111,6 +121,7 @@ class ConstructorQuery internal constructor() {
     fun parameterTypesAssignableFrom(vararg types: Class<*>) {
         conditions += { parameterTypes.canAcceptAll(types) }
         cacheParts[ConstructorCachePart.ASSIGNABLE_PARAMETER_TYPES] = types.toList()
+        descriptions += "paramsAssignableFrom=${types.describeTypes()}"
     }
 
     /** [parameterTypesAssignableFrom] 的短名称。 */
@@ -122,6 +133,7 @@ class ConstructorQuery internal constructor() {
     fun exceptionTypes(vararg types: Class<*>) {
         conditions += { exceptionTypes.contentEquals(types) }
         cacheParts[ConstructorCachePart.EXCEPTION_TYPES] = types.toList()
+        descriptions += "exceptions=${types.describeTypes()}"
     }
 
     /** 限定为 public 构造器。 */
@@ -178,22 +190,28 @@ class ConstructorQuery internal constructor() {
     fun filter(condition: ConstructorCondition) {
         conditions += condition
         cacheable = false
+        descriptions += "customFilter"
     }
 
     /** 添加 Java `Predicate` 条件。 */
     fun filter(predicate: Predicate<Constructor<*>>) {
         conditions += { predicate.test(this) }
         cacheable = false
+        descriptions += "customFilter"
     }
 
     private fun flag(name: String, value: Boolean, condition: Constructor<*>.() -> Boolean) {
         conditions += { condition(this) == value }
         flags[name] = value
         cacheParts[ConstructorCachePart.FLAGS] = flags.toSortedMap().toList()
+        descriptions += "$name=$value"
     }
 
     internal fun cacheKeyOrNull(): List<Any>? =
         if (cacheable) constructorCacheKeyOf(cacheParts) else null
+
+    internal fun describe(): String? =
+        descriptions.distinct().takeIf { it.isNotEmpty() }?.joinToString(", ")
 
     internal fun matches(constructor: Constructor<*>): Boolean =
         conditions.all { it(constructor) }

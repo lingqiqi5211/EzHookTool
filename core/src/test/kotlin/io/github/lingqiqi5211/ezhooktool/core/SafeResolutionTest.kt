@@ -1,6 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.core
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -80,8 +81,16 @@ class SafeResolutionTest {
             loadClassFirstOrNull("broken.BaseLauncher", SafeResolveMethodTarget::class.java.name, classLoader = loader),
         )
     }
+
+    @Test
+    fun `member not found message includes query conditions`() {
+        val error = assertThrows(MemberNotFoundException::class.java) {
+            SafeMemberTarget::class.java.findMethod {
+                name("missingMethod")
+                params(String::class.java)
+            }
+        }
+
+        assertTrue(error.message.orEmpty().contains("Condition: name=missingMethod, params=[java.lang.String]"))
+    }
 }
-
-
-
-

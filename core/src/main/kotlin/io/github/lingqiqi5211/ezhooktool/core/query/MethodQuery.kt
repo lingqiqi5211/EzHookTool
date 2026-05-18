@@ -3,6 +3,7 @@ package io.github.lingqiqi5211.ezhooktool.core.query
 import io.github.lingqiqi5211.ezhooktool.core.MethodCondition
 import io.github.lingqiqi5211.ezhooktool.core.isTypeMatch
 import io.github.lingqiqi5211.ezhooktool.core.paramCount
+import io.github.lingqiqi5211.ezhooktool.core.toReadableTypeName
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.function.Predicate
@@ -69,6 +70,9 @@ private fun Method.isDefaultMethod(): Boolean =
             !Modifier.isAbstract(modifiers) &&
             !Modifier.isStatic(modifiers)
 
+private fun Array<out Class<*>>.describeTypes(): String =
+    joinToString(prefix = "[", postfix = "]") { it.toReadableTypeName() }
+
 /**
  * 方法查询条件。
  *
@@ -86,6 +90,7 @@ private fun Method.isDefaultMethod(): Boolean =
 class MethodQuery internal constructor() {
     private val conditions = mutableListOf<MethodCondition>()
     private val cacheParts = mutableMapOf<MethodCachePart, Any>()
+    private val descriptions = mutableListOf<String>()
     private val flags = mutableMapOf<String, Boolean>()
     private var cacheable = true
     private var searchSuperSet = false
@@ -95,36 +100,42 @@ class MethodQuery internal constructor() {
     fun name(value: String) {
         conditions += { name == value }
         cacheParts[MethodCachePart.NAME] = value
+        descriptions += "name=$value"
     }
 
     /** 限定方法名包含指定文本。 */
     fun nameContains(value: String, ignoreCase: Boolean = false) {
         conditions += { name.contains(value, ignoreCase) }
         cacheParts[MethodCachePart.NAME_CONTAINS] = MethodTextMatchKey(value, ignoreCase)
+        descriptions += "name contains \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
     }
 
     /** 限定方法名以指定文本开头。 */
     fun nameStartsWith(value: String, ignoreCase: Boolean = false) {
         conditions += { name.startsWith(value, ignoreCase) }
         cacheParts[MethodCachePart.NAME_STARTS_WITH] = MethodTextMatchKey(value, ignoreCase)
+        descriptions += "name startsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
     }
 
     /** 限定方法名以指定文本结尾。 */
     fun nameEndsWith(value: String, ignoreCase: Boolean = false) {
         conditions += { name.endsWith(value, ignoreCase) }
         cacheParts[MethodCachePart.NAME_ENDS_WITH] = MethodTextMatchKey(value, ignoreCase)
+        descriptions += "name endsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
     }
 
     /** 限定参数数量。 */
     fun paramCount(value: Int) {
         conditions += { paramCount == value }
         cacheParts[MethodCachePart.PARAM_COUNT] = value
+        descriptions += "paramCount=$value"
     }
 
     /** 限定参数数量范围。 */
     fun paramCountIn(range: IntRange) {
         conditions += { paramCount in range }
         cacheParts[MethodCachePart.PARAM_COUNT_RANGE] = MethodIntRangeKey(range.first, range.last)
+        descriptions += "paramCount=${range.first}..${range.last}"
     }
 
     /** 限定为无参数方法。 */
@@ -134,19 +145,23 @@ class MethodQuery internal constructor() {
 
     /** 限定为有参数方法。 */
     fun hasParams() {
-        paramCountIn(1..Int.MAX_VALUE)
+        conditions += { paramCount > 0 }
+        cacheParts[MethodCachePart.PARAM_COUNT_RANGE] = MethodIntRangeKey(1, Int.MAX_VALUE)
+        descriptions += "paramCount>=1"
     }
 
     /** 限定返回值类型。 */
     fun returnType(value: Class<*>) {
         conditions += { returnType == value }
         cacheParts[MethodCachePart.RETURN_TYPE] = value
+        descriptions += "returnType=${value.toReadableTypeName()}"
     }
 
     /** 限定返回值类型是 [value] 本身或子类。 */
     fun returnTypeExtendsFrom(value: Class<*>) {
         conditions += { isTypeMatch(returnType, value) }
         cacheParts[MethodCachePart.RETURN_TYPE_EXTENDS_FROM] = value
+        descriptions += "returnType extends ${value.toReadableTypeName()}"
     }
 
     /** 限定返回值为 void。 */
@@ -162,6 +177,7 @@ class MethodQuery internal constructor() {
     fun parameterTypes(vararg types: Class<*>) {
         conditions += { parameterTypes.contentEquals(types) }
         cacheParts[MethodCachePart.PARAMETER_TYPES] = types.toList()
+        descriptions += "params=${types.describeTypes()}"
     }
 
     /** [parameterTypes] 的短名称。 */
@@ -177,6 +193,7 @@ class MethodQuery internal constructor() {
     fun parameterTypesAssignableFrom(vararg types: Class<*>) {
         conditions += { parameterTypes.canAcceptAll(types) }
         cacheParts[MethodCachePart.ASSIGNABLE_PARAMETER_TYPES] = types.toList()
+        descriptions += "paramsAssignableFrom=${types.describeTypes()}"
     }
 
     /** [parameterTypesAssignableFrom] 的短名称。 */
@@ -188,6 +205,7 @@ class MethodQuery internal constructor() {
     fun exceptionTypes(vararg types: Class<*>) {
         conditions += { exceptionTypes.contentEquals(types) }
         cacheParts[MethodCachePart.EXCEPTION_TYPES] = types.toList()
+        descriptions += "exceptions=${types.describeTypes()}"
     }
 
     /** 限定为 static 方法。 */
@@ -339,18 +357,21 @@ class MethodQuery internal constructor() {
     fun filter(condition: MethodCondition) {
         conditions += condition
         cacheable = false
+        descriptions += "customFilter"
     }
 
     /** 添加 Java `Predicate` 条件。 */
     fun filter(predicate: Predicate<Method>) {
         conditions += { predicate.test(this) }
         cacheable = false
+        descriptions += "customFilter"
     }
 
     private fun flag(name: String, value: Boolean, condition: Method.() -> Boolean) {
         conditions += { condition(this) == value }
         flags[name] = value
         cacheParts[MethodCachePart.FLAGS] = flags.toSortedMap().toList()
+        descriptions += "$name=$value"
     }
 
     internal fun effectiveFindSuper(defaultValue: Boolean?): Boolean? =
@@ -358,6 +379,9 @@ class MethodQuery internal constructor() {
 
     internal fun cacheKeyOrNull(): List<Any>? =
         if (cacheable) methodCacheKeyOf(cacheParts) else null
+
+    internal fun describe(): String? =
+        descriptions.distinct().takeIf { it.isNotEmpty() }?.joinToString(", ")
 
     internal fun matches(method: Method): Boolean = conditions.all { it(method) }
 }

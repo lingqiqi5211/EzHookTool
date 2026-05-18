@@ -1,8 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.core.java
 
-import io.github.lingqiqi5211.ezhooktool.core.MemberNotFoundException
-import io.github.lingqiqi5211.ezhooktool.core.MemberType
 import io.github.lingqiqi5211.ezhooktool.core.findAllConstructors
+import io.github.lingqiqi5211.ezhooktool.core.findConstructor
 import io.github.lingqiqi5211.ezhooktool.core.findConstructorOrNull
 import io.github.lingqiqi5211.ezhooktool.core.newInstanceAuto
 import io.github.lingqiqi5211.ezhooktool.core.query.ConstructorQuery
@@ -119,8 +118,12 @@ class ConstructorSearch internal constructor(
     fun filter(predicate: Predicate<Constructor<*>>): ConstructorSearch = add { filter(predicate) }
 
     /** 返回第一个匹配的构造器，找不到时抛出异常。 */
-    fun first(): Constructor<*> = firstOrNull()
-        ?: throw MemberNotFoundException(MemberType.CONSTRUCTOR, clazz.name, false)
+    fun first(): Constructor<*> {
+        val query = conditions.toList()
+        return findConstructor(clazz) {
+            query.forEach { it() }
+        }
+    }
 
     /** 返回第一个匹配的构造器，找不到时返回 `null`。 */
     fun firstOrNull(): Constructor<*>? {

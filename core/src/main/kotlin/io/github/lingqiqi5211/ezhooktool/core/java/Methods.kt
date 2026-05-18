@@ -1,12 +1,11 @@
 package io.github.lingqiqi5211.ezhooktool.core.java
 
-import io.github.lingqiqi5211.ezhooktool.core.MemberNotFoundException
-import io.github.lingqiqi5211.ezhooktool.core.MemberType
 import io.github.lingqiqi5211.ezhooktool.core.callMethod
 import io.github.lingqiqi5211.ezhooktool.core.callMethodAs
 import io.github.lingqiqi5211.ezhooktool.core.callStaticMethod
 import io.github.lingqiqi5211.ezhooktool.core.callStaticMethodAs
 import io.github.lingqiqi5211.ezhooktool.core.findAllMethods
+import io.github.lingqiqi5211.ezhooktool.core.findMethod
 import io.github.lingqiqi5211.ezhooktool.core.findMethodOrNull
 import io.github.lingqiqi5211.ezhooktool.core.query.MethodQuery
 import java.lang.reflect.Method
@@ -273,8 +272,12 @@ class MethodSearch internal constructor(
     fun filter(predicate: Predicate<Method>): MethodSearch = add { filter(predicate) }
 
     /** 返回第一个匹配的方法，找不到时抛出异常。 */
-    fun first(): Method = firstOrNull()
-        ?: throw MemberNotFoundException(MemberType.METHOD, clazz.name, findSuper != false)
+    fun first(): Method {
+        val query = conditions.toList()
+        return findMethod(clazz, findSuper) {
+            query.forEach { it() }
+        }
+    }
 
     /** 返回第一个匹配的方法，找不到时返回 `null`。 */
     fun firstOrNull(): Method? {

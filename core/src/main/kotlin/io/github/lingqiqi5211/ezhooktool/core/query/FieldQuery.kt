@@ -3,6 +3,7 @@ package io.github.lingqiqi5211.ezhooktool.core.query
 import io.github.lingqiqi5211.ezhooktool.core.FieldCondition
 import io.github.lingqiqi5211.ezhooktool.core.isStatic
 import io.github.lingqiqi5211.ezhooktool.core.isTypeMatch
+import io.github.lingqiqi5211.ezhooktool.core.toReadableTypeName
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import java.util.function.Predicate
@@ -59,6 +60,7 @@ private fun Field.isSyntheticField(): Boolean = modifiers and 0x00001000 != 0
 class FieldQuery internal constructor() {
     private val conditions = mutableListOf<FieldCondition>()
     private val cacheParts = mutableMapOf<FieldCachePart, Any>()
+    private val descriptions = mutableListOf<String>()
     private val flags = mutableMapOf<String, Boolean>()
     private var cacheable = true
     private var searchSuperSet = false
@@ -68,36 +70,42 @@ class FieldQuery internal constructor() {
     fun name(value: String) {
         conditions += { name == value }
         cacheParts[FieldCachePart.NAME] = value
+        descriptions += "name=$value"
     }
 
     /** 限定字段名包含指定文本。 */
     fun nameContains(value: String, ignoreCase: Boolean = false) {
         conditions += { name.contains(value, ignoreCase) }
         cacheParts[FieldCachePart.NAME_CONTAINS] = FieldTextMatchKey(value, ignoreCase)
+        descriptions += "name contains \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
     }
 
     /** 限定字段名以指定文本开头。 */
     fun nameStartsWith(value: String, ignoreCase: Boolean = false) {
         conditions += { name.startsWith(value, ignoreCase) }
         cacheParts[FieldCachePart.NAME_STARTS_WITH] = FieldTextMatchKey(value, ignoreCase)
+        descriptions += "name startsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
     }
 
     /** 限定字段名以指定文本结尾。 */
     fun nameEndsWith(value: String, ignoreCase: Boolean = false) {
         conditions += { name.endsWith(value, ignoreCase) }
         cacheParts[FieldCachePart.NAME_ENDS_WITH] = FieldTextMatchKey(value, ignoreCase)
+        descriptions += "name endsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
     }
 
     /** 限定字段类型。 */
     fun type(value: Class<*>) {
         conditions += { type == value }
         cacheParts[FieldCachePart.TYPE] = value
+        descriptions += "type=${value.toReadableTypeName()}"
     }
 
     /** 限定字段类型是 [value] 本身或子类。 */
     fun typeExtendsFrom(value: Class<*>) {
         conditions += { isTypeMatch(type, value) }
         cacheParts[FieldCachePart.TYPE_EXTENDS_FROM] = value
+        descriptions += "type extends ${value.toReadableTypeName()}"
     }
 
     /** 限定为 static 字段。 */
@@ -109,6 +117,7 @@ class FieldQuery internal constructor() {
     fun isStatic(value: Boolean) {
         conditions += { this.isStatic == value }
         cacheParts[FieldCachePart.IS_STATIC] = value
+        descriptions += "static=$value"
     }
 
     /** 限定为非 static 字段。 */
@@ -220,18 +229,21 @@ class FieldQuery internal constructor() {
     fun filter(condition: FieldCondition) {
         conditions += condition
         cacheable = false
+        descriptions += "customFilter"
     }
 
     /** 添加 Java `Predicate` 条件。 */
     fun filter(predicate: Predicate<Field>) {
         conditions += { predicate.test(this) }
         cacheable = false
+        descriptions += "customFilter"
     }
 
     private fun flag(name: String, value: Boolean, condition: Field.() -> Boolean) {
         conditions += { condition(this) == value }
         flags[name] = value
         cacheParts[FieldCachePart.FLAGS] = flags.toSortedMap().toList()
+        descriptions += "$name=$value"
     }
 
     internal fun effectiveFindSuper(defaultValue: Boolean?): Boolean? =
@@ -239,6 +251,9 @@ class FieldQuery internal constructor() {
 
     internal fun cacheKeyOrNull(): List<Any>? =
         if (cacheable) fieldCacheKeyOf(cacheParts) else null
+
+    internal fun describe(): String? =
+        descriptions.distinct().takeIf { it.isNotEmpty() }?.joinToString(", ")
 
     internal fun matches(field: Field): Boolean = conditions.all { it(field) }
 }

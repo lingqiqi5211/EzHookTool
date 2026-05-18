@@ -127,13 +127,16 @@ class ClassNotFoundError(
 
 // ═══════════════════════ Internal Helpers ═══════════════════════
 
+internal fun Class<*>.toReadableTypeName(): String =
+    canonicalName ?: name
+
 /**
  * 将 Method 格式化为可读字符串（用于候选列表输出）。
  */
 internal fun Method.toReadableString(): String {
     val mods = Modifier.toString(modifiers)
-    val params = parameterTypes.joinToString(", ") { it.simpleName }
-    return "$mods ${returnType.simpleName} $name($params)".trim()
+    val params = parameterTypes.joinToString(", ") { it.toReadableTypeName() }
+    return "$mods ${returnType.toReadableTypeName()} $name($params)".trim()
 }
 
 /**
@@ -141,7 +144,7 @@ internal fun Method.toReadableString(): String {
  */
 internal fun Field.toReadableString(): String {
     val mods = Modifier.toString(modifiers)
-    return "$mods ${type.simpleName} $name".trim()
+    return "$mods ${type.toReadableTypeName()} $name".trim()
 }
 
 /**
@@ -149,6 +152,6 @@ internal fun Field.toReadableString(): String {
  */
 internal fun Constructor<*>.toReadableString(): String {
     val mods = Modifier.toString(modifiers)
-    val params = parameterTypes.joinToString(", ") { it.simpleName }
+    val params = parameterTypes.joinToString(", ") { it.toReadableTypeName() }
     return "$mods ${declaringClass.simpleName}($params)".trim()
 }

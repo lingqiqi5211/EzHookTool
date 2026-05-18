@@ -66,11 +66,13 @@ fun findConstructor(
     clz: Class<*>,
     query: ConstructorQuery.() -> Unit,
 ): Constructor<*> {
-    return findConstructorOrNull(clz, constructorQuery(query))
+    val builtQuery = constructorQuery(query)
+    return findConstructorOrNull(clz, builtQuery)
         ?: throw MemberNotFoundException(
             memberType = MemberType.CONSTRUCTOR,
             targetClass = clz.name,
             searchedSuper = false,
+            conditionDesc = builtQuery.describe(),
             candidates = getConstructorCandidates(clz)
         )
 }
