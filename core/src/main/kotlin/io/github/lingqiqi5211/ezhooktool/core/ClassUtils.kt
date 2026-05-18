@@ -6,6 +6,14 @@ private data class ClassNameCacheKey(val name: String)
 
 private data class FirstClassNameCacheKey(val names: List<String>)
 
+private fun Throwable.isRecoverableClassLoadError(): Boolean = when (this) {
+    is ClassNotFoundException,
+    is NoClassDefFoundError,
+    is TypeNotPresentException,
+    is LinkageError -> true
+    else -> false
+}
+
 // ═══════════════════════ 基础加载 ═══════════════════════
 
 /**
@@ -44,7 +52,8 @@ fun loadClassOrNull(name: String, classLoader: ClassLoader = EzReflect.classLoad
 
     val clz = try {
         Class.forName(name, false, classLoader)
-    } catch (_: ClassNotFoundException) {
+    } catch (throwable: Throwable) {
+        if (!throwable.isRecoverableClassLoadError()) throw throwable
         null
     }
     if (clz != null) {

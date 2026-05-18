@@ -5,6 +5,7 @@ package io.github.lingqiqi5211.ezhooktool.core
 import io.github.lingqiqi5211.ezhooktool.core.query.ConstructorQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.FieldQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.MethodQuery
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
 import java.lang.reflect.Method
@@ -38,10 +39,86 @@ interface MemberResolver {
     fun constructorsOf(clz: Class<*>): Array<Constructor<*>>
 }
 
+private val hiddenMemberBooleanArg = arrayOf(Boolean::class.javaPrimitiveType!!)
+
+private fun Throwable.unwrapMemberResolveCause(): Throwable =
+    if (this is InvocationTargetException) targetException ?: this else this
+
+private fun Throwable.isRecoverableMemberResolveError(): Boolean = when (unwrapMemberResolveCause()) {
+    is NoClassDefFoundError,
+    is TypeNotPresentException,
+    is LinkageError -> true
+    else -> false
+}
+
+internal fun <T> resolveDeclaredMembersFallback(
+    directAccess: () -> Array<T>,
+    hiddenAccess: () -> Array<T>? = { null },
+    emptyAccess: () -> Array<T>,
+): Array<T> = try {
+    directAccess()
+} catch (throwable: Throwable) {
+    if (!throwable.isRecoverableMemberResolveError()) throw throwable
+    hiddenAccess() ?: emptyAccess()
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun <T> Class<*>.hiddenDeclaredMembersOrNull(
+    componentType: Class<*>,
+    vararg accessorNames: String,
+): Array<T>? {
+    for (accessorName in accessorNames) {
+        val accessor = Class::class.java.declaredMethods.firstOrNull {
+            it.name == accessorName &&
+                    it.parameterTypes.contentEquals(hiddenMemberBooleanArg) &&
+                    it.returnType.isArray &&
+                    it.returnType.componentType == componentType
+        } ?: continue
+        val members = runCatching {
+            accessor.isAccessible = true
+            accessor.invoke(this, false)
+        }.getOrNull()
+        if (members is Array<*>) return members as Array<T>
+    }
+    return null
+}
+
 internal object DefaultMemberResolver : MemberResolver {
-    override fun methodsOf(clz: Class<*>): Array<Method> = clz.declaredMethods
-    override fun fieldsOf(clz: Class<*>): Array<Field> = clz.declaredFields
-    override fun constructorsOf(clz: Class<*>): Array<Constructor<*>> = clz.declaredConstructors
+    override fun methodsOf(clz: Class<*>): Array<Method> = resolveDeclaredMembersFallback(
+        directAccess = { clz.declaredMethods },
+        hiddenAccess = {
+            clz.hiddenDeclaredMembersOrNull(
+                componentType = Method::class.java,
+                "getDeclaredMethodsUnchecked",
+                "privateGetDeclaredMethods",
+            )
+        },
+        emptyAccess = { emptyArray() },
+    )
+
+    override fun fieldsOf(clz: Class<*>): Array<Field> = resolveDeclaredMembersFallback(
+        directAccess = { clz.declaredFields },
+        hiddenAccess = {
+            clz.hiddenDeclaredMembersOrNull(
+                componentType = Field::class.java,
+                "getDeclaredFieldsUnchecked",
+                "privateGetDeclaredFields",
+            )
+        },
+        emptyAccess = { emptyArray() },
+    )
+
+    override fun constructorsOf(clz: Class<*>): Array<Constructor<*>> = resolveDeclaredMembersFallback(
+        directAccess = { clz.declaredConstructors },
+        hiddenAccess = {
+            clz.hiddenDeclaredMembersOrNull(
+                componentType = Constructor::class.java,
+                "getDeclaredConstructorsInternal",
+                "privateGetDeclaredConstructors",
+            )
+        },
+        emptyAccess = { emptyArray() },
+    )
 }
 
 /**
