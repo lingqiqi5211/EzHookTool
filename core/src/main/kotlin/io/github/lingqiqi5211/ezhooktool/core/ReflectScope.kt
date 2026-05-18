@@ -50,6 +50,14 @@ class ReflectScope internal constructor(
     fun findFirstClassOrNull(vararg names: String): Class<*>? =
         findFirstClassOrNull(*names, classLoader = classLoader)
 
+    /** 在当前作用域的 [classLoader] 上创建延迟加载类。 */
+    fun lazyClass(vararg names: String): LazyClass =
+        lazyClass(classLoader, *names)
+
+    /** 在当前作用域的 [classLoader] 上创建可空延迟加载类。 */
+    fun lazyClassOrNull(vararg names: String): NullableLazyClass =
+        lazyClassOrNull(classLoader, *names)
+
     /**
      * 在当前作用域的 [classLoader] 上按类名创建实例。
      *

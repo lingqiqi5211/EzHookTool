@@ -31,6 +31,7 @@ private class BrokenClassLoader(parent: ClassLoader?) : ClassLoader(parent) {
 }
 
 class SafeResolutionTest {
+    private class NestedClassTarget
 
     @Test
     fun `declared methods fallback returns hidden method list when direct access fails`() {
@@ -80,6 +81,25 @@ class SafeResolutionTest {
             SafeResolveMethodTarget::class.java,
             loadClassFirstOrNull("broken.BaseLauncher", SafeResolveMethodTarget::class.java.name, classLoader = loader),
         )
+    }
+
+    @Test
+    fun `loadClassOrNull can fallback from dotted nested class name`() {
+        val binaryName = NestedClassTarget::class.java.name
+        val dottedName = binaryName.replaceRange(binaryName.lastIndexOf('$'), binaryName.lastIndexOf('$') + 1, ".")
+
+        assertEquals(NestedClassTarget::class.java, loadClassOrNull(dottedName))
+        assertEquals(NestedClassTarget::class.java, loadClassOrNull(binaryName))
+    }
+
+    @Test
+    fun `lazyClass resolves when requested`() {
+        val binaryName = NestedClassTarget::class.java.name
+        val dottedName = binaryName.replaceRange(binaryName.lastIndexOf('$'), binaryName.lastIndexOf('$') + 1, ".")
+        val target by lazyClass(dottedName)
+
+        assertEquals(NestedClassTarget::class.java, target)
+        assertNull(lazyClassOrNull("missing.LazyClassTarget").resolveOrNull())
     }
 
     @Test
