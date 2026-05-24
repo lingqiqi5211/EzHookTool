@@ -15,12 +15,11 @@ import io.github.lingqiqi5211.ezhooktool.core.EzReflect
  *
  * 推荐初始化顺序：
  *
- * 1. 如果需要模块资源，在 `IXposedHookZygoteInit.initZygote` 里调用 [initZygote]
- * 2. 如果需要模块资源，调用 [initModuleResources]
- * 3. 在 `IXposedHookLoadPackage.handleLoadPackage` 里调用 [init]
+ * 1. 在 `IXposedHookZygoteInit.initZygote` 里调用 [initZygote]
+ * 2. 在 `IXposedHookLoadPackage.handleLoadPackage` 里调用 [init]
  *
- * 和上游保持一致，这里不会自动初始化模块资源或 application context，
- * 需要由调用方按生命周期显式触发对应入口。
+ * [initZygote] 会自动初始化模块资源；application context 仍按需懒解析，
+ * 也可以由调用方显式触发 [initAppContext]。
  */
 @SuppressLint("PrivateApi", "DiscouragedPrivateApi", "StaticFieldLeak")
 object EzXposed {
@@ -47,7 +46,7 @@ object EzXposed {
         private set
 
     @JvmStatic
-    /** 当前模块资源；调用 [initModuleResources] 后可用。 */
+    /** 当前模块资源；调用 [initZygote] 后可用。 */
     lateinit var moduleRes: XModuleResources
         private set
 
@@ -105,9 +104,10 @@ object EzXposed {
     }
 
     @JvmStatic
-    /** 在 `IXposedHookZygoteInit.initZygote` 阶段记录模块 apk 路径。 */
+    /** 在 `IXposedHookZygoteInit.initZygote` 阶段记录模块 apk 路径并初始化模块资源。 */
     fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
         modulePath = startupParam.modulePath
+        initModuleResources()
     }
 
     @JvmStatic
@@ -116,9 +116,10 @@ object EzXposed {
      *
      * 默认会创建独立的 [XModuleResources]；
      * 如需复用资源配置，可显式传入 [origRes]。
+     * 通常不需要手动调用；[initZygote] 会自动初始化一次。
      */
     fun initModuleResources(origRes: XResources? = null) {
-        moduleRes = XModuleResources.createInstance(modulePath, origRes)
+        moduleRes = XModuleResources.createInstance(requireModulePath(), origRes)
     }
 
     @JvmStatic
@@ -150,7 +151,7 @@ object EzXposed {
     @JvmStatic
     /** 将模块资源路径注入到指定 [resources]。 */
     fun addModuleAssetPath(resources: Resources) {
-        addAssetPathMethod.invoke(resources.assets, modulePath)
+        addAssetPathMethod.invoke(resources.assets, requireModulePath())
     }
 
     @JvmStatic
@@ -169,6 +170,13 @@ object EzXposed {
         currentApplication?.applicationContext ?: currentApplication
     } catch (e: ReflectiveOperationException) {
         throw IllegalStateException("Cannot get current application context.", e)
+    }
+
+    private fun requireModulePath(): String {
+        if (::modulePath.isInitialized) return modulePath
+        throw IllegalStateException(
+            "Cannot get modulePath before EzXposed.initZygote is called."
+        )
     }
 
     private val addAssetPathMethod by lazy {

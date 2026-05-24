@@ -16,16 +16,15 @@ import java.lang.reflect.Executable
  * 推荐初始化顺序：
  *
  * 1. 在 `XposedModule.onModuleLoaded` 里调用 [initOnModuleLoaded]
- * 2. 如果需要模块资源，调用 [initModuleResources]
- * 3. 在 `XposedModule.onPackageLoaded` 里调用 [initOnPackageLoaded]
- * 4. 在 `XposedModule.onPackageReady` 里调用 [initOnPackageReady]
+ * 2. 在 `XposedModule.onPackageLoaded` 里调用 [initOnPackageLoaded]
+ * 3. 在 `XposedModule.onPackageReady` 里调用 [initOnPackageReady]
  *
  * 行为约定：
  *
  * - [base] 在 [initOnModuleLoaded] 后可用
  * - [classLoader] 在 [initOnPackageReady] 或 [initOnSystemServerStarting] 后代表当前进程反射环境
  * - [appContext] 采用懒解析；如果应用尚未创建，请改用 [appContextOrNull] 或稍后访问
- * - [modulePath] / [moduleRes] 不会自动初始化；只有显式调用 [initModuleResources] 后才可用
+ * - [modulePath] / [moduleRes] 在 [initOnModuleLoaded] 后可用
  */
 @SuppressLint("PrivateApi", "DiscouragedPrivateApi", "StaticFieldLeak")
 object EzXposed {
@@ -61,12 +60,12 @@ object EzXposed {
         private set
 
     @JvmStatic
-    /** 当前模块 apk 路径；调用 [initModuleResources] 后可用。 */
+    /** 当前模块 apk 路径；调用 [initOnModuleLoaded] 后可用。 */
     lateinit var modulePath: String
         private set
 
     @JvmStatic
-    /** 当前模块资源；调用 [initModuleResources] 后可用。 */
+    /** 当前模块资源；调用 [initOnModuleLoaded] 后可用。 */
     lateinit var moduleRes: Resources
         private set
 
@@ -129,11 +128,11 @@ object EzXposed {
      * 初始化模块资源。
      *
      * 这个入口会读取 `base.moduleApplicationInfo.sourceDir` 作为模块 apk 路径，
-     * 并创建可独立访问的 [moduleRes]。
+     * 并创建可独立访问的 [moduleRes]。通常不需要手动调用；
+     * [initOnModuleLoaded] 会自动初始化一次。
      */
     fun initModuleResources() {
-        modulePath = base.moduleApplicationInfo.sourceDir
-        moduleRes = ModuleResources.create(modulePath)
+        moduleRes = ModuleResources.create(requireModulePath())
     }
 
     @JvmStatic
@@ -165,22 +164,24 @@ object EzXposed {
     /**
      * 将模块资源路径注入到指定 [resources]。
      *
-     * 调用前需要先完成 [initModuleResources]。
+     * 调用前需要先完成 [initOnModuleLoaded]。
      */
     @JvmStatic
     fun addModuleAssetPath(resources: Resources) {
-        addAssetPathMethod.invoke(resources.assets, modulePath)
+        addAssetPathMethod.invoke(resources.assets, requireModulePath())
     }
 
     @JvmStatic
     /**
      * 在 `onModuleLoaded` 阶段初始化运行时基础信息。
      *
-     * 这里只保存 libxposed 基础接口和进程元信息，
-     * 不会自动初始化 [moduleRes] 或目标进程 [classLoader]。
+     * 这里会保存 libxposed 基础接口、进程元信息和模块资源，
+     * 但不会初始化目标进程 [classLoader]。
      */
     fun initOnModuleLoaded(base: XposedInterface, param: XposedModuleInterface.ModuleLoadedParam) {
         this.base = base
+        modulePath = base.moduleApplicationInfo.sourceDir
+        initModuleResources()
         processName = param.processName
         isSystemServer = param.isSystemServer
     }
@@ -227,6 +228,16 @@ object EzXposed {
         currentApplication?.applicationContext ?: currentApplication
     } catch (e: ReflectiveOperationException) {
         throw IllegalStateException("Cannot get current application context.", e)
+    }
+
+    private fun requireModulePath(): String {
+        if (::modulePath.isInitialized) return modulePath
+        if (!::base.isInitialized) {
+            throw IllegalStateException(
+                "Cannot get modulePath before EzXposed.initOnModuleLoaded is called."
+            )
+        }
+        return base.moduleApplicationInfo.sourceDir.also { modulePath = it }
     }
 
     private val addAssetPathMethod by lazy {
