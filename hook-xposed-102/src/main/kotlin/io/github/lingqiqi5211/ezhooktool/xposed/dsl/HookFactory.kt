@@ -24,6 +24,7 @@ class HookFactory internal constructor(
     private val stages = mutableListOf<ChainStage>()
     private var priority: Int = XposedInterface.PRIORITY_DEFAULT
     private var exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT
+    private var id: String? = null
 
     /**
      * 注册 before 回调。
@@ -129,22 +130,48 @@ class HookFactory internal constructor(
         exceptionMode = mode
     }
 
+    /**
+     * 为当前 hook 设置 id。
+     *
+     * 同模块、同 executable 下相同 id 的新 hook 会原子替换旧 hook，旧 [XposedInterface.HookHandle] 失效。
+     * 传 `null` 表示不分配 id。
+     *
+     * @param value hook id，可为 `null`
+     */
+    fun id(value: String?) {
+        id = value
+    }
+
     internal fun create(): XposedInterface.HookHandle {
         require(stages.isNotEmpty()) { "No hook callback specified" }
-        val hookChain = HookChain(stages.toList())
+        val hooker = buildHooker(target, stages.toList())
         return EzXposed.base.hook(target)
             .setPriority(priority)
             .setExceptionMode(exceptionMode)
-            .intercept { chain ->
-                if (!EzXposed.safeMode) {
-                    hookChain.invoke(chain)
-                } else {
-                    runCatching { hookChain.invoke(chain) }
-                        .getOrElse {
-                            EzReflect.logger.error("Hook", "hook failed for $target", it)
-                            chain.proceed()
-                        }
+            .setId(id)
+            .intercept(hooker)
+    }
+}
+
+/**
+ * 把若干 [ChainStage] 包成单个 [XposedInterface.Hooker]，并在 [EzXposed.safeMode] 打开时保护原始调用。
+ *
+ * 对外不暴露，供 [HookFactory.create] 和 [replaceHook] 共用，确保替换后的 hook 沿用同样的安全语义。
+ */
+internal fun buildHooker(
+    target: Executable,
+    stages: List<ChainStage>,
+): XposedInterface.Hooker {
+    val hookChain = HookChain(stages)
+    return XposedInterface.Hooker { chain ->
+        if (!EzXposed.safeMode) {
+            hookChain.invoke(chain)
+        } else {
+            runCatching { hookChain.invoke(chain) }
+                .getOrElse {
+                    EzReflect.logger.error("Hook", "hook failed for $target", it)
+                    chain.proceed()
                 }
-            }
+        }
     }
 }

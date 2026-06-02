@@ -4,6 +4,10 @@ import io.github.libxposed.api.XposedInterface
 import io.github.lingqiqi5211.ezhooktool.core.findConstructorBestMatch
 import io.github.lingqiqi5211.ezhooktool.core.findMethodBestMatch
 import io.github.lingqiqi5211.ezhooktool.core.loadClass
+import io.github.lingqiqi5211.ezhooktool.xposed.common.AfterChainStage
+import io.github.lingqiqi5211.ezhooktool.xposed.common.BeforeChainStage
+import io.github.lingqiqi5211.ezhooktool.xposed.common.ReplaceChainStage
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.buildHooker
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createHook
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createInterceptHook
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.HookClassLoader
@@ -235,6 +239,51 @@ object Hooks {
         constructor: Constructor<*>,
         callback: XposedInterface.Hooker,
     ): XposedInterface.HookHandle = constructor.createInterceptHook { callback.intercept(it) }
+
+    /**
+     * 用 before / after 回调原子替换已有 hook。
+     *
+     * 上游约束：替换会保留原 hook 的 executable、priority、exceptionMode 和 id；
+     * 替换成功后传入的 `handle` 失效，调用方应使用返回的新 handle。
+     *
+     * @param handle 已有 hook 句柄
+     * @param callback 新的 before / after 回调
+     */
+    @JvmStatic
+    fun replaceHook(
+        handle: XposedInterface.HookHandle,
+        callback: IMethodHook,
+    ): XposedInterface.HookHandle {
+        val hooker = buildHooker(
+            handle.executable,
+            listOf(
+                BeforeChainStage { callback.before(it) },
+                AfterChainStage { callback.after(it) },
+            ),
+        )
+        return handle.replaceHook(hooker)
+    }
+
+    /**
+     * 用 replace 回调原子替换已有 hook。
+     *
+     * 上游约束：替换会保留原 hook 的 executable、priority、exceptionMode 和 id；
+     * 替换成功后传入的 `handle` 失效，调用方应使用返回的新 handle。
+     *
+     * @param handle 已有 hook 句柄
+     * @param callback 新的 replace 回调，返回值会作为原调用结果
+     */
+    @JvmStatic
+    fun replaceHook(
+        handle: XposedInterface.HookHandle,
+        callback: IReplaceHook,
+    ): XposedInterface.HookHandle {
+        val hooker = buildHooker(
+            handle.executable,
+            listOf(ReplaceChainStage { callback.replace(it) }),
+        )
+        return handle.replaceHook(hooker)
+    }
 
     private fun resolveMethod(clazz: Class<*>, methodName: String, args: Array<out Any>): Method {
         val types = args.dropLast(1).map { resolveType(clazz, it) }.toTypedArray()
