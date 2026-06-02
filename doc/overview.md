@@ -352,7 +352,7 @@ Object value = Methods.callMethod(obj, "getValue");
 Fields.setBooleanField(obj, "enabled", true);
 ```
 
-## libxposed 101 intercept
+## libxposed 102 intercept
 
 `intercept` 只用于需要直接操作 `XposedInterface.Chain` 的场景。
 

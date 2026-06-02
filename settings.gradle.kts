@@ -30,7 +30,7 @@ rootProject.name = "EzHookTool"
 include(
     ":core",
     ":hook-xposed-82",
-    ":hook-xposed-101",
+    ":hook-xposed-102",
     ":sample-xposed-82",
-    ":sample-xposed-101"
+    ":sample-xposed-102"
 )

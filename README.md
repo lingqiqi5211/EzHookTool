@@ -1,7 +1,7 @@
 # EzHookTool
 
 一个让 Android / Xposed / libxposed 场景下的反射与 hook 编写更直接的 Kotlin 工具库。  
-当前拆分为 `core`、`hook-xposed-82`、`hook-xposed-101` 三个主模块，其中 `core` 可以单独用于纯反射场景。
+当前拆分为 `core`、`hook-xposed-82`、`hook-xposed-102` 三个主模块，其中 `core` 可以单独用于纯反射场景。
 
 当前 Maven 最新构建版本为: ![Maven Central Version](https://img.shields.io/maven-central/v/io.github.lingqiqi5211.ezhooktool/core)
 
@@ -14,13 +14,13 @@ dependencies {
     def ezHookToolVersion = '<version>'
 
     implementation "io.github.lingqiqi5211.ezhooktool:core:$ezHookToolVersion"
-    implementation "io.github.lingqiqi5211.ezhooktool:hook-xposed-101:$ezHookToolVersion"
+    implementation "io.github.lingqiqi5211.ezhooktool:hook-xposed-102:$ezHookToolVersion"
     // 或
     // implementation "io.github.lingqiqi5211.ezhooktool:hook-xposed-82:$ezHookToolVersion"
 
     // 如果你的模块直接使用 Xposed / libxposed 的类型，
     // 还需要额外声明对应运行时 API。
-    compileOnly "io.github.libxposed:api:101.0.1"
+    compileOnly "io.github.libxposed:api:102.0.0-SNAPSHOT"
     // 或
     // compileOnly "de.robv.android.xposed:api:82"
 }
@@ -33,13 +33,13 @@ dependencies {
     val ezHookToolVersion = "<version>"
 
     implementation("io.github.lingqiqi5211.ezhooktool:core:$ezHookToolVersion")
-    implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-101:$ezHookToolVersion")
+    implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-102:$ezHookToolVersion")
     // 或
     // implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-82:$ezHookToolVersion")
 
     // 如果你的模块直接使用 Xposed / libxposed 的类型，
     // 还需要额外声明对应运行时 API。
-    compileOnly("io.github.libxposed:api:101.0.1")
+    compileOnly("io.github.libxposed:api:102.0.0-SNAPSHOT")
     // 或
     // compileOnly("de.robv.android.xposed:api:82")
 }
@@ -64,7 +64,7 @@ class MainHook : IXposedHookLoadPackage {
 }
 ```
 
-`xposed-api-101`
+`xposed-api-102`
 
 ```kotlin
 import io.github.libxposed.api.XposedModule
@@ -112,7 +112,7 @@ EzReflect.init(yourClassLoader)
 
 - `core`：反射、查找、实例化、descriptor 解析、DSL 作用域
 - `hook-xposed-82`：经典 Xposed API 82 hook 辅助函数与兼容桥接
-- `hook-xposed-101`：libxposed 101 hook 辅助函数与兼容桥接
+- `hook-xposed-102`：libxposed 102 hook 辅助函数与兼容桥接
 
 ### API 文档
 
@@ -140,7 +140,7 @@ EzReflect.init(yourClassLoader)
 建议阅读顺序：
 
 1. 先看 `core`
-2. 再根据运行时选择 `hook-xposed-82` 或 `hook-xposed-101`
+2. 再根据运行时选择 `hook-xposed-82` 或 `hook-xposed-102`
 3. Java 写法入口看 `core.java` 包下的 `Classes`、`Methods`、`Fields`、`Constructors`，以及 hook 模块里的 `xposed.java.Hooks`
 
 ### 构建
@@ -154,7 +154,7 @@ EzReflect.init(yourClassLoader)
 ### 示例工程
 
 - `sample-xposed-82`
-- `sample-xposed-101`
+- `sample-xposed-102`
 
 ### 致谢
 
