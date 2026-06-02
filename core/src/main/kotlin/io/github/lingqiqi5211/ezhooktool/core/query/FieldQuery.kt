@@ -57,7 +57,7 @@ private fun Field.isSyntheticField(): Boolean = modifiers and 0x00001000 != 0
  * }
  * ```
  */
-class FieldQuery internal constructor() {
+class FieldQuery internal constructor() : BaseQuery<Field>() {
     private val conditions = mutableListOf<FieldCondition>()
     private val cacheParts = mutableMapOf<FieldCachePart, Any>()
     private val descriptions = mutableListOf<String>()
@@ -207,27 +207,41 @@ class FieldQuery internal constructor() {
 
     /**
      * 只在当前类中查找。
-     *
-     * 等同于调用 `findField(findSuper = false) { ... }`。
      */
-    fun currentClassOnly() {
+    fun findOnlyClass() {
         searchSuperSet = true
         searchSuperValue = false
     }
 
     /**
      * 查找当前类和全部父类。
-     *
-     * 等同于调用 `findField(findSuper = true) { ... }`。
      */
-    fun includeSuper() {
+    fun findAndSuper() {
         searchSuperSet = true
         searchSuperValue = true
     }
 
+    /** [findOnlyClass] 的旧名称。 */
+    @Deprecated(
+        message = "currentClassOnly is an old name. The last recommended version for this name is 1.0.4. Use findOnlyClass instead.",
+        replaceWith = ReplaceWith("findOnlyClass()"),
+    )
+    fun currentClassOnly() {
+        findOnlyClass()
+    }
+
+    /** [findAndSuper] 的旧名称。 */
+    @Deprecated(
+        message = "includeSuper is an old name. The last recommended version for this name is 1.0.4. Use findAndSuper instead.",
+        replaceWith = ReplaceWith("findAndSuper()"),
+    )
+    fun includeSuper() {
+        findAndSuper()
+    }
+
     /** 添加自定义 Kotlin 条件。 */
     fun filter(condition: FieldCondition) {
-        conditions += condition
+        conditions += { QueryFilterContext.run { condition(this) } }
         cacheable = false
         descriptions += "customFilter"
     }
@@ -250,7 +264,7 @@ class FieldQuery internal constructor() {
         if (searchSuperSet) searchSuperValue else defaultValue
 
     internal fun cacheKeyOrNull(): List<Any>? =
-        if (cacheable) fieldCacheKeyOf(cacheParts) else null
+        cacheKeyOrManual(fieldCacheKeyOf(cacheParts), cacheable)
 
     internal fun describe(): String? =
         descriptions.distinct().takeIf { it.isNotEmpty() }?.joinToString(", ")

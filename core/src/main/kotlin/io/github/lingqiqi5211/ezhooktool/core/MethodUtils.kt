@@ -6,6 +6,7 @@ import io.github.lingqiqi5211.ezhooktool.core.query.MethodQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.methodCondition
 import io.github.lingqiqi5211.ezhooktool.core.query.methodExactCacheKeys
 import io.github.lingqiqi5211.ezhooktool.core.query.methodQuery
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
 import java.lang.reflect.Method
 
 /**
@@ -33,6 +34,7 @@ private fun searchMethods(
     findSuper: Boolean?,
     collectAll: Boolean,
     condition: MethodCondition,
+    maxResults: Int? = null,
 ): List<Method> {
     val results = mutableListOf<Method>()
 
@@ -44,6 +46,7 @@ private fun searchMethods(
                     m.isAccessible = true
                     if (!collectAll) return listOf(m)
                     results.add(m.also { it.isAccessible = true })
+                    if (maxResults != null && results.size >= maxResults) return results
                 }
             }
         }
@@ -57,6 +60,7 @@ private fun searchMethods(
                         m.isAccessible = true
                         if (!collectAll) return listOf(m)
                         results.add(m)
+                        if (maxResults != null && results.size >= maxResults) return results
                     }
                 }
                 current = current.superclass
@@ -72,6 +76,7 @@ private fun searchMethods(
                         m.isAccessible = true
                         if (!collectAll) return listOf(m)
                         results.add(m)
+                        if (maxResults != null && results.size >= maxResults) return results
                     }
                 }
                 // 对于 collectAll=false (findMethod)，如果当前类没找到就继续向上
@@ -105,6 +110,7 @@ private fun getCandidates(clz: Class<*>): List<String> {
 private data class MethodCacheKey(
     val queryKey: List<Any>,
     val findSuper: Boolean?,
+    val resultMode: String = "first",
 )
 
 private data class MethodNameCacheKey(
@@ -116,6 +122,11 @@ private data class MethodNameCacheKey(
 private data class DeclaringMethodCacheKey(
     val owner: Class<*>,
     val key: MethodCacheKey,
+)
+
+private data class AllMethodsCacheKey(
+    val queryKey: List<Any>,
+    val findSuper: Boolean?,
 )
 
 private fun cacheExactMethods(
@@ -166,23 +177,25 @@ private fun cacheExactMethods(
  * }
  *
  * // 强制只查当前类
- * val m = findMethod(clz, findSuper = false) { name("doTask") }
+ * val m = findMethod(clz) {
+ *     findOnlyClass()
+ *     name("doTask")
+ * }
  * ```
  *
  * @param clz        目标类
- * @param findSuper  null=智能搜索(默认), false=仅当前类, true=强制搜索继承链
  * @param query      查询条件块
  * @return 第一个匹配的 Method（已 setAccessible）
  * @throws MemberNotFoundException 找不到时
  */
 fun findMethod(
     clz: Class<*>,
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
 ): Method {
+    QueryFilterContext.warnNestedFind("findMethod")
     val builtQuery = methodQuery(query)
-    val effectiveFindSuper = builtQuery.effectiveFindSuper(findSuper)
-    return findMethodOrNull(clz, findSuper, builtQuery)
+    val effectiveFindSuper = builtQuery.effectiveFindSuper(null)
+    return findMethodOrNull(clz, null, builtQuery)
         ?: throw MemberNotFoundException(
             memberType = MemberType.METHOD,
             targetClass = clz.name,
@@ -197,10 +210,10 @@ fun findMethod(
  */
 fun findMethodOrNull(
     clz: Class<*>,
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
 ): Method? {
-    return findMethodOrNull(clz, findSuper, methodQuery(query))
+    QueryFilterContext.warnNestedFind("findMethodOrNull")
+    return findMethodOrNull(clz, null, methodQuery(query))
 }
 
 private fun findMethodOrNull(
@@ -212,13 +225,39 @@ private fun findMethodOrNull(
     val condition = methodCondition(query)
     val queryKey = query.cacheKeyOrNull()
     if (EzReflect.cacheEnabled && queryKey != null) {
-        val key = MethodCacheKey(queryKey, effectiveFindSuper)
+        val key = MethodCacheKey(
+            queryKey = queryKey,
+            findSuper = effectiveFindSuper,
+            resultMode = if (query.requiresSingleResult) "single" else "first",
+        )
         val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, key)
         if (cached is Method) return cached
     }
-    val result = searchMethods(clz, effectiveFindSuper, collectAll = false, condition).firstOrNull()
+    val results = searchMethods(
+        clz = clz,
+        findSuper = effectiveFindSuper,
+        collectAll = query.requiresSingleResult,
+        condition = condition,
+        maxResults = if (query.requiresSingleResult) 2 else null,
+    )
+    if (query.requiresSingleResult && results.size > 1) {
+        throw SingleResultExpectedException(
+            target = "method in ${clz.name}",
+            conditionDesc = query.describe(),
+        )
+    }
+    val result = results.firstOrNull()
     if (result != null && EzReflect.cacheEnabled && queryKey != null) {
-        EzReflect.cachePut(clz, ReflectCacheBucket.METHOD, MethodCacheKey(queryKey, effectiveFindSuper), result)
+        EzReflect.cachePut(
+            clz,
+            ReflectCacheBucket.METHOD,
+            MethodCacheKey(
+                queryKey = queryKey,
+                findSuper = effectiveFindSuper,
+                resultMode = if (query.requiresSingleResult) "single" else "first",
+            ),
+            result,
+        )
     }
     return result
 }
@@ -233,9 +272,8 @@ private fun findMethodOrNull(
 fun findMethod(
     className: String,
     classLoader: ClassLoader = EzReflect.classLoader,
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
-): Method = findMethod(loadClass(className, classLoader), findSuper, query)
+): Method = findMethod(loadClass(className, classLoader), query)
 
 /**
  * 按类名查找方法，找不到返回 null。
@@ -243,11 +281,10 @@ fun findMethod(
 fun findMethodOrNull(
     className: String,
     classLoader: ClassLoader = EzReflect.classLoader,
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
 ): Method? {
     val clz = loadClassOrNull(className, classLoader) ?: return null
-    return findMethodOrNull(clz, findSuper, query)
+    return findMethodOrNull(clz, query)
 }
 
 private fun findAllMethodsMatching(
@@ -261,27 +298,39 @@ private fun findAllMethodsMatching(
  */
 fun findAllMethods(
     clz: Class<*>,
-    findSuper: Boolean? = null,
-): List<Method> = findAllMethodsMatching(clz, findSuper) { true }
+): List<Method> {
+    QueryFilterContext.warnNestedFind("findAllMethods")
+    return findAllMethodsMatching(clz, null) { true }
+}
 
 /**
  * 按查询条件查找方法。
  */
 fun findAllMethods(
     clz: Class<*>,
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
 ): List<Method> {
+    QueryFilterContext.warnNestedFind("findAllMethods")
     val builtQuery = methodQuery(query)
-    val effectiveFindSuper = builtQuery.effectiveFindSuper(findSuper)
-    val cacheSearchClass = builtQuery.cacheKeyOrNull() != null
-    findMethodOrNull(clz, findSuper, builtQuery) ?: return emptyList()
+    val effectiveFindSuper = builtQuery.effectiveFindSuper(null)
+    val queryKey = builtQuery.cacheKeyOrNull()
+    if (EzReflect.cacheEnabled && queryKey != null) {
+        val key = AllMethodsCacheKey(queryKey, effectiveFindSuper)
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, key)
+        if (cached is List<*>) {
+            @Suppress("UNCHECKED_CAST")
+            return cached as List<Method>
+        }
+    }
     val results = findAllMethodsMatching(
         clz = clz,
         findSuper = effectiveFindSuper,
         condition = methodCondition(builtQuery),
     )
-    cacheExactMethods(clz, effectiveFindSuper, results, cacheSearchClass)
+    if (EzReflect.cacheEnabled && queryKey != null) {
+        EzReflect.cachePut(clz, ReflectCacheBucket.METHOD, AllMethodsCacheKey(queryKey, effectiveFindSuper), results)
+    }
+    cacheExactMethods(clz, effectiveFindSuper, results, queryKey != null)
     return results
 }
 
@@ -291,8 +340,7 @@ fun findAllMethods(
 fun findAllMethods(
     className: String,
     classLoader: ClassLoader = EzReflect.classLoader,
-    findSuper: Boolean? = null,
-): List<Method> = findAllMethods(loadClass(className, classLoader), findSuper)
+): List<Method> = findAllMethods(loadClass(className, classLoader))
 
 /**
  * 按类名和查询条件查找方法。
@@ -300,9 +348,8 @@ fun findAllMethods(
 fun findAllMethods(
     className: String,
     classLoader: ClassLoader = EzReflect.classLoader,
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
-): List<Method> = findAllMethods(loadClass(className, classLoader), findSuper, query)
+): List<Method> = findAllMethods(loadClass(className, classLoader), query)
 
 // ═══════════════════════ 按名称直接获取 ═══════════════════════
 
@@ -392,9 +439,8 @@ fun Class<*>.methodOrNull(
 @JvmName("findMethodFromString")
 fun String.findMethod(
     classLoader: ClassLoader = EzReflect.classLoader,
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
-): Method = findMethod(loadClass(this, classLoader), findSuper, query)
+): Method = findMethod(loadClass(this, classLoader), query)
 
 /**
  * 从类名直接查找方法，找不到返回 null。
@@ -402,11 +448,10 @@ fun String.findMethod(
 @JvmName("findMethodOrNullFromString")
 fun String.findMethodOrNull(
     classLoader: ClassLoader = EzReflect.classLoader,
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
 ): Method? {
     val clz = loadClassOrNull(this, classLoader) ?: return null
-    return findMethodOrNull(clz, findSuper, query)
+    return findMethodOrNull(clz, query)
 }
 
 /**
@@ -415,8 +460,7 @@ fun String.findMethodOrNull(
 @JvmName("findAllMethodsFromString")
 fun String.findAllMethods(
     classLoader: ClassLoader = EzReflect.classLoader,
-    findSuper: Boolean? = null,
-): List<Method> = findAllMethods(loadClass(this, classLoader), findSuper)
+): List<Method> = findAllMethods(loadClass(this, classLoader))
 
 /**
  * 从类名按查询条件查找方法。
@@ -424,9 +468,8 @@ fun String.findAllMethods(
 @JvmName("findAllMethodsFromStringWithQuery")
 fun String.findAllMethods(
     classLoader: ClassLoader = EzReflect.classLoader,
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
-): List<Method> = findAllMethods(loadClass(this, classLoader), findSuper, query)
+): List<Method> = findAllMethods(loadClass(this, classLoader), query)
 
 // ═══════════════════════ 组合态链式 (Class 出发) ═══════════════════════
 
@@ -442,35 +485,31 @@ fun String.findAllMethods(
  */
 @JvmName("findMethodFromClass")
 fun Class<*>.findMethod(
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
-): Method = findMethod(this, findSuper, query)
+): Method = findMethod(this, query)
 
 /**
  * 从 Class 对象查找方法，找不到返回 null。
  */
 @JvmName("findMethodOrNullFromClass")
 fun Class<*>.findMethodOrNull(
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
-): Method? = findMethodOrNull(this, findSuper, query)
+): Method? = findMethodOrNull(this, query)
 
 /**
  * 从 Class 对象查找全部方法。
  */
 @JvmName("findAllMethodsFromClass")
 fun Class<*>.findAllMethods(
-    findSuper: Boolean? = null,
-): List<Method> = findAllMethods(this, findSuper)
+): List<Method> = findAllMethods(this)
 
 /**
  * 从 Class 对象按查询条件查找方法。
  */
 @JvmName("findAllMethodsFromClassWithQuery")
 fun Class<*>.findAllMethods(
-    findSuper: Boolean? = null,
     query: MethodQuery.() -> Unit,
-): List<Method> = findAllMethods(this, findSuper, query)
+): List<Method> = findAllMethods(this, query)
 
 // ═══════════════════════ 实例方法调用 ═══════════════════════
 

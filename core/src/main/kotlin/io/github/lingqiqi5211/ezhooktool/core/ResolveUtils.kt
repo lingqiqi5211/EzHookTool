@@ -142,33 +142,67 @@ class ResolveSession private constructor(
      */
     fun superclass(enabled: Boolean? = true): ResolveSession = copy(findSuper = enabled)
 
+    private fun MethodQuery.applySearchScope() {
+        when (findSuper) {
+            false -> findOnlyClass()
+            true -> findAndSuper()
+            null -> Unit
+        }
+    }
+
+    private fun FieldQuery.applySearchScope() {
+        when (findSuper) {
+            false -> findOnlyClass()
+            true -> findAndSuper()
+            null -> Unit
+        }
+    }
+
     /** 按查询条件解析单个方法。 */
     fun method(query: MethodQuery.() -> Unit): Method =
         if (optionalMode) methodOrNull(query) ?: throw MemberNotFoundException(MemberType.METHOD, targetClass.name, findSuper != false)
-        else findMethod(targetClass, findSuper, query)
+        else findMethod(targetClass) {
+            applySearchScope()
+            query()
+        }
 
     /** 按查询条件解析单个方法，未命中时返回 `null`。 */
-    fun methodOrNull(query: MethodQuery.() -> Unit): Method? = findMethodOrNull(targetClass, findSuper, query)
+    fun methodOrNull(query: MethodQuery.() -> Unit): Method? = findMethodOrNull(targetClass) {
+        applySearchScope()
+        query()
+    }
 
     /** 按查询条件解析全部匹配的方法。 */
-    fun methods(query: MethodQuery.() -> Unit): List<Method> = findAllMethods(targetClass, findSuper, query)
+    fun methods(query: MethodQuery.() -> Unit): List<Method> = findAllMethods(targetClass) {
+        applySearchScope()
+        query()
+    }
 
     /** 解析全部方法。 */
-    fun methods(): List<Method> = findAllMethods(targetClass, findSuper)
+    fun methods(): List<Method> = findAllMethods(targetClass) { applySearchScope() }
 
     /** 按查询条件解析单个字段。 */
     fun field(query: FieldQuery.() -> Unit): Field =
         if (optionalMode) fieldOrNull(query) ?: throw MemberNotFoundException(MemberType.FIELD, targetClass.name, findSuper != false)
-        else findField(targetClass, findSuper, query)
+        else findField(targetClass) {
+            applySearchScope()
+            query()
+        }
 
     /** 按查询条件解析单个字段，未命中时返回 `null`。 */
-    fun fieldOrNull(query: FieldQuery.() -> Unit): Field? = findFieldOrNull(targetClass, findSuper, query)
+    fun fieldOrNull(query: FieldQuery.() -> Unit): Field? = findFieldOrNull(targetClass) {
+        applySearchScope()
+        query()
+    }
 
     /** 按查询条件解析全部匹配的字段。 */
-    fun fields(query: FieldQuery.() -> Unit): List<Field> = findAllFields(targetClass, findSuper, query)
+    fun fields(query: FieldQuery.() -> Unit): List<Field> = findAllFields(targetClass) {
+        applySearchScope()
+        query()
+    }
 
     /** 解析全部字段。 */
-    fun fields(): List<Field> = findAllFields(targetClass, findSuper)
+    fun fields(): List<Field> = findAllFields(targetClass) { applySearchScope() }
 
     /** 按查询条件解析单个构造器。 */
     fun constructor(query: ConstructorQuery.() -> Unit): Constructor<*> =

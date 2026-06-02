@@ -28,7 +28,7 @@ interface IMethodHook {
      * @param value 额外字段的值
      */
     fun setObjectExtra(param: HookParam, key: String, value: Any?) {
-        ExtraFields.setInstanceField(param.thisObject!!, key, value)
+        ExtraFields.setInstanceField(param.thisObject, key, value)
     }
 
     /**
@@ -38,6 +38,6 @@ interface IMethodHook {
      * @param key 额外字段的键
      */
     fun getObjectExtra(param: HookParam, key: String): Any? {
-        return ExtraFields.getInstanceField(param.thisObject!!, key)
+        return ExtraFields.getInstanceField(param.thisObject, key)
     }
 }

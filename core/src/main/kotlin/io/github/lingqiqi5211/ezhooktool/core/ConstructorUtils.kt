@@ -6,6 +6,7 @@ import io.github.lingqiqi5211.ezhooktool.core.query.ConstructorQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.constructorCondition
 import io.github.lingqiqi5211.ezhooktool.core.query.constructorExactCacheKeys
 import io.github.lingqiqi5211.ezhooktool.core.query.constructorQuery
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
 import java.lang.reflect.Constructor
 
 /**
@@ -19,6 +20,11 @@ private fun getConstructorCandidates(clz: Class<*>): List<String> {
 }
 
 private data class ConstructorCacheKey(
+    val queryKey: List<Any>,
+    val resultMode: String = "first",
+)
+
+private data class AllConstructorsCacheKey(
     val queryKey: List<Any>,
 )
 
@@ -38,12 +44,16 @@ private fun cacheExactConstructors(clz: Class<*>, constructors: List<Constructor
 private fun findAllConstructorsMatching(
     clz: Class<*>,
     condition: ConstructorCondition,
+    collectAll: Boolean = true,
+    maxResults: Int? = null,
 ): List<Constructor<*>> {
     val results = mutableListOf<Constructor<*>>()
     for (ctor in EzReflect.memberResolver.constructorsOf(clz)) {
         if (condition(ctor)) {
             ctor.isAccessible = true
+            if (!collectAll) return listOf(ctor)
             results.add(ctor)
+            if (maxResults != null && results.size >= maxResults) return results
         }
     }
     return results
@@ -66,6 +76,7 @@ fun findConstructor(
     clz: Class<*>,
     query: ConstructorQuery.() -> Unit,
 ): Constructor<*> {
+    QueryFilterContext.warnNestedFind("findConstructor")
     val builtQuery = constructorQuery(query)
     return findConstructorOrNull(clz, builtQuery)
         ?: throw MemberNotFoundException(
@@ -84,6 +95,7 @@ fun findConstructorOrNull(
     clz: Class<*>,
     query: ConstructorQuery.() -> Unit,
 ): Constructor<*>? {
+    QueryFilterContext.warnNestedFind("findConstructorOrNull")
     return findConstructorOrNull(clz, constructorQuery(query))
 }
 
@@ -94,13 +106,36 @@ private fun findConstructorOrNull(
     val condition = constructorCondition(query)
     val queryKey = query.cacheKeyOrNull()
     if (EzReflect.cacheEnabled && queryKey != null) {
-        val key = ConstructorCacheKey(queryKey)
+        val key = ConstructorCacheKey(
+            queryKey = queryKey,
+            resultMode = if (query.requiresSingleResult) "single" else "first",
+        )
         val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, key)
         if (cached is Constructor<*>) return cached
     }
-    val result = findAllConstructorsMatching(clz, condition).firstOrNull()
+    val results = findAllConstructorsMatching(
+        clz = clz,
+        condition = condition,
+        collectAll = query.requiresSingleResult,
+        maxResults = if (query.requiresSingleResult) 2 else null,
+    )
+    if (query.requiresSingleResult && results.size > 1) {
+        throw SingleResultExpectedException(
+            target = "constructor in ${clz.name}",
+            conditionDesc = query.describe(),
+        )
+    }
+    val result = results.firstOrNull()
     if (result != null && EzReflect.cacheEnabled && queryKey != null) {
-        EzReflect.cachePut(clz, ReflectCacheBucket.CONSTRUCTOR, ConstructorCacheKey(queryKey), result)
+        EzReflect.cachePut(
+            clz,
+            ReflectCacheBucket.CONSTRUCTOR,
+            ConstructorCacheKey(
+                queryKey = queryKey,
+                resultMode = if (query.requiresSingleResult) "single" else "first",
+            ),
+            result,
+        )
     }
     return result
 }
@@ -134,7 +169,10 @@ fun findConstructorOrNull(
  * 查找全部构造器。
  */
 fun findAllConstructors(clz: Class<*>): List<Constructor<*>> =
-    findAllConstructorsMatching(clz) { true }
+    run {
+        QueryFilterContext.warnNestedFind("findAllConstructors")
+        findAllConstructorsMatching(clz, condition = { true })
+    }
 
 /**
  * 按查询条件查找构造器。
@@ -143,9 +181,21 @@ fun findAllConstructors(
     clz: Class<*>,
     query: ConstructorQuery.() -> Unit,
 ): List<Constructor<*>> {
+    QueryFilterContext.warnNestedFind("findAllConstructors")
     val builtQuery = constructorQuery(query)
-    findConstructorOrNull(clz, builtQuery) ?: return emptyList()
+    val queryKey = builtQuery.cacheKeyOrNull()
+    if (EzReflect.cacheEnabled && queryKey != null) {
+        val key = AllConstructorsCacheKey(queryKey)
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, key)
+        if (cached is List<*>) {
+            @Suppress("UNCHECKED_CAST")
+            return cached as List<Constructor<*>>
+        }
+    }
     val results = findAllConstructorsMatching(clz, constructorCondition(builtQuery))
+    if (EzReflect.cacheEnabled && queryKey != null) {
+        EzReflect.cachePut(clz, ReflectCacheBucket.CONSTRUCTOR, AllConstructorsCacheKey(queryKey), results)
+    }
     cacheExactConstructors(clz, results)
     return results
 }

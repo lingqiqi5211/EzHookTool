@@ -58,18 +58,18 @@ class FindAllOverloadTest {
     fun `method query can switch superclass search mode`() {
         val inherited = FindAllChild::class.java.findMethod {
             name("parentOnly")
-            includeSuper()
+            findAndSuper()
         }
         val javaStyle = io.github.lingqiqi5211.ezhooktool.core.java.Methods.find(FindAllChild::class.java)
             .filterByName("parentOnly")
-            .includeSuper()
+            .findAndSuper()
             .first()
 
         assertEquals("parentOnly", inherited.name)
         assertEquals("parentOnly", javaStyle.name)
         assertNull(FindAllChild::class.java.findMethodOrNull {
             name("parentOnly")
-            currentClassOnly()
+            findOnlyClass()
         })
     }
 
@@ -101,18 +101,18 @@ class FindAllOverloadTest {
     fun `field query can switch superclass search mode`() {
         val inherited = FindAllChild::class.java.findField {
             name("parentField")
-            includeSuper()
+            findAndSuper()
         }
         val javaStyle = io.github.lingqiqi5211.ezhooktool.core.java.Fields.find(FindAllChild::class.java)
             .filterByName("parentField")
-            .includeSuper()
+            .findAndSuper()
             .first()
 
         assertEquals("parentField", inherited.name)
         assertEquals("parentField", javaStyle.name)
         assertNull(FindAllChild::class.java.findFieldOrNull {
             name("parentField")
-            currentClassOnly()
+            findOnlyClass()
         })
     }
 

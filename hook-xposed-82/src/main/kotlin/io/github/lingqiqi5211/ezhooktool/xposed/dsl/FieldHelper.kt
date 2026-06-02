@@ -48,6 +48,19 @@ fun getValueByField(target: Any, fieldName: String, clazz: Class<*>? = null): An
 }
 
 /**
+ * 把 `findSuper` 语义应用到 [FieldQuery]。
+ *
+ * `null` 沿用 query 默认行为，`false` 调用 [FieldQuery.findOnlyClass]，`true` 调用 [FieldQuery.findAndSuper]。
+ */
+private fun FieldQuery.applyFindSuper(findSuper: Boolean?) {
+    when (findSuper) {
+        true -> findAndSuper()
+        false -> findOnlyClass()
+        null -> Unit
+    }
+}
+
+/**
  * 按类名查找字段。
  *
  * 默认使用当前 hook 运行时的 `ClassLoader`，适合在 Xposed 模块里直接用目标类名查找。
@@ -60,7 +73,10 @@ fun String.findField(
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
     findSuper: Boolean? = null,
     query: FieldQuery.() -> Unit,
-): Field = findField(this, classLoader, findSuper, query)
+): Field = findField(this, classLoader) {
+    applyFindSuper(findSuper)
+    query()
+}
 
 /**
  * 按类名查找字段，找不到时返回 `null`。
@@ -73,7 +89,10 @@ fun String.findFieldOrNull(
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
     findSuper: Boolean? = null,
     query: FieldQuery.() -> Unit,
-): Field? = findFieldOrNull(this, classLoader, findSuper, query)
+): Field? = findFieldOrNull(this, classLoader) {
+    applyFindSuper(findSuper)
+    query()
+}
 
 /**
  * 按类名查找全部匹配字段。
@@ -88,7 +107,10 @@ fun String.findAllFields(
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
     findSuper: Boolean? = null,
     query: FieldQuery.() -> Unit,
-): List<Field> = findAllFields(this, classLoader, findSuper, query)
+): List<Field> = findAllFields(this, classLoader) {
+    applyFindSuper(findSuper)
+    query()
+}
 
 /**
  * 按类名列出字段。
@@ -99,7 +121,9 @@ fun String.findAllFields(
 fun String.findAllFields(
     classLoader: ClassLoader = HookClassLoader.currentOrDefault(),
     findSuper: Boolean? = null,
-): List<Field> = findAllFields(this, classLoader, findSuper)
+): List<Field> = findAllFields(this, classLoader) {
+    applyFindSuper(findSuper)
+}
 
 /**
  * 按字段类型查找字段。
@@ -108,7 +132,10 @@ fun String.findAllFields(
  * @param findSuper `null` 为智能查找，`false` 只查当前类，`true` 查当前类和全部父类
  */
 fun Class<*>.findFieldByType(type: Class<*>, findSuper: Boolean? = null): Field =
-    findField(findSuper) { this.type(type) }
+    findField {
+        applyFindSuper(findSuper)
+        type(type)
+    }
 
 /**
  * 按字段类型查找字段，找不到时返回 `null`。
@@ -117,7 +144,10 @@ fun Class<*>.findFieldByType(type: Class<*>, findSuper: Boolean? = null): Field 
  * @param findSuper `null` 为智能查找，`false` 只查当前类，`true` 查当前类和全部父类
  */
 fun Class<*>.findFieldByTypeOrNull(type: Class<*>, findSuper: Boolean? = null): Field? =
-    findFieldOrNull(findSuper) { this.type(type) }
+    findFieldOrNull {
+        applyFindSuper(findSuper)
+        type(type)
+    }
 
 /**
  * 按名称查找实例字段。

@@ -3,6 +3,7 @@
 package io.github.lingqiqi5211.ezhooktool.core
 
 import io.github.lingqiqi5211.ezhooktool.core.query.ConstructorQuery
+import io.github.lingqiqi5211.ezhooktool.core.query.ClassQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.FieldQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.MethodQuery
 
@@ -28,11 +29,17 @@ class ReflectScope internal constructor(
     /** 在当前作用域的 [classLoader] 上加载类，找不到时返回 `null`。 */
     fun loadClassOrNull(name: String): Class<*>? = loadClassOrNull(name, classLoader)
 
-    /** 在当前作用域的 [classLoader] 上查找类，找不到时抛异常。 */
-    fun findClass(name: String): Class<*> = findClass(name, classLoader)
+    /** 在当前作用域的 [classLoader] 上按条件查找类。 */
+    fun findClassIf(query: ClassQuery.() -> Unit): Class<*> =
+        findClassIf(classLoader, query)
 
-    /** 在当前作用域的 [classLoader] 上查找类，找不到时返回 `null`。 */
-    fun findClassOrNull(name: String): Class<*>? = findClassOrNull(name, classLoader)
+    /** 在当前作用域的 [classLoader] 上按条件查找类，找不到返回 `null`。 */
+    fun findClassIfOrNull(query: ClassQuery.() -> Unit): Class<*>? =
+        findClassIfOrNull(classLoader, query)
+
+    /** 在当前作用域的 [classLoader] 上按条件查找全部类。 */
+    fun findAllClassesIf(query: ClassQuery.() -> Unit): List<Class<*>> =
+        findAllClassesIf(classLoader, query)
 
     /** 按多个候选类名依次尝试加载，返回第一个成功的类。 */
     fun loadClassFirst(vararg names: String): Class<*> =
@@ -41,14 +48,6 @@ class ReflectScope internal constructor(
     /** 按多个候选类名依次尝试加载，全部失败时返回 `null`。 */
     fun loadClassFirstOrNull(vararg names: String): Class<*>? =
         loadClassFirstOrNull(*names, classLoader = classLoader)
-
-    /** 按多个候选类名依次查找，返回第一个成功的类。 */
-    fun findFirstClass(vararg names: String): Class<*> =
-        findFirstClass(*names, classLoader = classLoader)
-
-    /** 按多个候选类名依次查找，全部失败时返回 `null`。 */
-    fun findFirstClassOrNull(vararg names: String): Class<*>? =
-        findFirstClassOrNull(*names, classLoader = classLoader)
 
     /** 在当前作用域的 [classLoader] 上创建延迟加载类。 */
     fun lazyClass(vararg names: String): LazyClass =
@@ -87,48 +86,40 @@ class ReflectScope internal constructor(
     /** 在当前作用域的 [classLoader] 上把类名字符串解析为 [Class]。 */
     fun String.toClass(): Class<*> = loadClass(this)
 
-    /** 在当前作用域的 [classLoader] 上按类名查找 [Class]。 */
-    @JvmName("findClassFromString")
-    fun String.findClass(): Class<*> = findClass(this)
-
     /** 在当前作用域的 [classLoader] 上把类名字符串解析为 [Class]，失败返回 `null`。 */
     fun String.toClassOrNull(): Class<*>? = loadClassOrNull(this)
 
-    /** 在当前作用域的 [classLoader] 上按类名查找 [Class]，失败返回 `null`。 */
-    @JvmName("findClassOrNullFromString")
-    fun String.findClassOrNull(): Class<*>? = findClassOrNull(this)
-
     /** 在当前作用域的 [classLoader] 上按查询条件查找方法。 */
-    fun String.findMethod(findSuper: Boolean? = null, query: MethodQuery.() -> Unit): java.lang.reflect.Method =
-        findMethod(this, classLoader, findSuper, query)
+    fun String.findMethod(query: MethodQuery.() -> Unit): java.lang.reflect.Method =
+        findMethod(this, classLoader, query)
 
     /** 在当前作用域的 [classLoader] 上按查询条件查找方法，找不到返回 `null`。 */
-    fun String.findMethodOrNull(findSuper: Boolean? = null, query: MethodQuery.() -> Unit): java.lang.reflect.Method? =
-        findMethodOrNull(this, classLoader, findSuper, query)
+    fun String.findMethodOrNull(query: MethodQuery.() -> Unit): java.lang.reflect.Method? =
+        findMethodOrNull(this, classLoader, query)
 
     /** 在当前作用域的 [classLoader] 上按查询条件查找所有匹配的方法。 */
-    fun String.findAllMethods(findSuper: Boolean? = null, query: MethodQuery.() -> Unit): List<java.lang.reflect.Method> =
-        findAllMethods(this, classLoader, findSuper, query)
+    fun String.findAllMethods(query: MethodQuery.() -> Unit): List<java.lang.reflect.Method> =
+        findAllMethods(this, classLoader, query)
 
     /** 在当前作用域的 [classLoader] 上查找全部方法。 */
-    fun String.findAllMethods(findSuper: Boolean? = null): List<java.lang.reflect.Method> =
-        findAllMethods(this, classLoader, findSuper)
+    fun String.findAllMethods(): List<java.lang.reflect.Method> =
+        findAllMethods(this, classLoader)
 
     /** 在当前作用域的 [classLoader] 上按查询条件查找字段。 */
-    fun String.findField(findSuper: Boolean? = null, query: FieldQuery.() -> Unit): java.lang.reflect.Field =
-        findField(this, classLoader, findSuper, query)
+    fun String.findField(query: FieldQuery.() -> Unit): java.lang.reflect.Field =
+        findField(this, classLoader, query)
 
     /** 在当前作用域的 [classLoader] 上按查询条件查找字段，找不到返回 `null`。 */
-    fun String.findFieldOrNull(findSuper: Boolean? = null, query: FieldQuery.() -> Unit): java.lang.reflect.Field? =
-        findFieldOrNull(this, classLoader, findSuper, query)
+    fun String.findFieldOrNull(query: FieldQuery.() -> Unit): java.lang.reflect.Field? =
+        findFieldOrNull(this, classLoader, query)
 
     /** 在当前作用域的 [classLoader] 上按查询条件查找所有匹配的字段。 */
-    fun String.findAllFields(findSuper: Boolean? = null, query: FieldQuery.() -> Unit): List<java.lang.reflect.Field> =
-        findAllFields(this, classLoader, findSuper, query)
+    fun String.findAllFields(query: FieldQuery.() -> Unit): List<java.lang.reflect.Field> =
+        findAllFields(this, classLoader, query)
 
     /** 在当前作用域的 [classLoader] 上查找全部字段。 */
-    fun String.findAllFields(findSuper: Boolean? = null): List<java.lang.reflect.Field> =
-        findAllFields(this, classLoader, findSuper)
+    fun String.findAllFields(): List<java.lang.reflect.Field> =
+        findAllFields(this, classLoader)
 
     /** 在当前作用域的 [classLoader] 上按查询条件查找构造器。 */
     fun String.findConstructor(query: ConstructorQuery.() -> Unit): java.lang.reflect.Constructor<*> =

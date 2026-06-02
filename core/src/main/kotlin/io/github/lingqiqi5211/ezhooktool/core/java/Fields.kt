@@ -25,15 +25,6 @@ object Fields {
     @JvmStatic
     fun find(clazz: Class<*>): FieldSearch = FieldSearch(clazz)
 
-    /**
-     * 创建字段查询器，并指定父类查找策略。
-     *
-     * @param clazz 目标类
-     * @param findSuper `null` 表示智能查找，`false` 只查当前类，`true` 查当前类和全部父类
-     */
-    @JvmStatic
-    fun find(clazz: Class<*>, findSuper: Boolean?): FieldSearch = FieldSearch(clazz, findSuper)
-
     /** 读取实例字段。 */
     @JvmStatic
     fun getObjectField(obj: Any, fieldName: String): Any? = obj.getField(fieldName)
@@ -157,7 +148,6 @@ object Fields {
  */
 class FieldSearch internal constructor(
     private val clazz: Class<*>,
-    private var findSuper: Boolean? = null,
 ) {
     private val conditions = mutableListOf<FieldQuery.() -> Unit>()
 
@@ -259,14 +249,24 @@ class FieldSearch internal constructor(
     fun filterNonSynthetic(): FieldSearch = add { notSynthetic() }
 
     /** 只在当前类中查找。 */
-    fun currentClassOnly(): FieldSearch = apply {
-        findSuper = false
-    }
+    fun findOnlyClass(): FieldSearch = add { findOnlyClass() }
 
     /** 查找当前类和全部父类。 */
-    fun includeSuper(): FieldSearch = apply {
-        findSuper = true
-    }
+    fun findAndSuper(): FieldSearch = add { findAndSuper() }
+
+    /** [findOnlyClass] 的旧名称。 */
+    @Deprecated(
+        message = "currentClassOnly is an old name. The last recommended version for this name is 1.0.4. Use findOnlyClass instead.",
+        replaceWith = ReplaceWith("findOnlyClass()"),
+    )
+    fun currentClassOnly(): FieldSearch = findOnlyClass()
+
+    /** [findAndSuper] 的旧名称。 */
+    @Deprecated(
+        message = "includeSuper is an old name. The last recommended version for this name is 1.0.4. Use findAndSuper instead.",
+        replaceWith = ReplaceWith("findAndSuper()"),
+    )
+    fun includeSuper(): FieldSearch = findAndSuper()
 
     /** 添加自定义条件。 */
     fun filter(predicate: Predicate<Field>): FieldSearch = add { filter(predicate) }
@@ -274,7 +274,7 @@ class FieldSearch internal constructor(
     /** 返回第一个匹配的字段，找不到时抛出异常。 */
     fun first(): Field {
         val query = conditions.toList()
-        return findField(clazz, findSuper) {
+        return findField(clazz) {
             query.forEach { it() }
         }
     }
@@ -282,7 +282,7 @@ class FieldSearch internal constructor(
     /** 返回第一个匹配的字段，找不到时返回 `null`。 */
     fun firstOrNull(): Field? {
         val query = conditions.toList()
-        return findFieldOrNull(clazz, findSuper) {
+        return findFieldOrNull(clazz) {
             query.forEach { it() }
         }
     }
@@ -290,7 +290,7 @@ class FieldSearch internal constructor(
     /** 返回全部匹配的字段。 */
     fun toList(): List<Field> {
         val query = conditions.toList()
-        return findAllFields(clazz, findSuper) {
+        return findAllFields(clazz) {
             query.forEach { it() }
         }
     }

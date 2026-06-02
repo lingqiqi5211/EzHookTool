@@ -133,7 +133,7 @@ fun Constructor<*>.createReplaceHook(callback: (HookParam) -> Any?): XC_MethodHo
 /**
  * 为指定类中同名的全部方法批量创建 hook。
  *
- * 仅匹配当前类声明的方法，不包含父类继承而来的方法。
+ * 默认走智能查找，当前类找不到时会向上沿父类继续匹配。
  *
  * @param methodName 目标方法名
  * @param block 每个方法都会使用同一份 hook 声明
@@ -142,12 +142,14 @@ fun Class<*>.hookAllMethods(
     methodName: String,
     block: HookFactory.() -> Unit,
 ): List<XC_MethodHook.Unhook> =
-    findAllMethods(this, findSuper = false) { name(methodName) }.createHooks(block)
+    findAllMethods(this) {
+        name(methodName)
+    }.createHooks(block)
 
 private fun Class<*>.findHookMethods(
     methodName: String,
     argTypes: Array<out Class<*>>,
-): List<Method> = findAllMethods(this, findSuper = false) {
+): List<Method> = findAllMethods(this) {
     name(methodName)
     if (argTypes.isNotEmpty()) {
         parameterTypes(*argTypes)

@@ -2,11 +2,19 @@
 
 package io.github.lingqiqi5211.ezhooktool.core
 
+import io.github.lingqiqi5211.ezhooktool.core.query.ClassQuery
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
+import io.github.lingqiqi5211.ezhooktool.core.query.classQuery
 import kotlin.reflect.KProperty
 
 private data class ClassNameCacheKey(val name: String)
 
 private data class FirstClassNameCacheKey(val names: List<String>)
+
+private data class ClassIfCacheKey(
+    val queryKey: List<Any>,
+    val resultMode: String,
+)
 
 private fun Throwable.isRecoverableClassLoadError(): Boolean = when (this) {
     is ClassNotFoundException,
@@ -122,16 +130,6 @@ fun loadClass(
         ?: throw ClassNotFoundError(name, classLoader.toString())
 
 /**
- * 查找类。找不到时抛出 [ClassNotFoundError]。
- */
-@JvmOverloads
-fun findClass(
-    name: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
-): Class<*> =
-    loadClass(name, classLoader)
-
-/**
  * 加载类。找不到时返回 null。
  *
  * ```kotlin
@@ -162,15 +160,91 @@ fun loadClassOrNull(
     return clz
 }
 
+private fun findClassesMatching(
+    classLoader: ClassLoader,
+    query: ClassQuery,
+    collectAll: Boolean,
+): List<Class<*>> {
+    val queryKey = query.cacheKeyOrNull()
+    val resultMode = if (collectAll) "all" else "first"
+    val cacheKey = queryKey?.let { ClassIfCacheKey(it, resultMode) }
+    if (cacheKey != null) {
+        val cached = EzReflect.classQueryCacheGet(classLoader, cacheKey)
+        if (collectAll && cached is List<*>) {
+            @Suppress("UNCHECKED_CAST")
+            return cached as List<Class<*>>
+        }
+        if (!collectAll && cached is Class<*>) return listOf(cached)
+    }
+
+    val results = mutableListOf<Class<*>>()
+    for (name in EzReflect.classResolver.classNamesOf(classLoader).distinct()) {
+        if (!query.matchesName(name)) continue
+        val clz = loadClassOrNull(name, classLoader) ?: continue
+        if (!query.matchesClass(clz)) continue
+
+        results += clz
+        if (!collectAll && !query.requiresSingleResult) break
+        if (!collectAll && results.size > 1) {
+            throw SingleResultExpectedException(
+                target = "class in $classLoader",
+                conditionDesc = query.describe(),
+            )
+        }
+    }
+
+    if (cacheKey != null) {
+        if (collectAll) {
+            EzReflect.classQueryCachePut(classLoader, cacheKey, results.toList())
+        } else {
+            results.firstOrNull()?.let { EzReflect.classQueryCachePut(classLoader, cacheKey, it) }
+        }
+    }
+    return results
+}
+
 /**
- * 查找类。找不到时返回 null。
+ * 按条件查找类，默认返回第一个匹配项。
+ *
+ * 查询块内调用 `findSingle()` 时，要求只能命中一个类。
  */
 @JvmOverloads
-fun findClassOrNull(
-    name: String,
+fun findClassIf(
     classLoader: ClassLoader = EzReflect.classLoader,
-): Class<*>? =
-    loadClassOrNull(name, classLoader)
+    query: ClassQuery.() -> Unit,
+): Class<*> {
+    QueryFilterContext.warnNestedFind("findClassIf")
+    val builtQuery = classQuery(query)
+    return findClassesMatching(classLoader, builtQuery, collectAll = false).firstOrNull()
+        ?: throw ClassNotFoundError(
+            className = builtQuery.describe() ?: "<condition>",
+            classLoaderInfo = classLoader.toString(),
+        )
+}
+
+/**
+ * 按条件查找类，找不到时返回 null。
+ */
+@JvmOverloads
+fun findClassIfOrNull(
+    classLoader: ClassLoader = EzReflect.classLoader,
+    query: ClassQuery.() -> Unit,
+): Class<*>? {
+    QueryFilterContext.warnNestedFind("findClassIfOrNull")
+    return findClassesMatching(classLoader, classQuery(query), collectAll = false).firstOrNull()
+}
+
+/**
+ * 按条件查找全部类。
+ */
+@JvmOverloads
+fun findAllClassesIf(
+    classLoader: ClassLoader = EzReflect.classLoader,
+    query: ClassQuery.() -> Unit,
+): List<Class<*>> {
+    QueryFilterContext.warnNestedFind("findAllClassesIf")
+    return findClassesMatching(classLoader, classQuery(query), collectAll = true)
+}
 
 // ═══════════════════════ 多名称兜底 ═══════════════════════
 
@@ -200,15 +274,6 @@ fun loadClassFirst(
         )
 
 /**
- * 依次尝试多个类名，返回第一个成功加载的类。
- */
-fun findFirstClass(
-    vararg names: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
-): Class<*> =
-    loadClassFirst(*names, classLoader = classLoader)
-
-/**
  * 同 [loadClassFirst]，全部找不到时返回 null。
  *
  * ```kotlin
@@ -234,15 +299,6 @@ fun loadClassFirstOrNull(
     }
     return null
 }
-
-/**
- * 依次尝试多个类名，全部找不到时返回 null。
- */
-fun findFirstClassOrNull(
-    vararg names: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
-): Class<*>? =
-    loadClassFirstOrNull(*names, classLoader = classLoader)
 
 // ═══════════════════════ 批量加载 ═══════════════════════
 
@@ -281,16 +337,6 @@ fun String.toClass(
     loadClass(this, classLoader)
 
 /**
- * 字符串直接查找 Class。
- */
-@JvmName("findClassFromString")
-@JvmOverloads
-fun String.findClass(
-    classLoader: ClassLoader = EzReflect.classLoader,
-): Class<*> =
-    findClass(this, classLoader)
-
-/**
  * 字符串直接转 Class，找不到返回 null。
  *
  * ```kotlin
@@ -304,16 +350,6 @@ fun String.toClassOrNull(
     classLoader: ClassLoader = EzReflect.classLoader,
 ): Class<*>? =
     loadClassOrNull(this, classLoader)
-
-/**
- * 字符串直接查找 Class，找不到返回 null。
- */
-@JvmName("findClassOrNullFromString")
-@JvmOverloads
-fun String.findClassOrNull(
-    classLoader: ClassLoader = EzReflect.classLoader,
-): Class<*>? =
-    findClassOrNull(this, classLoader)
 
 // ═══════════════════════ Class 工具扩展 ═══════════════════════
 

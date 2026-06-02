@@ -64,7 +64,7 @@ private fun Array<out Class<*>>.describeTypes(): String =
  * }
  * ```
  */
-class ConstructorQuery internal constructor() {
+class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
     private val conditions = mutableListOf<ConstructorCondition>()
     private val cacheParts = mutableMapOf<ConstructorCachePart, Any>()
     private val descriptions = mutableListOf<String>()
@@ -188,7 +188,7 @@ class ConstructorQuery internal constructor() {
 
     /** 添加自定义 Kotlin 条件。 */
     fun filter(condition: ConstructorCondition) {
-        conditions += condition
+        conditions += { QueryFilterContext.run { condition(this) } }
         cacheable = false
         descriptions += "customFilter"
     }
@@ -208,7 +208,7 @@ class ConstructorQuery internal constructor() {
     }
 
     internal fun cacheKeyOrNull(): List<Any>? =
-        if (cacheable) constructorCacheKeyOf(cacheParts) else null
+        cacheKeyOrManual(constructorCacheKeyOf(cacheParts), cacheable)
 
     internal fun describe(): String? =
         descriptions.distinct().takeIf { it.isNotEmpty() }?.joinToString(", ")

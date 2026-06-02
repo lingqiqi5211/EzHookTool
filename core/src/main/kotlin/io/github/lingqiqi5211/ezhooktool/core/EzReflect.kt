@@ -115,7 +115,7 @@ object EzReflect {
     /**
      * 是否启用查找结果缓存。默认 true。
      *
-     * 开启后，findClass / findMethod / findField / findConstructor 的结果会以稳定查询条件为 key 缓存，
+     * 开启后，loadClass / findClassIf / findMethod / findField / findConstructor 的结果会以稳定查询条件为 key 缓存，
      * 减少重复加载类和重复遍历成员列表。
      *
      * `name`、`paramCount`、`type`、`params` 等结构化条件会参与缓存。
@@ -167,6 +167,19 @@ object EzReflect {
     @Volatile
     @JvmStatic
     var memberResolver: MemberResolver = DefaultMemberResolver
+        set(value) {
+            field = value
+            clearCache()
+        }
+
+    /**
+     * 类名枚举策略。
+     *
+     * `core` 默认只使用主动注册的类名；Android / Xposed 场景可替换为 Dex 类名来源。
+     */
+    @Volatile
+    @JvmStatic
+    var classResolver: ClassResolver = DefaultClassResolver
         set(value) {
             field = value
             clearCache()
@@ -230,6 +243,23 @@ object EzReflect {
     }
 
     internal fun classCachePut(classLoader: ClassLoader, key: Any, value: Class<*>) {
+        if (!cacheEnabled) return
+        val tick = cacheClock.incrementAndGet()
+        val loaderCache = classCache.computeIfAbsent(classLoader) { ClassLoaderCache() }
+        loaderCache.classes[key] = CacheEntry(value, tick)
+        if (loaderCache.shouldTrimAfterPut()) {
+            trimColdEntries(loaderCache, tick)
+        }
+    }
+
+    internal fun classQueryCacheGet(classLoader: ClassLoader, key: Any): Any? {
+        if (!cacheEnabled) return null
+        val entry = classCache[classLoader]?.classes?.get(key) ?: return null
+        entry.lastAccess = cacheClock.incrementAndGet()
+        return entry.value
+    }
+
+    internal fun classQueryCachePut(classLoader: ClassLoader, key: Any, value: Any) {
         if (!cacheEnabled) return
         val tick = cacheClock.incrementAndGet()
         val loaderCache = classCache.computeIfAbsent(classLoader) { ClassLoaderCache() }

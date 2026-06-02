@@ -36,15 +36,6 @@ object Methods {
     fun find(clazz: Class<*>): MethodSearch = MethodSearch(clazz)
 
     /**
-     * 创建方法查询器，并指定父类查找策略。
-     *
-     * @param clazz 目标类
-     * @param findSuper `null` 表示智能查找，`false` 只查当前类，`true` 查当前类和全部父类
-     */
-    @JvmStatic
-    fun find(clazz: Class<*>, findSuper: Boolean?): MethodSearch = MethodSearch(clazz, findSuper)
-
-    /**
      * 自动匹配参数并调用实例方法。
      *
      * @param obj 目标实例
@@ -96,7 +87,6 @@ object Methods {
  */
 class MethodSearch internal constructor(
     private val clazz: Class<*>,
-    private var findSuper: Boolean? = null,
 ) {
     private val conditions = mutableListOf<MethodQuery.() -> Unit>()
 
@@ -259,14 +249,24 @@ class MethodSearch internal constructor(
     fun filterNonDefault(): MethodSearch = add { notDefault() }
 
     /** 只在当前类中查找。 */
-    fun currentClassOnly(): MethodSearch = apply {
-        findSuper = false
-    }
+    fun findOnlyClass(): MethodSearch = add { findOnlyClass() }
 
     /** 查找当前类和全部父类。 */
-    fun includeSuper(): MethodSearch = apply {
-        findSuper = true
-    }
+    fun findAndSuper(): MethodSearch = add { findAndSuper() }
+
+    /** [findOnlyClass] 的旧名称。 */
+    @Deprecated(
+        message = "currentClassOnly is an old name. The last recommended version for this name is 1.0.4. Use findOnlyClass instead.",
+        replaceWith = ReplaceWith("findOnlyClass()"),
+    )
+    fun currentClassOnly(): MethodSearch = findOnlyClass()
+
+    /** [findAndSuper] 的旧名称。 */
+    @Deprecated(
+        message = "includeSuper is an old name. The last recommended version for this name is 1.0.4. Use findAndSuper instead.",
+        replaceWith = ReplaceWith("findAndSuper()"),
+    )
+    fun includeSuper(): MethodSearch = findAndSuper()
 
     /** 添加自定义条件。 */
     fun filter(predicate: Predicate<Method>): MethodSearch = add { filter(predicate) }
@@ -274,7 +274,7 @@ class MethodSearch internal constructor(
     /** 返回第一个匹配的方法，找不到时抛出异常。 */
     fun first(): Method {
         val query = conditions.toList()
-        return findMethod(clazz, findSuper) {
+        return findMethod(clazz) {
             query.forEach { it() }
         }
     }
@@ -282,7 +282,7 @@ class MethodSearch internal constructor(
     /** 返回第一个匹配的方法，找不到时返回 `null`。 */
     fun firstOrNull(): Method? {
         val query = conditions.toList()
-        return findMethodOrNull(clazz, findSuper) {
+        return findMethodOrNull(clazz) {
             query.forEach { it() }
         }
     }
@@ -290,7 +290,7 @@ class MethodSearch internal constructor(
     /** 返回全部匹配的方法。 */
     fun toList(): List<Method> {
         val query = conditions.toList()
-        return findAllMethods(clazz, findSuper) {
+        return findAllMethods(clazz) {
             query.forEach { it() }
         }
     }

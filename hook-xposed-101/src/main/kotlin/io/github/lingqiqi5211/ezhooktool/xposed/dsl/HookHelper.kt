@@ -229,7 +229,7 @@ fun Constructor<*>.createInterceptHook(
 /**
  * 为指定类中同名的全部方法批量创建 hook。
  *
- * 仅匹配当前类声明的方法，不包含父类继承而来的方法。
+ * 默认走智能查找，当前类找不到时会向上沿父类继续匹配。
  *
  * @param methodName 目标方法名
  * @param priority hook 优先级，数值越大越先执行
@@ -242,12 +242,14 @@ fun Class<*>.hookAllMethods(
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
     block: HookFactory.() -> Unit,
 ): List<XposedInterface.HookHandle> =
-    findAllMethods(this, findSuper = false) { name(methodName) }.createHooks(priority, exceptionMode, block)
+    findAllMethods(this) {
+        name(methodName)
+    }.createHooks(priority, exceptionMode, block)
 
 private fun Class<*>.findHookMethods(
     methodName: String,
     argTypes: Array<out Class<*>>,
-): List<Method> = findAllMethods(this, findSuper = false) {
+): List<Method> = findAllMethods(this) {
     name(methodName)
     if (argTypes.isNotEmpty()) {
         parameterTypes(*argTypes)

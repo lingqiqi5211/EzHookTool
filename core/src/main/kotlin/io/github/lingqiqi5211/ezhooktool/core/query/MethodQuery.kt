@@ -87,7 +87,7 @@ private fun Array<out Class<*>>.describeTypes(): String =
  * }
  * ```
  */
-class MethodQuery internal constructor() {
+class MethodQuery internal constructor() : BaseQuery<Method>() {
     private val conditions = mutableListOf<MethodCondition>()
     private val cacheParts = mutableMapOf<MethodCachePart, Any>()
     private val descriptions = mutableListOf<String>()
@@ -335,27 +335,41 @@ class MethodQuery internal constructor() {
 
     /**
      * 只在当前类中查找。
-     *
-     * 等同于调用 `findMethod(findSuper = false) { ... }`。
      */
-    fun currentClassOnly() {
+    fun findOnlyClass() {
         searchSuperSet = true
         searchSuperValue = false
     }
 
     /**
      * 查找当前类和全部父类。
-     *
-     * 等同于调用 `findMethod(findSuper = true) { ... }`。
      */
-    fun includeSuper() {
+    fun findAndSuper() {
         searchSuperSet = true
         searchSuperValue = true
     }
 
+    /** [findOnlyClass] 的旧名称。 */
+    @Deprecated(
+        message = "currentClassOnly is an old name. The last recommended version for this name is 1.0.4. Use findOnlyClass instead.",
+        replaceWith = ReplaceWith("findOnlyClass()"),
+    )
+    fun currentClassOnly() {
+        findOnlyClass()
+    }
+
+    /** [findAndSuper] 的旧名称。 */
+    @Deprecated(
+        message = "includeSuper is an old name. The last recommended version for this name is 1.0.4. Use findAndSuper instead.",
+        replaceWith = ReplaceWith("findAndSuper()"),
+    )
+    fun includeSuper() {
+        findAndSuper()
+    }
+
     /** 添加自定义 Kotlin 条件。 */
     fun filter(condition: MethodCondition) {
-        conditions += condition
+        conditions += { QueryFilterContext.run { condition(this) } }
         cacheable = false
         descriptions += "customFilter"
     }
@@ -378,7 +392,7 @@ class MethodQuery internal constructor() {
         if (searchSuperSet) searchSuperValue else defaultValue
 
     internal fun cacheKeyOrNull(): List<Any>? =
-        if (cacheable) methodCacheKeyOf(cacheParts) else null
+        cacheKeyOrManual(methodCacheKeyOf(cacheParts), cacheable)
 
     internal fun describe(): String? =
         descriptions.distinct().takeIf { it.isNotEmpty() }?.joinToString(", ")

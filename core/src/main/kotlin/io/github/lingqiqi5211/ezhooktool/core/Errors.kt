@@ -125,6 +125,19 @@ class ClassNotFoundError(
     }
 }
 
+/**
+ * 查询要求只命中一个结果，但实际命中多个结果。
+ */
+class SingleResultExpectedException(
+    val target: String,
+    val conditionDesc: String? = null,
+) : RuntimeException(
+    buildString {
+        append("Expected single result for $target, but found multiple matches.")
+        if (conditionDesc != null) append("\n  Condition: $conditionDesc")
+    }
+)
+
 // ═══════════════════════ Internal Helpers ═══════════════════════
 
 internal fun Class<*>.toReadableTypeName(): String =
