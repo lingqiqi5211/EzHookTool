@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.AssetManager
 import android.content.res.Resources
 import io.github.libxposed.api.XposedInterface
+import io.github.libxposed.api.XposedInterfaceWrapper
 import io.github.libxposed.api.XposedModuleInterface
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ModuleResources
@@ -34,6 +35,8 @@ object EzXposed {
     /** libxposed 基础接口实例。 */
     lateinit var base: XposedInterface
         internal set
+
+    private var moduleEntry: XposedInterfaceWrapper? = null
 
     @JvmStatic
     @Volatile
@@ -180,6 +183,7 @@ object EzXposed {
      */
     fun initOnModuleLoaded(base: XposedInterface, param: XposedModuleInterface.ModuleLoadedParam) {
         this.base = base
+        this.moduleEntry = base as? XposedInterfaceWrapper
         modulePath = base.moduleApplicationInfo.sourceDir
         initModuleResources()
         processName = param.processName
@@ -219,6 +223,34 @@ object EzXposed {
         base.deoptimize(executable)
         true
     }.getOrDefault(false)
+
+    /**
+     * 当前 framework 是否允许热重载。
+     *
+     * 等价于 `(base.frameworkProperties and XposedInterface.PROP_RT_HOT_RELOAD) != 0L`。
+     * 在 [initOnModuleLoaded] 之前访问会抛出 [IllegalStateException]。
+     */
+    @JvmStatic
+    val isHotReloadPermitted: Boolean
+        get() = (base.frameworkProperties and XposedInterface.PROP_RT_HOT_RELOAD) != 0L
+
+    /**
+     * 停止当前 module entry 的后续生命周期回调。
+     *
+     * 调用后 framework 不会再向当前 entry 实例分发 `onPackageLoaded` / `onHotReloading` 等回调，
+     * 已注册的 hook 与其它 [XposedInterface] API 不受影响。该方法幂等，可多次调用。
+     *
+     * 必须先在 `onModuleLoaded` 阶段调用 [initOnModuleLoaded] 并传入 [XposedInterfaceWrapper]（或其子类，
+     * 例如 `XposedModule`）。如果传入的 `base` 不是 wrapper 类型，这里会抛出 [IllegalStateException]。
+     */
+    @JvmStatic
+    fun detachCurrentEntry() {
+        val entry = moduleEntry ?: throw IllegalStateException(
+            "detachCurrentEntry requires a XposedInterfaceWrapper (e.g. XposedModule) " +
+                    "to be passed into EzXposed.initOnModuleLoaded."
+        )
+        entry.detach()
+    }
 
     private fun getCurrentApplicationContext(): Context? = try {
         val activityThreadClass = Class.forName("android.app.ActivityThread")
