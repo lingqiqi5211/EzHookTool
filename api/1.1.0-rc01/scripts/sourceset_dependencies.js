@@ -1,0 +1,1 @@
+sourceset_dependencies = '{":core/main":[],":hook-xposed-82/release":[],":hook-xposed-101/release":[]}'
