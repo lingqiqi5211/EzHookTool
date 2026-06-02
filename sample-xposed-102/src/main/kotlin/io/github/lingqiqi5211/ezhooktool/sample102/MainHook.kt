@@ -1,7 +1,6 @@
 package io.github.lingqiqi5211.ezhooktool.sample102
 
 import android.os.Build
-import android.os.Bundle
 import android.util.Log
 import androidx.annotation.RequiresApi
 import io.github.libxposed.api.XposedModule
@@ -16,7 +15,6 @@ import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleReplaceHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleReporterHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleVipHook
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
-import io.github.lingqiqi5211.ezhooktool.xposed.dsl.unhookAll
 
 private const val TargetApp = "com.example.target"
 private const val TAG = "MainHook"
@@ -24,13 +22,15 @@ private const val TAG = "MainHook"
 class MainHook : XposedModule() {
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         EzXposed.initOnModuleLoaded(this, param)
-        Log.i(TAG, "module loaded, hotReloadPermitted=${EzXposed.isHotReloadPermitted}")
+        // 注册「目标进程准备好后跑什么」。初次加载和热重载后 EzXposed 都会自动触发一次。
+        EzXposed.onTargetReady {
+            initHooks(ExampleVipHook, ExampleCryptoHook, ExampleReporterHook, ExampleReplaceHook)
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun onPackageLoaded(param: PackageLoadedParam) {
         if (param.packageName != TargetApp) return
-
         EzXposed.initOnPackageLoaded(param)
     }
 
@@ -40,42 +40,16 @@ class MainHook : XposedModule() {
             EzXposed.detachCurrentEntry()
             return
         }
-
         EzXposed.initOnPackageReady(param)
-        initHooks(ExampleVipHook, ExampleCryptoHook, ExampleReporterHook, ExampleReplaceHook)
     }
 
-    /**
-     * 旧 code 阶段：透传 extras 给新 code。
-     *
-     * 不要把旧 module classloader 的对象塞进 [HotReloadingParam.setSavedInstanceState]，
-     * framework 会拒绝。这里只传 [Bundle] 里的基础类型。
-     */
-    override fun onHotReloading(param: HotReloadingParam): Boolean {
-        val outState = Bundle().apply {
-            putString("triggeredBy", param.extras?.getString("triggeredBy") ?: "auto")
-        }
-        param.setSavedInstanceState(outState)
-        return true
-    }
+    // 启用热重载只需要下面两个一行模板。EzXposed 会自动透传目标进程 snapshot，
+    // 在新 code 里 unhook 上一代 handle、重建 EzReflect.classLoader 并再次触发 onTargetReady。
+    override fun onHotReloading(param: HotReloadingParam): Boolean =
+        EzXposed.handleHotReloading(param)
 
-    /**
-     * 新 code 阶段：framework 不会自动重放 package 生命周期。这里只演示如何处理旧 handle：
-     * 直接全部 unhook，再以新代码重新挂钩。如果想保留某些 hook，可以用 [groupById] +
-     * [io.github.lingqiqi5211.ezhooktool.xposed.dsl.replaceAll]。
-     */
-    override fun onHotReloaded(param: HotReloadedParam) {
-        EzXposed.initOnHotReloaded(this, param)
-
-        val savedState = param.savedInstanceState as? Bundle
-        Log.i(TAG, "hot reloaded, triggeredBy=${savedState?.getString("triggeredBy")}")
-
-        param.oldHookHandles.unhookAll()
-
-        // 注意：framework 不会重放 onPackageReady。如果需要 EzReflect.classLoader 指向
-        // 目标进程，调用方需要自己缓存上一代 package classloader 并重新调用 initOnPackageReady。
-        // 这里 sample 只演示句柄处理，不重建反射 classLoader。
-    }
+    override fun onHotReloaded(param: HotReloadedParam) =
+        EzXposed.handleHotReloaded(this, param)
 
     private fun initHooks(vararg hooks: BaseHook) {
         for (hook in hooks) {

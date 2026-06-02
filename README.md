@@ -138,10 +138,32 @@ override fun onPackageReady(param: PackageReadyParam) {
 }
 ```
 
-热重载：新 code 在 `onHotReloaded` 里调用 `EzXposed.initOnHotReloaded(this, param)`，
-再用 `groupById` / `replaceAll` / `unhookAll` 处理旧 handle。framework **不会** 自动重放
-package 生命周期，所以需要 `EzReflect.classLoader` 时调用方要自行缓存上一代 classloader
-并再次调用 `initOnPackageReady`。
+热重载：把目标进程要跑的逻辑写在 `EzXposed.onTargetReady { ... }`，
+再加两行模板让 `EzXposed` 接管跨代 snapshot 和重建：
+
+```kotlin
+class MainHook : XposedModule() {
+    override fun onModuleLoaded(param: ModuleLoadedParam) {
+        EzXposed.initOnModuleLoaded(this, param)
+        EzXposed.onTargetReady { installHooks() }
+    }
+
+    override fun onPackageReady(param: PackageReadyParam) {
+        if (param.packageName != TargetApp) return
+        EzXposed.initOnPackageReady(param)
+    }
+
+    override fun onHotReloading(param: HotReloadingParam) =
+        EzXposed.handleHotReloading(param)
+
+    override fun onHotReloaded(param: HotReloadedParam) =
+        EzXposed.handleHotReloaded(this, param)
+}
+```
+
+`onTargetReady` 在初次加载和热重载后都会触发；`handleHotReloaded` 内部会 unhook 上一代全部
+handle，并重建 `EzReflect.classLoader`。需要自定义 saved state 或按 id 替换 hook 的进阶用法，
+直接走原生回调即可，详见 `doc/overview.md`。
 
 ### 模块说明
 
