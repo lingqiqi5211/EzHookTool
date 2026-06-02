@@ -218,6 +218,21 @@ object EzXposed {
     }
 
     @JvmStatic
+    /**
+     * 在 `onHotReloaded` 阶段初始化新一代模块代码的运行时基础信息。
+     *
+     * 行为与 [initOnModuleLoaded] 等价：保存 [base]、[modulePath]、[processName]、[isSystemServer]
+     * 并重建 [moduleRes]。typically 在新 code 的 `onHotReloaded` 回调里第一行调用。
+     *
+     * 注意 framework 不会自动重放 package 生命周期。如果新 code 需要 [classLoader] 指向目标进程，
+     * 应在 [initOnHotReloaded] 之后自行调用 [initOnPackageReady] 或 [initOnSystemServerStarting]
+     * （通常需要缓存上一代 package classloader，由调用方决定如何获取）。
+     */
+    fun initOnHotReloaded(base: XposedInterface, param: XposedModuleInterface.HotReloadedParam) {
+        initOnModuleLoaded(base, param)
+    }
+
+    @JvmStatic
     /** 对方法或构造器做去优化。 */
     fun deoptimize(executable: Executable): Boolean = runCatching {
         base.deoptimize(executable)
