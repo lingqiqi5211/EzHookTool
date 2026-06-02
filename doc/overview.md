@@ -93,13 +93,13 @@ val constructor = clazz.findConstructor {
 
 ```kotlin
 method.createHook {
-    before {
-        val text = argAs<String>(0)
-        args[0] = text.trim()
+    before { param ->
+        val text = param.argAs<String>(0)
+        param.args[0] = text.trim()
     }
 
-    after {
-        result = "done"
+    after { param ->
+        param.result = "done"
     }
 }
 ```
@@ -362,3 +362,117 @@ Hooks.intercept(method, chain -> {
     return chain.proceed(args);
 });
 ```
+
+## libxposed 102 hook id 与替换
+
+`HookFactory.id(...)` 给当前 hook 分配一个模块和 executable 范围内唯一的 id。
+之后用同一个 id 在同一个 executable 上创建新 hook，旧 hook 会被原子替换，原 handle 失效。
+
+```kotlin
+val handle = method.createHook {
+    id("license-check")
+    before {
+        // ...
+    }
+}
+```
+
+拿到旧 handle 后，用 `replaceWith` / `replaceIntercept` 用 lambda 直接替换：
+
+```kotlin
+val newHandle = handle.replaceWith { /* HookParam */ true }
+```
+
+也可以传 libxposed 原生 `Hooker`，直接走接口成员：
+
+```kotlin
+val newHandle = handle.replaceHook(myHooker)
+```
+
+替换会保留原 hook 的 `executable`、`priority`、`exceptionMode` 和 `id`；调用成功后原 handle 不再可用。
+替换后的 hook 也会沿用 `EzXposed.safeMode` 的保护。
+
+Java 调用方：
+
+```java
+HookHandle newHandle = Hooks.replaceHook(oldHandle, methodHook);  // IMethodHook
+HookHandle newHandle = Hooks.replaceHook(oldHandle, replaceHook); // IReplaceHook
+HookHandle newHandle = oldHandle.replaceHook(hooker);             // 原生 Hooker
+```
+
+`HookHandle.id` 是 `getId()` 的 Kotlin 直通属性：
+
+```kotlin
+val current: String? = handle.id
+```
+
+## libxposed 102 entry detach
+
+`EzXposed.detachCurrentEntry()` 停止 framework 向当前 module entry 分发后续生命周期回调；
+已注册的 hook 与其它 `XposedInterface` API 不受影响。
+
+适合的场景：
+
+- 当前 entry 的初始化已完成，不再需要后续 `onPackageLoaded` 等回调。
+- 多 entry 模块里，当前 entry 检测到自己不在目标 app 中，立即停止接收回调。
+
+```kotlin
+override fun onPackageReady(param: PackageReadyParam) {
+    if (param.packageName != TargetApp) {
+        EzXposed.detachCurrentEntry()
+        return
+    }
+    EzXposed.initOnPackageReady(param)
+    // ...
+}
+```
+
+`detach()` 幂等，多次调用等价于一次。该入口需要 `EzXposed.initOnModuleLoaded` 传入的是
+`XposedInterfaceWrapper`（即 `XposedModule` 或其子类）；否则会抛 `IllegalStateException`。
+
+## libxposed 102 热重载
+
+framework 是否允许热重载：
+
+```kotlin
+val canHotReload = EzXposed.isHotReloadPermitted
+```
+
+热重载发生时，旧 code 走 `onHotReloading`，新 code 走 `onHotReloaded`。EzHookTool 只在新 code
+提供初始化入口，跨代状态用 `Bundle` 自行序列化（不要把旧 module classloader 的对象塞进
+`setSavedInstanceState`，上游会拒绝）。
+
+```kotlin
+class MainHook : XposedModule() {
+
+    override fun onHotReloading(param: HotReloadingParam): Boolean {
+        param.setSavedInstanceState(Bundle().apply {
+            putString("reason", "manual")
+        })
+        return true
+    }
+
+    override fun onHotReloaded(param: HotReloadedParam) {
+        EzXposed.initOnHotReloaded(this, param)
+
+        // 选 1：直接全部 unhook，新 code 重新挂钩
+        param.oldHookHandles.unhookAll()
+        installHooks()
+
+        // 选 2：按 id 替换需要保留的 hook，其余 unhook
+        val byId = param.oldHookHandles.groupById()
+        byId["license-check"]?.replaceAll(LicenseHooker())
+        (byId[null].orEmpty()).unhookAll()
+    }
+}
+```
+
+注意 framework **不会自动重放** package 生命周期。如果新 code 需要 `EzReflect.classLoader`
+指向目标进程，调用方需要自行缓存上一代的 package classloader，并在 `initOnHotReloaded`
+之后用 `initOnPackageReady` 重建。
+
+`HookHandle` 列表辅助函数：
+
+- `oldHandles.groupById()` → `Map<String?, List<HookHandle>>`
+- `oldHandles.replaceAll(hooker)` → `List<HookHandle>`，按原顺序返回新 handle
+- `oldHandles.unhookAll()`：全部 unhook

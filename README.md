@@ -5,6 +5,9 @@
 
 当前 Maven 最新构建版本为: ![Maven Central Version](https://img.shields.io/maven-central/v/io.github.lingqiqi5211.ezhooktool/core)
 
+> `hook-xposed-102` 依赖 libxposed API 102，目前上游为 `102.0.0-SNAPSHOT`，
+> 仍可能调整签名。生产环境请关注上游 RFC，或继续使用 API 101 版本。
+
 ### 快速开始
 
 `build.gradle`
@@ -107,6 +110,38 @@ class MainHook : XposedModule() {
 // 否则它会默认使用 ClassLoader.getSystemClassLoader()。
 EzReflect.init(yourClassLoader)
 ```
+
+### API 102 新能力
+
+详细说明见 `doc/overview.md`。
+
+`HookFactory` 支持给 hook 分配 id；同模块同 executable 上相同 id 的新 hook 会原子替换旧 hook：
+
+```kotlin
+val handle = method.createHook {
+    id("license-check")
+    before { /* ... */ }
+}
+
+val newHandle = handle.replaceWith { /* HookParam */ true }
+```
+
+`EzXposed.detachCurrentEntry()` 停止 framework 向当前 entry 分发后续生命周期回调，hook 不受影响：
+
+```kotlin
+override fun onPackageReady(param: PackageReadyParam) {
+    if (param.packageName != TargetApp) {
+        EzXposed.detachCurrentEntry()
+        return
+    }
+    EzXposed.initOnPackageReady(param)
+}
+```
+
+热重载：新 code 在 `onHotReloaded` 里调用 `EzXposed.initOnHotReloaded(this, param)`，
+再用 `groupById` / `replaceAll` / `unhookAll` 处理旧 handle。framework **不会** 自动重放
+package 生命周期，所以需要 `EzReflect.classLoader` 时调用方要自行缓存上一代 classloader
+并再次调用 `initOnPackageReady`。
 
 ### 模块说明
 
