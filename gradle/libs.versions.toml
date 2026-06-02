@@ -2,7 +2,7 @@
 kotlin = "2.3.21"
 junit = "6.0.3"
 agp = "9.2.1"
-libxposed = "101.0.1"
+libxposed = "102.0.0-SNAPSHOT"
 oldxposed = "82"
 dokka = "2.2.0"
 vanniktechMavenPublish = "0.36.0"
