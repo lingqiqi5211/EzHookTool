@@ -439,8 +439,10 @@ val canHotReload = EzXposed.isHotReloadPermitted
 ```
 
 热重载发生时，旧 code 走 `onHotReloading`，新 code 走 `onHotReloaded`。EzHookTool 只在新 code
-提供初始化入口，跨代状态用 `Bundle` 自行序列化（不要把旧 module classloader 的对象塞进
-`setSavedInstanceState`，上游会拒绝）。
+提供初始化入口。跨代 `setSavedInstanceState` 接受 system / system_server / app classloader
+创建的对象（包含 `String`、`ClassLoader`、`ApplicationInfo`、`Bundle` 等），但**拒绝**旧 module
+classloader 创建的对象——比如模块自己定义的 data class、lambda、持有模块类引用的容器。
+如果有这类自定义状态，用 `Bundle` 序列化成基础类型来绕开 module classloader。
 
 ```kotlin
 class MainHook : XposedModule() {
