@@ -79,6 +79,7 @@ class MainHook : XposedModule() {
         EzXposed.initOnModuleLoaded(this, param)
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     override fun onPackageLoaded(param: PackageLoadedParam) {
         if (param.packageName != TargetApp) return
 

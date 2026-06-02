@@ -6,6 +6,7 @@ libxposed = "101.0.1"
 oldxposed = "82"
 dokka = "2.2.0"
 vanniktechMavenPublish = "0.36.0"
+annotationJvm = "1.10.0"
 
 [libraries]
 junit-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
@@ -13,6 +14,7 @@ junit-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref 
 junit-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
 libxposedApi = { module = "io.github.libxposed:api", version.ref = "libxposed" }
 xposed82Api = { module = "de.robv.android.xposed:api", version.ref = "oldxposed" }
+annotation-jvm = { group = "androidx.annotation", name = "annotation-jvm", version.ref = "annotationJvm" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

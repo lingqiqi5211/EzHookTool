@@ -1,6 +1,8 @@
 package io.github.lingqiqi5211.ezhooktool.sample101
 
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
@@ -18,6 +20,7 @@ class MainHook : XposedModule() {
         EzXposed.initOnModuleLoaded(this, param)
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     override fun onPackageLoaded(param: PackageLoadedParam) {
         if (param.packageName != TargetApp) return
 

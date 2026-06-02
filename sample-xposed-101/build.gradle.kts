@@ -38,5 +38,6 @@ android {
 dependencies {
     implementation(project(":core"))
     implementation(project(":hook-xposed-101"))
+    implementation(libs.annotation.jvm)
     compileOnly(libs.libxposedApi)
 }
