@@ -9,7 +9,8 @@ object ExampleKotlinHook : BaseHook() {
     override val name: String = "ExampleKotlinHook"
 
     override fun init() {
-        Application::class.java.findMethod(findSuper = false) {
+        Application::class.java.findMethod {
+            findOnlyClass()
             name("onCreate")
             paramCount(0)
         }.createHook {
