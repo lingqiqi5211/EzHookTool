@@ -175,7 +175,10 @@ object EzReflect {
     /**
      * 类名枚举策略。
      *
-     * `core` 默认只使用主动注册的类名；Android / Xposed 场景可替换为 Dex 类名来源。
+     * 默认 [DefaultClassResolver] 返回空列表——core 没有"主动注册类名"的入口，所以默认下
+     * `findClassIf { ... }` 这类基于枚举的查找会始终空结果。
+     *
+     * Android / Xposed 场景里通常会接入 DexKit 或自带类名索引，把 [ClassResolver] 替换成那一侧的实现。
      */
     @Volatile
     @JvmStatic
@@ -214,13 +217,16 @@ object EzReflect {
             putCount.incrementAndGet() % CACHE_TRIM_PUT_INTERVAL == 0
     }
 
-    private val memberCache = ConcurrentHashMap<Class<*>, MemberClassCache>()
-    private val classCache = ConcurrentHashMap<ClassLoader, ClassLoaderCache>()
+    private val memberCache: MutableMap<Class<*>, MemberClassCache> =
+        java.util.Collections.synchronizedMap(java.util.WeakHashMap())
+    private val classCache: MutableMap<ClassLoader, ClassLoaderCache> =
+        java.util.Collections.synchronizedMap(java.util.WeakHashMap())
     private val cacheClock = AtomicLong()
 
     internal fun cacheGet(owner: Class<*>, bucket: ReflectCacheBucket, key: Any): Any? {
         if (!cacheEnabled) return null
-        val entry = memberCache[owner]?.bucket(bucket)?.get(key) ?: return null
+        val ownerCache = synchronized(memberCache) { memberCache[owner] } ?: return null
+        val entry = ownerCache.bucket(bucket)[key] ?: return null
         entry.lastAccess = cacheClock.incrementAndGet()
         return entry.value
     }
@@ -228,7 +234,9 @@ object EzReflect {
     internal fun cachePut(owner: Class<*>, bucket: ReflectCacheBucket, key: Any, value: Any) {
         if (!cacheEnabled) return
         val tick = cacheClock.incrementAndGet()
-        val ownerCache = memberCache.computeIfAbsent(owner) { MemberClassCache() }
+        val ownerCache = synchronized(memberCache) {
+            memberCache.getOrPut(owner) { MemberClassCache() }
+        }
         ownerCache.bucket(bucket)[key] = CacheEntry(value, tick)
         if (ownerCache.shouldTrimAfterPut()) {
             trimColdEntries(ownerCache, tick)
@@ -237,7 +245,8 @@ object EzReflect {
 
     internal fun classCacheGet(classLoader: ClassLoader, key: Any): Class<*>? {
         if (!cacheEnabled) return null
-        val entry = classCache[classLoader]?.classes?.get(key) ?: return null
+        val loaderCache = synchronized(classCache) { classCache[classLoader] } ?: return null
+        val entry = loaderCache.classes[key] ?: return null
         entry.lastAccess = cacheClock.incrementAndGet()
         return entry.value as? Class<*>
     }
@@ -245,7 +254,9 @@ object EzReflect {
     internal fun classCachePut(classLoader: ClassLoader, key: Any, value: Class<*>) {
         if (!cacheEnabled) return
         val tick = cacheClock.incrementAndGet()
-        val loaderCache = classCache.computeIfAbsent(classLoader) { ClassLoaderCache() }
+        val loaderCache = synchronized(classCache) {
+            classCache.getOrPut(classLoader) { ClassLoaderCache() }
+        }
         loaderCache.classes[key] = CacheEntry(value, tick)
         if (loaderCache.shouldTrimAfterPut()) {
             trimColdEntries(loaderCache, tick)
@@ -254,7 +265,8 @@ object EzReflect {
 
     internal fun classQueryCacheGet(classLoader: ClassLoader, key: Any): Any? {
         if (!cacheEnabled) return null
-        val entry = classCache[classLoader]?.classes?.get(key) ?: return null
+        val loaderCache = synchronized(classCache) { classCache[classLoader] } ?: return null
+        val entry = loaderCache.classes[key] ?: return null
         entry.lastAccess = cacheClock.incrementAndGet()
         return entry.value
     }
@@ -262,7 +274,9 @@ object EzReflect {
     internal fun classQueryCachePut(classLoader: ClassLoader, key: Any, value: Any) {
         if (!cacheEnabled) return
         val tick = cacheClock.incrementAndGet()
-        val loaderCache = classCache.computeIfAbsent(classLoader) { ClassLoaderCache() }
+        val loaderCache = synchronized(classCache) {
+            classCache.getOrPut(classLoader) { ClassLoaderCache() }
+        }
         loaderCache.classes[key] = CacheEntry(value, tick)
         if (loaderCache.shouldTrimAfterPut()) {
             trimColdEntries(loaderCache, tick)
@@ -312,8 +326,8 @@ object EzReflect {
     /** 清除查找结果缓存。 */
     @JvmStatic
     fun clearCache() {
-        memberCache.clear()
-        classCache.clear()
+        synchronized(memberCache) { memberCache.clear() }
+        synchronized(classCache) { classCache.clear() }
         cacheClock.set(0)
         logger.debug(TAG, "Cache cleared")
     }
