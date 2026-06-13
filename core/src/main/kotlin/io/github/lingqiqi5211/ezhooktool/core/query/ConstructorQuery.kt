@@ -100,7 +100,9 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
     /**
      * 限定完整参数类型。
      *
-     * 参数数量和顺序都必须一致。
+     * 参数数量和顺序都必须一致，且类型必须 **完全相等**：
+     * `Int::class.java`（即 `int.class`）与 `Integer.class` 视为不同类型。
+     * 如果需要让 primitive 与 wrapper 互相匹配（或允许子类）请改用 [parameterTypesAssignableFrom]。
      */
     fun parameterTypes(vararg types: Class<*>) {
         conditions += { parameterTypes.contentEquals(types) }

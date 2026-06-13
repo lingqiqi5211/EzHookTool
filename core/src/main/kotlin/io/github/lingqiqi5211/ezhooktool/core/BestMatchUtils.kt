@@ -67,6 +67,9 @@ private fun scoreMatch(actual: Array<Class<*>>, expected: Array<Class<*>>): Int 
  *
  * 优先尝试精确匹配，失败后再按 primitive/wrapper 兼容和继承关系选出最接近的候选。
  *
+ * 与 `findMethodBestMatch(clz, methodName, vararg args: Any?)` 重载共存；Kotlin 按 vararg 元素类型自动选择。
+ * Java 调用方需用 `Class<?>...` 数组显式选中此版本，否则可能落到 `Object...` 重载。
+ *
  * @param clz 目标类
  * @param methodName 目标方法名
  * @param parameterTypes 用于匹配的参数类型列表
