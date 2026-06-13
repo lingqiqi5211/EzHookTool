@@ -532,14 +532,20 @@ fun Any.callMethod(
 }
 
 /**
- * 按名称调用实例方法，返回可空结果。
+ * 按名称调用实例方法，方法找不到或调用异常时返回 `null`。
+ *
+ * 失败被静默吞掉，不打印日志；需要日志请用 [tryOrLogNull] 包裹普通 [callMethod]。
  */
 fun Any.callMethodOrNull(
     methodName: String,
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Any? = callMethod(methodName, args, argTypes, returnType)
+): Any? = try {
+    callMethod(methodName, args, argTypes, returnType)
+} catch (_: Throwable) {
+    null
+}
 
 /**
  * 类型安全的方法调用。
@@ -578,10 +584,15 @@ fun Any.callMethod(methodName: String, vararg args: Any?): Any? =
     invokeAutoMatchedMethod(javaClass, this, methodName, args)
 
 /**
- * 自动匹配参数并调用实例方法，返回可空结果。
+ * 自动匹配参数并调用实例方法，方法找不到或调用异常时返回 `null`。
+ *
+ * 失败被静默吞掉，不打印日志。
  */
-fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? =
+fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? = try {
     callMethod(methodName, *args)
+} catch (_: Throwable) {
+    null
+}
 
 /**
  * 自动匹配参数并调用实例方法。
@@ -644,14 +655,18 @@ fun Class<*>.callStaticMethod(
 }
 
 /**
- * 调用静态方法，返回可空结果。
+ * 调用静态方法，方法找不到或调用异常时返回 `null`。
  */
 fun Class<*>.callStaticMethodOrNull(
     methodName: String,
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Any? = callStaticMethod(methodName, args, argTypes, returnType)
+): Any? = try {
+    callStaticMethod(methodName, args, argTypes, returnType)
+} catch (_: Throwable) {
+    null
+}
 
 /**
  * 静态方法调用。
@@ -685,10 +700,13 @@ fun Class<*>.callStaticMethod(methodName: String, vararg args: Any?): Any? =
     invokeAutoMatchedMethod(this, null, methodName, args)
 
 /**
- * 自动匹配参数并调用静态方法，返回可空结果。
+ * 自动匹配参数并调用静态方法，方法找不到或调用异常时返回 `null`。
  */
-fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any? =
+fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any? = try {
     callStaticMethod(methodName, *args)
+} catch (_: Throwable) {
+    null
+}
 
 /**
  * 自动匹配参数并调用静态方法。
