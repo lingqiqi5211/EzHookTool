@@ -138,6 +138,9 @@ Class<?> target = Classes.loadClassFirst(
 );
 ```
 
+> Java 端目前没有「按类名 + 内含成员条件挑选类」的条件查找入口（Kotlin 的 `findClassIf { ... }`）；
+> 需要类似能力时请在 Kotlin 侧暴露便利方法或自行组合 [Classes.loadClass] + 反射检查。
+
 查找方法：
 
 ```java
