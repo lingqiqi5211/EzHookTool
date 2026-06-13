@@ -83,6 +83,10 @@ class MemberNotFoundException(
 
 /**
  * 类加载失败时的异常。
+ *
+ * 注意：尽管类名以 `Error` 结尾，本类继承 [RuntimeException] 而非 [Error]；
+ * 名字保留是为了对应 JDK 的 [NoClassDefFoundError]，但行为更像受查的 RuntimeException。
+ * 不要据此假设它"不可恢复"——可以正常 `try/catch` 处理。
  */
 class ClassNotFoundError(
     val className: String,

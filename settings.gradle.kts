@@ -13,6 +13,15 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven(url = "https://api.xposed.info/")
+        maven {
+            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+            mavenContent {
+                snapshotsOnly()
+            }
+            content {
+                includeGroup("io.github.libxposed")
+            }
+        }
     }
 }
 
@@ -21,7 +30,7 @@ rootProject.name = "EzHookTool"
 include(
     ":core",
     ":hook-xposed-82",
-    ":hook-xposed-101",
+    ":hook-xposed-102",
     ":sample-xposed-82",
-    ":sample-xposed-101"
+    ":sample-xposed-102"
 )

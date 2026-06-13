@@ -8,6 +8,7 @@ import io.github.lingqiqi5211.ezhooktool.core.query.fieldExactCacheKeys
 import io.github.lingqiqi5211.ezhooktool.core.query.fieldQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
 import java.lang.reflect.Field
+import java.lang.reflect.Modifier
 
 /**
  * 字段查找条件。以 Field 为 receiver。
@@ -396,6 +397,11 @@ fun Any.fieldOrNull(
         try {
             val f = current.getDeclaredField(fieldName)
             if (fieldType != null && f.type != fieldType) {
+                current = current.superclass
+                continue
+            }
+            if (isStatic != Modifier.isStatic(f.modifiers)) {
+                // 名字命中但 static 修饰符不符；继续向上找同名字段。
                 current = current.superclass
                 continue
             }

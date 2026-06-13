@@ -532,17 +532,26 @@ fun Any.callMethod(
 }
 
 /**
- * 按名称调用实例方法，返回可空结果。
+ * 按名称调用实例方法，方法找不到或调用异常时返回 `null`。
+ *
+ * 失败被静默吞掉，不打印日志；需要日志请用 [tryOrLogNull] 包裹普通 [callMethod]。
  */
 fun Any.callMethodOrNull(
     methodName: String,
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Any? = callMethod(methodName, args, argTypes, returnType)
+): Any? = try {
+    callMethod(methodName, args, argTypes, returnType)
+} catch (_: Throwable) {
+    null
+}
 
 /**
  * 类型安全的方法调用。
+ *
+ * 找不到方法按 [callMethod] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
+ * 期望 `null` 结果请改用 [callMethodAsOrNull]。
  *
  * ```kotlin
  * val name: String = instance.callMethodAs("getName")
@@ -554,7 +563,9 @@ fun <T> Any.callMethodAs(
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): T = callMethod(methodName, args, argTypes, returnType) as T
+): T = checkNotNull(callMethod(methodName, args, argTypes, returnType)) {
+    "Method \"$methodName\" returned null; use callMethodAsOrNull for nullable results."
+} as T
 
 /**
  * 类型安全的方法调用，类型不匹配时返回 null。
@@ -578,17 +589,27 @@ fun Any.callMethod(methodName: String, vararg args: Any?): Any? =
     invokeAutoMatchedMethod(javaClass, this, methodName, args)
 
 /**
- * 自动匹配参数并调用实例方法，返回可空结果。
+ * 自动匹配参数并调用实例方法，方法找不到或调用异常时返回 `null`。
+ *
+ * 失败被静默吞掉，不打印日志。
  */
-fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? =
+fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? = try {
     callMethod(methodName, *args)
+} catch (_: Throwable) {
+    null
+}
 
 /**
  * 自动匹配参数并调用实例方法。
+ *
+ * 找不到方法按 [callMethod] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
+ * 期望 `null` 结果请改用 [callMethodAsOrNull]。
  */
 @Suppress("UNCHECKED_CAST")
 fun <T> Any.callMethodAs(methodName: String, vararg args: Any?): T =
-    callMethod(methodName, *args) as T
+    checkNotNull(callMethod(methodName, *args)) {
+        "Method \"$methodName\" returned null; use callMethodAsOrNull for nullable results."
+    } as T
 
 /**
  * 自动匹配参数并调用实例方法，类型不匹配时返回 null。
@@ -616,12 +637,16 @@ fun Any.callMethodBy(
 
 /**
  * 按条件查找并调用。
+ *
+ * 找不到方法按 [callMethodBy] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
  */
 @Suppress("UNCHECKED_CAST")
 fun <T> Any.callMethodByAs(
     args: Array<out Any?> = emptyArray(),
     query: MethodQuery.() -> Unit,
-): T = callMethodBy(args, query) as T
+): T = checkNotNull(callMethodBy(args, query)) {
+    "callMethodByAs returned null; use a nullable T or a dedicated OrNull helper for nullable results."
+} as T
 
 // ═══════════════════════ 静态方法调用 ═══════════════════════
 
@@ -644,17 +669,24 @@ fun Class<*>.callStaticMethod(
 }
 
 /**
- * 调用静态方法，返回可空结果。
+ * 调用静态方法，方法找不到或调用异常时返回 `null`。
  */
 fun Class<*>.callStaticMethodOrNull(
     methodName: String,
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Any? = callStaticMethod(methodName, args, argTypes, returnType)
+): Any? = try {
+    callStaticMethod(methodName, args, argTypes, returnType)
+} catch (_: Throwable) {
+    null
+}
 
 /**
  * 静态方法调用。
+ *
+ * 找不到方法按 [callStaticMethod] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
+ * 期望 `null` 结果请改用 [callStaticMethodAsOrNull]。
  */
 @Suppress("UNCHECKED_CAST")
 fun <T> Class<*>.callStaticMethodAs(
@@ -662,7 +694,9 @@ fun <T> Class<*>.callStaticMethodAs(
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): T = callStaticMethod(methodName, args, argTypes, returnType) as T
+): T = checkNotNull(callStaticMethod(methodName, args, argTypes, returnType)) {
+    "Static method \"$methodName\" returned null; use callStaticMethodAsOrNull for nullable results."
+} as T
 
 /**
  * 静态方法调用，类型不匹配时返回 null。
@@ -685,17 +719,25 @@ fun Class<*>.callStaticMethod(methodName: String, vararg args: Any?): Any? =
     invokeAutoMatchedMethod(this, null, methodName, args)
 
 /**
- * 自动匹配参数并调用静态方法，返回可空结果。
+ * 自动匹配参数并调用静态方法，方法找不到或调用异常时返回 `null`。
  */
-fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any? =
+fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any? = try {
     callStaticMethod(methodName, *args)
+} catch (_: Throwable) {
+    null
+}
 
 /**
  * 自动匹配参数并调用静态方法。
+ *
+ * 找不到方法按 [callStaticMethod] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
+ * 期望 `null` 结果请改用 [callStaticMethodAsOrNull]。
  */
 @Suppress("UNCHECKED_CAST")
 fun <T> Class<*>.callStaticMethodAs(methodName: String, vararg args: Any?): T =
-    callStaticMethod(methodName, *args) as T
+    checkNotNull(callStaticMethod(methodName, *args)) {
+        "Static method \"$methodName\" returned null; use callStaticMethodAsOrNull for nullable results."
+    } as T
 
 /**
  * 自动匹配参数并调用静态方法，类型不匹配时返回 null。

@@ -1,9 +1,12 @@
 # EzHookTool
 
 一个让 Android / Xposed / libxposed 场景下的反射与 hook 编写更直接的 Kotlin 工具库。  
-当前拆分为 `core`、`hook-xposed-82`、`hook-xposed-101` 三个主模块，其中 `core` 可以单独用于纯反射场景。
+当前拆分为 `core`、`hook-xposed-82`、`hook-xposed-102` 三个主模块，其中 `core` 可以单独用于纯反射场景。
 
 当前 Maven 最新构建版本为: ![Maven Central Version](https://img.shields.io/maven-central/v/io.github.lingqiqi5211.ezhooktool/core)
+
+> `hook-xposed-102` 依赖 libxposed API 102，目前上游为 `102.0.0-SNAPSHOT`，
+> 仍可能调整签名。生产环境请关注上游 RFC，或继续使用 API 101 版本。
 
 ### 快速开始
 
@@ -14,13 +17,13 @@ dependencies {
     def ezHookToolVersion = '<version>'
 
     implementation "io.github.lingqiqi5211.ezhooktool:core:$ezHookToolVersion"
-    implementation "io.github.lingqiqi5211.ezhooktool:hook-xposed-101:$ezHookToolVersion"
+    implementation "io.github.lingqiqi5211.ezhooktool:hook-xposed-102:$ezHookToolVersion"
     // 或
     // implementation "io.github.lingqiqi5211.ezhooktool:hook-xposed-82:$ezHookToolVersion"
 
     // 如果你的模块直接使用 Xposed / libxposed 的类型，
     // 还需要额外声明对应运行时 API。
-    compileOnly "io.github.libxposed:api:101.0.1"
+    compileOnly "io.github.libxposed:api:102.0.0-SNAPSHOT"
     // 或
     // compileOnly "de.robv.android.xposed:api:82"
 }
@@ -33,13 +36,13 @@ dependencies {
     val ezHookToolVersion = "<version>"
 
     implementation("io.github.lingqiqi5211.ezhooktool:core:$ezHookToolVersion")
-    implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-101:$ezHookToolVersion")
+    implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-102:$ezHookToolVersion")
     // 或
     // implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-82:$ezHookToolVersion")
 
     // 如果你的模块直接使用 Xposed / libxposed 的类型，
     // 还需要额外声明对应运行时 API。
-    compileOnly("io.github.libxposed:api:101.0.1")
+    compileOnly("io.github.libxposed:api:102.0.0-SNAPSHOT")
     // 或
     // compileOnly("de.robv.android.xposed:api:82")
 }
@@ -64,7 +67,7 @@ class MainHook : IXposedHookLoadPackage {
 }
 ```
 
-`xposed-api-101`
+`xposed-api-102`
 
 ```kotlin
 import io.github.libxposed.api.XposedModule
@@ -108,11 +111,65 @@ class MainHook : XposedModule() {
 EzReflect.init(yourClassLoader)
 ```
 
+### API 102 新能力
+
+详细说明见 `doc/overview.md`。
+
+`HookFactory` 支持给 hook 分配 id；同模块同 executable 上相同 id 的新 hook 会原子替换旧 hook：
+
+```kotlin
+val handle = method.createHook {
+    id("license-check")
+    before { /* ... */ }
+}
+
+val newHandle = handle.replaceWith { /* HookParam */ true }
+```
+
+`EzXposed.detachCurrentEntry()` 停止 framework 向当前 entry 分发后续生命周期回调，hook 不受影响：
+
+```kotlin
+override fun onPackageReady(param: PackageReadyParam) {
+    if (param.packageName != TargetApp) {
+        EzXposed.detachCurrentEntry()
+        return
+    }
+    EzXposed.initOnPackageReady(param)
+}
+```
+
+热重载：把目标进程要跑的逻辑写在 `EzXposed.onTargetReady { ... }`，
+再加两行模板让 `EzXposed` 接管跨代 snapshot 和重建：
+
+```kotlin
+class MainHook : XposedModule() {
+    override fun onModuleLoaded(param: ModuleLoadedParam) {
+        EzXposed.initOnModuleLoaded(this, param)
+        EzXposed.onTargetReady { installHooks() }
+    }
+
+    override fun onPackageReady(param: PackageReadyParam) {
+        if (param.packageName != TargetApp) return
+        EzXposed.initOnPackageReady(param)
+    }
+
+    override fun onHotReloading(param: HotReloadingParam) =
+        EzXposed.handleHotReloading(param)
+
+    override fun onHotReloaded(param: HotReloadedParam) =
+        EzXposed.handleHotReloaded(this, param)
+}
+```
+
+`onTargetReady` 在初次加载和热重载后都会触发；`handleHotReloaded` 内部会 unhook 上一代全部
+handle，并重建 `EzReflect.classLoader`。需要自定义 saved state 或按 id 替换 hook 的进阶用法，
+直接走原生回调即可，详见 `doc/overview.md`。
+
 ### 模块说明
 
 - `core`：反射、查找、实例化、descriptor 解析、DSL 作用域
 - `hook-xposed-82`：经典 Xposed API 82 hook 辅助函数与兼容桥接
-- `hook-xposed-101`：libxposed 101 hook 辅助函数与兼容桥接
+- `hook-xposed-102`：libxposed 102 hook 辅助函数与兼容桥接
 
 ### API 文档
 
@@ -140,7 +197,7 @@ EzReflect.init(yourClassLoader)
 建议阅读顺序：
 
 1. 先看 `core`
-2. 再根据运行时选择 `hook-xposed-82` 或 `hook-xposed-101`
+2. 再根据运行时选择 `hook-xposed-82` 或 `hook-xposed-102`
 3. Java 写法入口看 `core.java` 包下的 `Classes`、`Methods`、`Fields`、`Constructors`，以及 hook 模块里的 `xposed.java.Hooks`
 
 ### 构建
@@ -154,7 +211,7 @@ EzReflect.init(yourClassLoader)
 ### 示例工程
 
 - `sample-xposed-82`
-- `sample-xposed-101`
+- `sample-xposed-102`
 
 ### 致谢
 

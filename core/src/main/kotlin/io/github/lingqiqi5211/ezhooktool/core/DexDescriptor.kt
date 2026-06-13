@@ -183,6 +183,9 @@ internal object DexDescriptor {
  *
  * 签名格式: `L<class>;-><method>(<param_types>)<return_type>`
  *
+ * 仅查找 `declaredMethods`；不会沿父类查找。这跟 `findMethod` 默认 smart 模式不同——
+ * 因为 descriptor 已显式声明了 owner class。
+ *
  * @param desc 方法的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
  */
@@ -199,17 +202,26 @@ fun getMethodByDesc(desc: String, classLoader: ClassLoader = EzReflect.classLoad
 /**
  * 通过 Dex/Smali 签名获取方法，找不到返回 null。
  *
+ * 描述符格式错误会抛 [IllegalArgumentException]——这跟"目标不存在"是两类不同问题，
+ * 应该尽早暴露而不是被吞成 null。
+ *
  * @param desc 方法的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
  */
 fun getMethodByDescOrNull(desc: String, classLoader: ClassLoader = EzReflect.classLoader): Method? {
+    val parsed = DexDescriptor.parseMethodDesc(desc, classLoader)
     return try {
-        val parsed = DexDescriptor.parseMethodDesc(desc, classLoader)
         val clz = loadClass(parsed.className, classLoader)
         val method = clz.getDeclaredMethod(parsed.methodName, *parsed.paramTypes)
         method.isAccessible = true
         method
-    } catch (_: Throwable) {
+    } catch (_: NoSuchMethodException) {
+        null
+    } catch (_: ClassNotFoundError) {
+        null
+    } catch (_: ClassNotFoundException) {
+        null
+    } catch (_: NoClassDefFoundError) {
         null
     }
 }
@@ -222,6 +234,8 @@ fun getMethodByDescOrNull(desc: String, classLoader: ClassLoader = EzReflect.cla
  * ```
  *
  * 签名格式: `L<class>;-><field>:<type>`
+ *
+ * 仅查找 `declaredFields`；不会沿父类查找。
  *
  * @param desc 字段的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
@@ -239,17 +253,26 @@ fun getFieldByDesc(desc: String, classLoader: ClassLoader = EzReflect.classLoade
 /**
  * 通过 Dex/Smali 签名获取字段，找不到返回 null。
  *
+ * 描述符格式错误会抛 [IllegalArgumentException]——这跟"目标不存在"是两类不同问题，
+ * 应该尽早暴露而不是被吞成 null。
+ *
  * @param desc 字段的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
  */
 fun getFieldByDescOrNull(desc: String, classLoader: ClassLoader = EzReflect.classLoader): Field? {
+    val parsed = DexDescriptor.parseFieldDesc(desc, classLoader)
     return try {
-        val parsed = DexDescriptor.parseFieldDesc(desc, classLoader)
         val clz = loadClass(parsed.className, classLoader)
         val field = clz.getDeclaredField(parsed.fieldName)
         field.isAccessible = true
         field
-    } catch (_: Throwable) {
+    } catch (_: NoSuchFieldException) {
+        null
+    } catch (_: ClassNotFoundError) {
+        null
+    } catch (_: ClassNotFoundException) {
+        null
+    } catch (_: NoClassDefFoundError) {
         null
     }
 }
