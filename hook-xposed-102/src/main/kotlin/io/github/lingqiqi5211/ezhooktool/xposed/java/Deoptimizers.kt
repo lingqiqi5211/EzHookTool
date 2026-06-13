@@ -24,7 +24,7 @@ object Deoptimizers {
      * @param names 目标方法名列表
      */
     @JvmStatic
-    fun deoptimizeMethods(clazz: Class<*>, vararg names: String?) {
+    fun deoptimizeMethods(clazz: Class<*>, vararg names: String) {
         val list = listOf(*names)
         Arrays.stream(clazz.declaredMethods)
             .filter { method: Method? ->
