@@ -1,5 +1,3 @@
-import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
-
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.dokka)
@@ -7,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "io.github.lingqiqi5211.ezhooktool.xposed"
+    namespace = "io.github.lingqiqi5211.ezhooktool.xposed102"
     compileSdk = 37
     compileSdkMinor = 0
 
