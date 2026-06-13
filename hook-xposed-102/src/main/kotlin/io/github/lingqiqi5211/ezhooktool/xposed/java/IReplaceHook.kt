@@ -1,3 +1,6 @@
+// 镜像文件：与 hook-xposed-82/.../java/IReplaceHook.kt 内容必须保持一致。
+// 改动时请同步修改另一侧。
+
 package io.github.lingqiqi5211.ezhooktool.xposed.java
 
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam

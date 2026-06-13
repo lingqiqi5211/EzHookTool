@@ -1,6 +1,9 @@
 @file:Suppress("UNCHECKED_CAST")
 @file:JvmName("FieldHelper")
 
+// 镜像文件：与 hook-xposed-102/.../dsl/FieldHelper.kt 内容必须保持一致。
+// 改动时请同步修改另一侧；CI 没有强制校验，依靠人工维护。
+
 package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 
 import io.github.lingqiqi5211.ezhooktool.core.field
