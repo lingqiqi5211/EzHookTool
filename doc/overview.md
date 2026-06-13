@@ -432,11 +432,8 @@ override fun onPackageReady(param: PackageReadyParam) {
 
 ## libxposed 102 热重载
 
-framework 是否允许热重载：
-
-```kotlin
-val canHotReload = EzXposed.isHotReloadPermitted
-```
+是否允许热重载由 framework 在调用 `onHotReloading` 时决定，模块侧不再持有显式的查询入口（上游
+102 SNAPSHOT 已移除 `PROP_RT_HOT_RELOAD`）。
 
 EzHookTool 把热重载里跨代 snapshot、`EzReflect.classLoader` 重建、旧 handle unhook、
 重新分发到使用者的「目标进程准备好后跑什么」逻辑都收在 `EzXposed` 里。模块作者只需要：

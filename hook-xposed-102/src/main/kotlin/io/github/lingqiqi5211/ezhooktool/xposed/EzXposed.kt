@@ -323,16 +323,6 @@ object EzXposed {
     }.getOrDefault(false)
 
     /**
-     * 当前 framework 是否允许热重载。
-     *
-     * 等价于 `(base.frameworkProperties and XposedInterface.PROP_RT_HOT_RELOAD) != 0L`。
-     * 在 [initOnModuleLoaded] 之前访问会抛出 [IllegalStateException]。
-     */
-    @JvmStatic
-    val isHotReloadPermitted: Boolean
-        get() = (base.frameworkProperties and XposedInterface.PROP_RT_HOT_RELOAD) != 0L
-
-    /**
      * 停止当前 module entry 的后续生命周期回调。
      *
      * 调用后 framework 不会再向当前 entry 实例分发 `onPackageLoaded` / `onHotReloading` 等回调，
