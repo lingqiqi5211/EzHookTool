@@ -112,10 +112,16 @@ internal fun isTypeMatch(actual: Class<*>, expected: Class<*>): Boolean {
 
 /**
  * 根据实参推断参数类型数组。
+ *
+ * 调用方必须保证所有实参都非 `null`；遇到 `null` 时无法准确推断目标参数类型，
+ * 直接抛出 [IllegalArgumentException]，提示调用方显式提供 `argTypes`。
  */
 internal fun inferArgTypes(args: Array<out Any?>): Array<Class<*>> =
     Array(args.size) { i ->
-        args[i]?.javaClass ?: Any::class.java
+        args[i]?.javaClass ?: throw IllegalArgumentException(
+            "Cannot infer parameter type for null argument at index $i. " +
+                    "Pass argTypes(...) explicitly so the right overload can be resolved."
+        )
     }
 
 @PublishedApi
@@ -178,7 +184,9 @@ internal fun constructAutoMatchedInstance(owner: Class<*>, args: Array<out Any?>
  * 浅拷贝字段值：将 [src] 的所有字段值复制到 [dst]。
  *
  * 遍历 src 的 declaredFields（含父类），对每个 field 执行 get(src) → set(dst, value)。
- * 引用类型字段只拷贝引用（浅拷贝）。
+ * 引用类型字段只拷贝引用（浅拷贝）。`static` 与 `final` 字段会被跳过；
+ * 其它任何拷贝失败（类型不兼容、安全策略拒绝等）会抛 [IllegalArgumentException]
+ * 并指明出错的字段名，避免静默失败。
  *
  * ```kotlin
  * val newConfig = configClass.newInstance()
@@ -192,15 +200,21 @@ internal fun constructAutoMatchedInstance(owner: Class<*>, args: Array<out Any?>
 fun fieldCpy(src: Any, dst: Any, findSuper: Boolean = true) {
     var clz: Class<*>? = src.javaClass
     while (clz != null && clz != Any::class.java) {
-        for (field in clz.declaredFields) {
+        val currentClass: Class<*> = clz
+        for (field in currentClass.declaredFields) {
+            val modifiers = field.modifiers
+            if (java.lang.reflect.Modifier.isStatic(modifiers)) continue
+            if (java.lang.reflect.Modifier.isFinal(modifiers)) continue
             field.isAccessible = true
             try {
                 field.set(dst, field.get(src))
-            } catch (_: Throwable) {
-                // skip fields that cannot be set (e.g. final static)
+            } catch (t: Throwable) {
+                throw IllegalArgumentException(
+                    "fieldCpy failed on ${currentClass.name}.${field.name}: ${t.message}", t
+                )
             }
         }
         if (!findSuper) break
-        clz = clz.superclass
+        clz = currentClass.superclass
     }
 }
