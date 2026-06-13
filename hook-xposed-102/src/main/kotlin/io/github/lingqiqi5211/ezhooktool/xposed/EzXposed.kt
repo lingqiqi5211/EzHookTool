@@ -11,6 +11,7 @@ import io.github.libxposed.api.XposedModuleInterface
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ModuleResources
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.unhookAll
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.ApplicationLifecycle
 import java.lang.reflect.Executable
 
 /**
@@ -28,7 +29,7 @@ import java.lang.reflect.Executable
  *
  * - [base] 在 [initOnModuleLoaded] 后可用
  * - [classLoader] 在 [initOnPackageReady] 或 [initOnSystemServerStarting] 后代表当前进程反射环境
- * - [appContext] 采用懒解析；如果应用尚未创建，请改用 [appContextOrNull] 或稍后访问
+ * - [appContext] 采用懒解析，期望指向目标进程 application；如果应用尚未创建，请改用 [appContextOrNull] 或稍后访问
  * - [modulePath] / [moduleRes] 在 [initOnModuleLoaded] 后可用
  *
  * 热重载：见 [handleHotReloading] / [handleHotReloaded]。
@@ -75,7 +76,12 @@ object EzXposed {
         private set
 
     @JvmStatic
-    /** 当前模块 apk 路径；调用 [initOnModuleLoaded] 后可用。 */
+    /**
+     * 当前模块 apk 路径；调用 [initOnModuleLoaded] 后可用。
+     *
+     * 直接访问该字段不会经过任何兜底；在 [initOnModuleLoaded] 之前读会抛 Kotlin lateinit 错误。
+     * 库内部读取请走 `requireModulePath()`，包含 `IllegalStateException` 友好提示。
+     */
     lateinit var modulePath: String
         private set
 
@@ -122,19 +128,72 @@ object EzXposed {
     /**
      * 手动缓存当前进程的 application context。
      *
-     * 默认会尝试复用当前运行时里的 application；
-     * 如需让目标进程资源对象同时挂上模块资源路径，可把 [injectModuleAssetPath] 设为 `true`。
+     * 默认行为：仅当 [appContext] 尚未初始化时才写入；已初始化时入参 `context` 会被忽略，
+     * 避免不同 hook 回调以非 application context（如 Activity / ContextWrapper）反复覆盖全局缓存。
+     *
+     * 仍需覆盖现有缓存（极少见，例如热重载手动还原）时把 [force] 设为 `true`。
+     *
+     * [injectModuleAssetPath] 的资源注入副作用始终按入参 `context` 执行，与 [force] 无关。
+     *
+     * 推荐通过 [runOnApplicationAttach] 让库自动在 `Application.attach` 阶段填充 application context，
+     * 而不是在业务 hook 回调里手工调用本方法。
      */
+    @JvmOverloads
     fun initAppContext(
         context: Context? = getCurrentApplicationContext(),
         injectModuleAssetPath: Boolean = false,
+        force: Boolean = false,
     ) {
         val resolved = context ?: throw NullPointerException(
             "Cannot init appContext with null context."
         )
-        appContextValue = resolved
+        synchronized(this) {
+            if (force || appContextValue == null) {
+                if (!force && resolved.applicationContext !== resolved) {
+                    EzReflect.logger.warn(
+                        "EzXposed",
+                        "initAppContext received non-Application context " +
+                                "(${resolved.javaClass.name}); using it as application cache. " +
+                                "Prefer EzXposed.runOnApplicationAttach for the global application context."
+                    )
+                }
+                appContextValue = resolved
+            }
+        }
         if (injectModuleAssetPath) {
             addModuleAssetPath(resolved)
+        }
+    }
+
+    /**
+     * 注册「`Application.attach(Context)` 之后跑什么」的回调。
+     *
+     * 第一次注册时库会自动 hook `Application.attach`，回调按注册顺序在 attach after 阶段执行。
+     *
+     * - 回调里收到的 `context` 是目标进程的 application，库会在触发回调前把它写入 [appContext] 缓存（仅当未初始化时）。
+     * - 如果注册时 application 已经 attach 过（即 [appContextOrNull] 非 null），新注册的回调会立即在当前线程同步触发一次。
+     * - callback 抛出的异常会被库捕获并记日志，不会影响其它已注册回调，也不会影响目标 app 的 `Application.attach`。
+     *
+     * 调用前必须先完成 [initOnModuleLoaded]（hook API 依赖 [base]）。
+     */
+    @JvmStatic
+    fun runOnApplicationAttach(callback: ApplicationAttachCallback) {
+        check(::base.isInitialized) {
+            "runOnApplicationAttach requires EzXposed.initOnModuleLoaded to be called first."
+        }
+        ApplicationLifecycle.register(callback)
+    }
+
+    /**
+     * 仅供 [ApplicationLifecycle] 内部回填：在 `Application.attach` 触发瞬间把 application context 写进缓存。
+     *
+     * 仅在缓存为空时写入，不会覆盖调用方已经显式塞入的值。
+     */
+    internal fun cacheApplicationContextFromLifecycle(context: Context) {
+        synchronized(this) {
+            if (appContextValue == null) {
+                appContextValue = context
+            }
         }
     }
 
@@ -194,6 +253,14 @@ object EzXposed {
      * 但不会初始化目标进程 [classLoader]。
      */
     fun initOnModuleLoaded(base: XposedInterface, param: XposedModuleInterface.ModuleLoadedParam) {
+        // 热重载：framework 在调 onHotReloaded 前先调新 entry 的 onModuleLoaded。
+        // 这里检测 base 实例变化即丢弃上一代 onTargetReady 回调与 targetSnapshot，
+        // 防止旧 module classloader 通过这些 lambda 持续被强引用。
+        if (::base.isInitialized && this.base !== base) {
+            synchronized(targetReadyCallbacks) { targetReadyCallbacks.clear() }
+            targetSnapshot = null
+            appContextValue = null
+        }
         this.base = base
         this.moduleEntry = base as? XposedInterfaceWrapper
         modulePath = base.moduleApplicationInfo.sourceDir
@@ -271,10 +338,17 @@ object EzXposed {
     /**
      * 在覆写的 `onHotReloading` 里直接调用。
      *
-     * 把当前 [TargetSnapshot] 拍平成 `Array<Any?>` 透传给 `HotReloadingParam.setSavedInstanceState`
-     * （都是 system / app classloader 创建的对象，可安全跨代），并返回 `true` 允许重载继续。
-     * 如果当前还没进入 `onPackageReady` / `onSystemServerStarting`，会返回 `false`——此时没有可恢复的状态，
-     * 重载没有意义。
+     * 把当前 [TargetSnapshot] 拍平成 `Array<Any?>` 透传给 `HotReloadingParam.setSavedInstanceState`，
+     * 并返回 `true` 允许重载继续。如果当前还没进入 `onPackageReady` / `onSystemServerStarting`，
+     * 会返回 `false`——此时没有可恢复的状态，重载没有意义。
+     *
+     * snapshot 数组的内容（`String`、`ClassLoader`、`ApplicationInfo`、`Boolean`、`Integer`）
+     * 全部由 boot / system / app classloader 加载，符合 libxposed 102「setSavedInstanceState 不接受
+     * 旧 module classloader 加载的对象」的硬约束。
+     *
+     * **返回值的含义由调用方 `onHotReloading` 的返回值传递给 framework**：
+     * 返回 `true` 表示同意热重载；返回 `false` 表示模块自身要求 framework 放弃本次热重载请求。
+     * 也就是说当本方法返回 `false` 时，请直接把它作为 `onHotReloading` 的返回值（默认写法即为 `return EzXposed.handleHotReloading(param)`）。
      *
      * 想自定义 saved state 的进阶用法直接覆写 `onHotReloading`，不要调用本方法。
      */
@@ -368,7 +442,7 @@ object EzXposed {
 
     /** 触发当前已注册的 [onTargetReady] 回调。 */
     private fun dispatchTargetReady() {
-        val snapshot = targetReadyCallbacks.toList()  // copy to avoid concurrent modification
+        val snapshot = synchronized(targetReadyCallbacks) { targetReadyCallbacks.toList() }
         for (callback in snapshot) {
             runCallbackSafely(callback)
         }
@@ -390,6 +464,15 @@ object EzXposed {
  */
 fun interface TargetReadyCallback {
     fun run()
+}
+
+/**
+ * [EzXposed.runOnApplicationAttach] 注册的回调。
+ *
+ * 在目标进程 `Application.attach(Context)` 之后触发，参数为该 application context。
+ */
+fun interface ApplicationAttachCallback {
+    fun onApplicationAttached(context: Context)
 }
 
 /**
