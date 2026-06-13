@@ -16,10 +16,13 @@ open class HookParam internal constructor(
     val member: Executable
         get() = executable
 
-    /** 当前实例方法的 `this` 对象；静态方法时会抛异常。 */
-    val thisObject: Any
+    /**
+     * 当前实例方法的 `this` 对象；静态方法时为 `null`。
+     *
+     * 与 [thisObjectOrNull] 同值，保留两个名字让 Kotlin / Java 命名习惯都能找到。
+     */
+    val thisObject: Any?
         get() = state.thisObject
-            ?: throw NullPointerException("static method should not have thisObject")
 
     /** 与 [thisObject] 相同，便于和上游命名保持一致。 */
     val thisObjectOrNull: Any?
