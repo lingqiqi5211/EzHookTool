@@ -7,21 +7,35 @@ internal object AdditionalFields {
     private val instanceFields = Collections.synchronizedMap(WeakHashMap<Any, MutableMap<String, Any?>>())
     private val staticFields = Collections.synchronizedMap(WeakHashMap<Class<*>, MutableMap<String, Any?>>())
 
-    fun setInstance(target: Any, key: String, value: Any?): Any? {
-        val map = instanceFields.getOrPut(target) { mutableMapOf() }
-        return map.put(key, value)
+    private fun innerInstance(target: Any): MutableMap<String, Any?> = synchronized(instanceFields) {
+        instanceFields.getOrPut(target) { Collections.synchronizedMap(HashMap()) }
     }
 
-    fun getInstance(target: Any, key: String): Any? = instanceFields[target]?.get(key)
-
-    fun removeInstance(target: Any, key: String): Any? = instanceFields[target]?.remove(key)
-
-    fun setStatic(target: Class<*>, key: String, value: Any?): Any? {
-        val map = staticFields.getOrPut(target) { mutableMapOf() }
-        return map.put(key, value)
+    private fun innerStatic(target: Class<*>): MutableMap<String, Any?> = synchronized(staticFields) {
+        staticFields.getOrPut(target) { Collections.synchronizedMap(HashMap()) }
     }
 
-    fun getStatic(target: Class<*>, key: String): Any? = staticFields[target]?.get(key)
+    fun setInstance(target: Any, key: String, value: Any?): Any? = innerInstance(target).put(key, value)
 
-    fun removeStatic(target: Class<*>, key: String): Any? = staticFields[target]?.remove(key)
+    fun getInstance(target: Any, key: String): Any? {
+        val map = synchronized(instanceFields) { instanceFields[target] } ?: return null
+        return map[key]
+    }
+
+    fun removeInstance(target: Any, key: String): Any? {
+        val map = synchronized(instanceFields) { instanceFields[target] } ?: return null
+        return map.remove(key)
+    }
+
+    fun setStatic(target: Class<*>, key: String, value: Any?): Any? = innerStatic(target).put(key, value)
+
+    fun getStatic(target: Class<*>, key: String): Any? {
+        val map = synchronized(staticFields) { staticFields[target] } ?: return null
+        return map[key]
+    }
+
+    fun removeStatic(target: Class<*>, key: String): Any? {
+        val map = synchronized(staticFields) { staticFields[target] } ?: return null
+        return map.remove(key)
+    }
 }
