@@ -30,6 +30,16 @@ internal class InvocationContext(private val chain: XposedInterface.Chain) {
     }
 }
 
+/**
+ * 由 [HookChain] 在 stage callback 抛错时包装抛出，让 hooker 层能拿到 phase 信息打日志。
+ *
+ * 不会逃逸到使用者代码——`buildHooker` 会捕获并解包 [cause]。
+ */
+internal class HookStageException(
+    val phase: String,
+    cause: Throwable,
+) : RuntimeException(cause)
+
 internal fun interface ChainStage {
     fun intercept(context: InvocationContext, proceed: () -> Unit)
 }
@@ -74,7 +84,11 @@ internal class BeforeChainStage(
 ) : ChainStage {
     override fun intercept(context: InvocationContext, proceed: () -> Unit) {
         context.isAfterStage = false
-        callback(HookParam(context))
+        try {
+            callback(HookParam(context))
+        } catch (t: Throwable) {
+            throw HookStageException("before", t)
+        }
         if (!context.skipped) proceed()
     }
 }
@@ -87,6 +101,8 @@ internal class AfterChainStage(
         context.isAfterStage = true
         try {
             callback(HookParam(context))
+        } catch (t: Throwable) {
+            throw HookStageException("after", t)
         } finally {
             context.isAfterStage = false
         }
@@ -99,7 +115,11 @@ internal class ReplaceChainStage(
     override fun intercept(context: InvocationContext, proceed: () -> Unit) {
         context.isAfterStage = false
         context.skipped = true
-        context.result = callback(HookParam(context))
+        context.result = try {
+            callback(HookParam(context))
+        } catch (t: Throwable) {
+            throw HookStageException("replace", t)
+        }
         context.throwable = null
     }
 }
@@ -175,7 +195,11 @@ internal class InterceptChainStage(
         }
 
         try {
-            val result = callback(chain)
+            val result = try {
+                callback(chain)
+            } catch (t: Throwable) {
+                throw HookStageException("intercept", t)
+            }
             if (proceedCount == 0) {
                 context.skipped = true
             }

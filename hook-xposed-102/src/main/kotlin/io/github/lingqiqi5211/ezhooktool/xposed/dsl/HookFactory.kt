@@ -8,6 +8,7 @@ import io.github.lingqiqi5211.ezhooktool.xposed.common.BeforeChainStage
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ChainStage
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookChain
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
+import io.github.lingqiqi5211.ezhooktool.xposed.common.HookStageException
 import io.github.lingqiqi5211.ezhooktool.xposed.common.InterceptChainStage
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ReplaceChainStage
 import java.lang.reflect.Executable
@@ -168,8 +169,10 @@ internal fun buildHooker(
             hookChain.invoke(chain)
         } else {
             runCatching { hookChain.invoke(chain) }
-                .getOrElse {
-                    EzReflect.logger.error("Hook", "hook failed for $target", it)
+                .getOrElse { t ->
+                    val (phase, cause) = if (t is HookStageException) t.phase to (t.cause ?: t)
+                    else "chain" to t
+                    EzReflect.logger.error("Hook", "$phase hook failed for $target", cause)
                     chain.proceed()
                 }
         }
