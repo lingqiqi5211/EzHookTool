@@ -5,8 +5,7 @@
 
 当前 Maven 最新构建版本为: ![Maven Central Version](https://img.shields.io/maven-central/v/io.github.lingqiqi5211.ezhooktool/core)
 
-> `hook-xposed-102` 依赖 libxposed API 102，目前上游为 `102.0.0-SNAPSHOT`，
-> 仍可能调整签名。生产环境请关注上游 RFC，或继续使用 API 101 版本。
+> `hook-xposed-102` 依赖 libxposed API `102.0.0` 正式版；如需使用其他版本，请自行替换为对应的 runtime API。
 
 ### 快速开始
 
@@ -23,7 +22,7 @@ dependencies {
 
     // 如果你的模块直接使用 Xposed / libxposed 的类型，
     // 还需要额外声明对应运行时 API。
-    compileOnly "io.github.libxposed:api:102.0.0-SNAPSHOT"
+    compileOnly "io.github.libxposed:api:102.0.0"
     // 或
     // compileOnly "de.robv.android.xposed:api:82"
 }
@@ -42,7 +41,7 @@ dependencies {
 
     // 如果你的模块直接使用 Xposed / libxposed 的类型，
     // 还需要额外声明对应运行时 API。
-    compileOnly("io.github.libxposed:api:102.0.0-SNAPSHOT")
+    compileOnly("io.github.libxposed:api:102.0.0")
     // 或
     // compileOnly("de.robv.android.xposed:api:82")
 }
