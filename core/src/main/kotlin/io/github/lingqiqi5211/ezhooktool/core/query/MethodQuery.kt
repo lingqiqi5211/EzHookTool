@@ -1,6 +1,10 @@
 package io.github.lingqiqi5211.ezhooktool.core.query
 
 import io.github.lingqiqi5211.ezhooktool.core.MethodCondition
+import io.github.lingqiqi5211.ezhooktool.core.canAcceptAll
+import io.github.lingqiqi5211.ezhooktool.core.describeTypes
+import io.github.lingqiqi5211.ezhooktool.core.isBridge
+import io.github.lingqiqi5211.ezhooktool.core.isSynthetic
 import io.github.lingqiqi5211.ezhooktool.core.isTypeMatch
 import io.github.lingqiqi5211.ezhooktool.core.paramCount
 import io.github.lingqiqi5211.ezhooktool.core.toReadableTypeName
@@ -52,26 +56,11 @@ private fun methodCacheKeyOf(parts: Map<MethodCachePart, Any>): List<Any> {
     return result
 }
 
-private fun Array<Class<*>>.canAcceptAll(types: Array<out Class<*>>): Boolean {
-    if (size != types.size) return false
-    for (index in indices) {
-        if (!isTypeMatch(types[index], this[index])) return false
-    }
-    return true
-}
-
-private fun Method.isBridgeMethod(): Boolean = modifiers and 0x00000040 != 0
-
-private fun Method.isSyntheticMethod(): Boolean = modifiers and 0x00001000 != 0
-
 private fun Method.isDefaultMethod(): Boolean =
     declaringClass.isInterface &&
             Modifier.isPublic(modifiers) &&
             !Modifier.isAbstract(modifiers) &&
             !Modifier.isStatic(modifiers)
-
-private fun Array<out Class<*>>.describeTypes(): String =
-    joinToString(prefix = "[", postfix = "]") { it.toReadableTypeName() }
 
 /**
  * 方法查询条件。
@@ -307,22 +296,22 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
 
     /** 限定为 synthetic 方法。 */
     fun isSynthetic() {
-        flag("synthetic", true) { isSyntheticMethod() }
+        flag("synthetic", true) { isSynthetic }
     }
 
     /** 限定为非 synthetic 方法。 */
     fun notSynthetic() {
-        flag("synthetic", false) { isSyntheticMethod() }
+        flag("synthetic", false) { isSynthetic }
     }
 
     /** 限定为 bridge 方法。 */
     fun isBridge() {
-        flag("bridge", true) { isBridgeMethod() }
+        flag("bridge", true) { isBridge }
     }
 
     /** 限定为非 bridge 方法。 */
     fun notBridge() {
-        flag("bridge", false) { isBridgeMethod() }
+        flag("bridge", false) { isBridge }
     }
 
     /** 限定为 interface default 方法。 */

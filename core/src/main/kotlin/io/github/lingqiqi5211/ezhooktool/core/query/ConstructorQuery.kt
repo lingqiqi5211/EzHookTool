@@ -1,9 +1,10 @@
 package io.github.lingqiqi5211.ezhooktool.core.query
 
 import io.github.lingqiqi5211.ezhooktool.core.ConstructorCondition
-import io.github.lingqiqi5211.ezhooktool.core.isTypeMatch
+import io.github.lingqiqi5211.ezhooktool.core.canAcceptAll
+import io.github.lingqiqi5211.ezhooktool.core.describeTypes
+import io.github.lingqiqi5211.ezhooktool.core.isSynthetic
 import io.github.lingqiqi5211.ezhooktool.core.paramCount
-import io.github.lingqiqi5211.ezhooktool.core.toReadableTypeName
 import java.lang.reflect.Constructor
 import java.lang.reflect.Modifier
 import java.util.function.Predicate
@@ -37,19 +38,6 @@ private fun constructorCacheKeyOf(parts: Map<ConstructorCachePart, Any>): List<A
     }
     return result
 }
-
-private fun Array<Class<*>>.canAcceptAll(types: Array<out Class<*>>): Boolean {
-    if (size != types.size) return false
-    for (index in indices) {
-        if (!isTypeMatch(types[index], this[index])) return false
-    }
-    return true
-}
-
-private fun Constructor<*>.isSyntheticConstructor(): Boolean = modifiers and 0x00001000 != 0
-
-private fun Array<out Class<*>>.describeTypes(): String =
-    joinToString(prefix = "[", postfix = "]") { it.toReadableTypeName() }
 
 /**
  * 构造器查询条件。
@@ -180,12 +168,12 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
 
     /** 限定为 synthetic 构造器。 */
     fun isSynthetic() {
-        flag("synthetic", true) { isSyntheticConstructor() }
+        flag("synthetic", true) { isSynthetic }
     }
 
     /** 限定为非 synthetic 构造器。 */
     fun notSynthetic() {
-        flag("synthetic", false) { isSyntheticConstructor() }
+        flag("synthetic", false) { isSynthetic }
     }
 
     /** 添加自定义 Kotlin 条件。 */

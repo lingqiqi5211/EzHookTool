@@ -111,6 +111,23 @@ internal fun isTypeMatch(actual: Class<*>, expected: Class<*>): Boolean {
 }
 
 /**
+ * 判断当前形参类型数组能否逐位接收 [types]（考虑 primitive/wrapper 互转和继承关系）。
+ *
+ * receiver 是候选成员的形参类型，[types] 是查询侧要求的实参类型。
+ */
+internal fun Array<Class<*>>.canAcceptAll(types: Array<out Class<*>>): Boolean {
+    if (size != types.size) return false
+    for (index in indices) {
+        if (!isTypeMatch(types[index], this[index])) return false
+    }
+    return true
+}
+
+/** 把类型数组格式化成 `[a, b]` 形式，用于查询条件描述。 */
+internal fun Array<out Class<*>>.describeTypes(): String =
+    joinToString(prefix = "[", postfix = "]") { it.toReadableTypeName() }
+
+/**
  * 根据实参推断参数类型数组。
  *
  * 调用方必须保证所有实参都非 `null`；遇到 `null` 时无法准确推断目标参数类型，

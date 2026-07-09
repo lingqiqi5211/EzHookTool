@@ -98,6 +98,7 @@ fun findMethodBestMatch(
         return exact
     }
 
+    val expected: Array<Class<*>> = parameterTypes.toList().toTypedArray()
     var best: Method? = null
     var bestScore = Int.MAX_VALUE
     var current: Class<*>? = clz
@@ -106,8 +107,8 @@ fun findMethodBestMatch(
         for (method in EzReflect.memberResolver.methodsOf(current)) {
             if (method.name != methodName) continue
             if (!considerPrivate && Modifier.isPrivate(method.modifiers)) continue
-            if (!paramTypesMatch(parameterTypes.toList().toTypedArray(), method.parameterTypes)) continue
-            val score = scoreMatch(parameterTypes.toList().toTypedArray(), method.parameterTypes)
+            if (!paramTypesMatch(expected, method.parameterTypes)) continue
+            val score = scoreMatch(expected, method.parameterTypes)
             if (score < bestScore) {
                 method.isAccessible = true
                 best = method
@@ -237,11 +238,12 @@ fun findConstructorBestMatch(
         return exact
     }
 
+    val expected: Array<Class<*>> = parameterTypes.toList().toTypedArray()
     var best: Constructor<*>? = null
     var bestScore = Int.MAX_VALUE
     for (constructor in EzReflect.memberResolver.constructorsOf(clz)) {
-        if (!paramTypesMatch(parameterTypes.toList().toTypedArray(), constructor.parameterTypes)) continue
-        val score = scoreMatch(parameterTypes.toList().toTypedArray(), constructor.parameterTypes)
+        if (!paramTypesMatch(expected, constructor.parameterTypes)) continue
+        val score = scoreMatch(expected, constructor.parameterTypes)
         if (score < bestScore) {
             constructor.isAccessible = true
             best = constructor
