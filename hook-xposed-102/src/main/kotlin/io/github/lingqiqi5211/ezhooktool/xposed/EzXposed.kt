@@ -13,6 +13,7 @@ import io.github.lingqiqi5211.ezhooktool.xposed.common.ModuleResources
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.unhookAll
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.ApplicationLifecycle
 import java.lang.reflect.Executable
+import java.util.function.Consumer
 
 /**
  * libxposed API 102 的运行时入口。
@@ -346,16 +347,27 @@ object EzXposed {
      * 全部由 boot / system / app classloader 加载，符合 libxposed 102「setSavedInstanceState 不接受
      * 旧 module classloader 加载的对象」的硬约束。
      *
+     * [extra] 是使用者要跨代透传的额外数据（如 hook 里记录的宿主对象、构造器 `this`、额外
+     * classloader），库不解读、原样在 [handleHotReloaded] 里回传。**同样受上述硬约束**：`extra`
+     * 里只能放宿主 / 系统 classloader 加载的对象，放模块 classloader 创建的对象会让 framework
+     * 拒绝本次热重载。
+     *
      * **返回值的含义由调用方 `onHotReloading` 的返回值传递给 framework**：
      * 返回 `true` 表示同意热重载；返回 `false` 表示模块自身要求 framework 放弃本次热重载请求。
      * 也就是说当本方法返回 `false` 时，请直接把它作为 `onHotReloading` 的返回值（默认写法即为 `return EzXposed.handleHotReloading(param)`）。
      *
-     * 想自定义 saved state 的进阶用法直接覆写 `onHotReloading`，不要调用本方法。
+     * 想完全自定义 saved state 的进阶用法直接覆写 `onHotReloading`，不要调用本方法。
+     *
+     * @param extra 使用者透传的跨代数据，默认空
      */
     @JvmStatic
-    fun handleHotReloading(param: XposedModuleInterface.HotReloadingParam): Boolean {
+    @JvmOverloads
+    fun handleHotReloading(
+        param: XposedModuleInterface.HotReloadingParam,
+        extra: Array<Any?> = emptyArray(),
+    ): Boolean {
         val snapshot = targetSnapshot ?: return false
-        param.setSavedInstanceState(snapshot.toCrossGenArray())
+        param.setSavedInstanceState(snapshot.toCrossGenArray(extra))
         return true
     }
 
@@ -365,20 +377,32 @@ object EzXposed {
      * 这里完成以下事情：
      *
      * 1. 用 [initOnModuleLoaded] 等价逻辑重置 [base]、[modulePath]、[moduleRes]、[processName]、[isSystemServer]。
-     * 2. unhook 上一代全部 hook handle。
+     * 2. 处理上一代 hook handle：默认全部 unhook；传入 [onOldHooks] 时改为交给它处置
+     *    （可按 `HookHandle.id` 分桶后 `replaceHook` / `unhook`，见 `groupById` / `replaceAll`）。
      * 3. 还原 [handleHotReloading] 透传的 snapshot，重建 [classLoader] 与 [packageName]。
-     * 4. 触发已通过 [onTargetReady] 注册的回调，等价于一次 `onPackageReady` / `onSystemServerStarting`。
+     * 4. 把 [handleHotReloading] 里 `extra` 透传的数据交给 [onExtra]（若提供）。
+     * 5. 触发已通过 [onTargetReady] 注册的回调，等价于一次 `onPackageReady` / `onSystemServerStarting`。
      *
      * 如果 saved state 不是由 [handleHotReloading] 生成的（例如使用者自己写了 `setSavedInstanceState`），
-     * 这里只会完成步骤 1、2，不会触发 [onTargetReady]。
+     * 只会完成步骤 1、2，不会触发 [onExtra] 与 [onTargetReady]。
+     *
+     * @param onOldHooks 上一代 hook handle 的处置策略；`null` 表示沿用默认的全部 unhook
+     * @param onExtra    接收 [handleHotReloading] 透传的 `extra`；`null` 表示忽略
      */
     @JvmStatic
+    @JvmOverloads
     fun handleHotReloaded(
         base: XposedInterface,
         param: XposedModuleInterface.HotReloadedParam,
+        onOldHooks: Consumer<List<XposedInterface.HookHandle>>? = null,
+        onExtra: Consumer<Array<Any?>>? = null,
     ) {
         initOnModuleLoaded(base, param)
-        param.oldHookHandles.unhookAll()
+        if (onOldHooks != null) {
+            onOldHooks.accept(param.oldHookHandles)
+        } else {
+            param.oldHookHandles.unhookAll()
+        }
 
         val snapshot = TargetSnapshot.tryRestore(param.savedInstanceState) ?: return
         EzReflect.init(snapshot.classLoader)
@@ -386,6 +410,7 @@ object EzXposed {
         processName = snapshot.processName
         isSystemServer = snapshot.isSystemServer
         targetSnapshot = snapshot
+        onExtra?.accept(TargetSnapshot.restoreExtra(param.savedInstanceState))
         dispatchTargetReady()
     }
 
@@ -479,10 +504,10 @@ fun interface ApplicationAttachCallback {
  * 目标进程 snapshot。跨代时拍平成 `Array<Any?>`，全部字段都来自 system / app classloader，
  * 因此可安全塞进 [XposedModuleInterface.HotReloadingParam.setSavedInstanceState]。
  *
- * 序列化格式：
+ * 序列化格式（末位 `extra` 是使用者透传的跨代数据，库不解读，原样回传）：
  *
  * ```
- * [MAGIC, VERSION, packageName, processName, classLoader, applicationInfo, isSystemServer]
+ * [MAGIC, VERSION, packageName, processName, classLoader, applicationInfo, isSystemServer, extra]
  * ```
  */
 internal data class TargetSnapshot(
@@ -492,7 +517,7 @@ internal data class TargetSnapshot(
     val applicationInfo: ApplicationInfo?,
     val isSystemServer: Boolean,
 ) {
-    fun toCrossGenArray(): Array<Any?> = arrayOf(
+    fun toCrossGenArray(extra: Array<Any?>): Array<Any?> = arrayOf(
         MAGIC,
         VERSION,
         packageName,
@@ -500,15 +525,16 @@ internal data class TargetSnapshot(
         classLoader,
         applicationInfo,
         isSystemServer,
+        extra,
     )
 
     companion object {
         private const val MAGIC = "EzXposed.TargetSnapshot"
-        private const val VERSION = 1
+        private const val VERSION = 2
 
         fun tryRestore(saved: Any?): TargetSnapshot? {
             val arr = saved as? Array<*> ?: return null
-            if (arr.size < 7) return null
+            if (arr.size < 8) return null
             if (arr[0] != MAGIC) return null
             if (arr[1] != VERSION) return null
             val packageName = arr[2] as? String ?: return null
@@ -523,6 +549,14 @@ internal data class TargetSnapshot(
                 applicationInfo = applicationInfo,
                 isSystemServer = isSystemServer,
             )
+        }
+
+        /** 读取 [toCrossGenArray] 末位的使用者透传数据；不是本库 snapshot 时返回空数组。 */
+        fun restoreExtra(saved: Any?): Array<Any?> {
+            val arr = saved as? Array<*> ?: return emptyArray()
+            if (arr.size < 8 || arr[0] != MAGIC || arr[1] != VERSION) return emptyArray()
+            @Suppress("UNCHECKED_CAST")
+            return arr[7] as? Array<Any?> ?: emptyArray()
         }
     }
 }

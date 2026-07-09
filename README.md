@@ -161,9 +161,10 @@ class MainHook : XposedModule() {
 }
 ```
 
-`onTargetReady` 在初次加载和热重载后都会触发；`handleHotReloaded` 内部会 unhook 上一代全部
-handle，并重建 `EzReflect.classLoader`。需要自定义 saved state 或按 id 替换 hook 的进阶用法，
-直接走原生回调即可，详见 `doc/overview.md`。
+`onTargetReady` 在初次加载和热重载后都会触发；`handleHotReloaded` 默认 unhook 上一代全部
+handle 并重建 `EzReflect.classLoader`。需要跨代夹带自己的状态时给 `handleHotReloading` 传
+`extra`、给 `handleHotReloaded` 传 `onExtra`；需要按 id 保留 / 替换旧 hook 时给
+`handleHotReloaded` 传 `onOldHooks`。详见 `doc/overview.md`。
 
 ### 模块说明
 
