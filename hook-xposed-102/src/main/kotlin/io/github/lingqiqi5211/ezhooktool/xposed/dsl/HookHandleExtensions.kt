@@ -8,9 +8,10 @@ import io.github.lingqiqi5211.ezhooktool.xposed.common.InterceptChainStage
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ReplaceChainStage
 
 /**
- * 当前 hook 的 id。
+ * 当前 hook 的底层 hook ID。
  *
- * 等价于 [XposedInterface.HookHandle.getId]，未通过 [HookFactory.id] 设置过时为 `null`。
+ * 等价于 [XposedInterface.HookHandle.getId]。默认自动模式会返回聚合批次的逻辑 handle，其物理 hook ID
+ * 属于工具内部，因此该值为 `null`；显式设置 [HookFactory.id] / `reloadKey(...)` 时返回对应底层 ID。
  */
 val XposedInterface.HookHandle.id: String?
     get() = getId()
@@ -20,7 +21,7 @@ val XposedInterface.HookHandle.id: String?
  *
  * 等价于「丢弃旧 hook 的全部 before/after/intercept 行为，新行为只生成返回值」。
  *
- * 上游约束：替换会保留原 hook 的 executable、priority、exceptionMode 和 id；
+ * 上游约束：替换会保留原 hook 的 executable、priority、exceptionMode 和 hook ID；
  * 替换成功后当前 handle 即失效，再调用其它方法会抛出 [IllegalStateException]。
  * 若需要直接传 [XposedInterface.Hooker]，调用 [XposedInterface.HookHandle.replaceHook] 即可。
  *
@@ -39,7 +40,7 @@ fun XposedInterface.HookHandle.replaceWith(
  * 用一个 intercept 风格的 lambda 原子替换当前 hook，返回新 handle。
  *
  * 适合需要直接操作 [XposedInterface.Chain] 的场景。语义与 [HookFactory.intercept] 完全一致。
- * 行为约束与 [replaceWith] 一致：保留 executable、priority、exceptionMode、id；旧 handle 失效。
+ * 行为约束与 [replaceWith] 一致：保留 executable、priority、exceptionMode、hook ID；旧 handle 失效。
  *
  * @param callback 接收 [XposedInterface.Chain] 的 around 回调
  */

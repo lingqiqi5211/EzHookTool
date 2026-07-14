@@ -5,9 +5,9 @@ package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 import io.github.libxposed.api.XposedInterface
 
 /**
- * 把旧 hook handle 按 id 分桶。
+ * 把旧 hook handle 按底层 hook ID 分桶。
  *
- * 没有 id 的 handle 会落在 `null` key 桶里，调用方自行决定丢弃还是替换。
+ * 没有 hook ID 的 handle 会落在 `null` key 桶里，调用方自行决定丢弃还是替换。
  * 典型用法：在新 code 的 `onHotReloaded` 里据此挑出感兴趣的旧 handle，并用
  * [XposedInterface.HookHandle.replaceHook]、[replaceWith] 或 [replaceIntercept] 替换。
  */

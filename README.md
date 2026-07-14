@@ -114,8 +114,9 @@ EzReflect.init(yourClassLoader)
 
 详细说明见 `doc/overview.md`。
 
-`HookFactory` 支持给 hook 分配 id；同模块同 executable 上相同 id 的新 hook 会原子替换旧 hook。
-用于跨版本热重载时，推荐用语义更明确的 `reloadKey`：
+`HookFactory` 的默认热重载路径会把同一 executable、优先级和异常模式的 DSL / Java helper hook 自动聚合为
+一个带稳定内部 ID 的物理 hook。规则构建完成后才提交，成功后由 framework 原子替换旧组；通常无需手写 ID。
+需要独立的跨版本 identity 时，再使用语义更明确的 `reloadKey`：
 
 ```kotlin
 val handle = method.createHook {
@@ -139,16 +140,15 @@ override fun onPackageReady(param: PackageReadyParam) {
 ```
 
 热重载：API 102 模块在 `META-INF/xposed/module.prop` 中设置 `autoHotReload=true` 后，
-Xposed 应用更新模块也会请求热重载。新模块推荐使用 `HotReloadSession`；它用 libxposed 原生
-`executable + reloadKey` 原子替换已声明的 hook，等新 hook 成功安装后才清理未复建的旧 handle：
+Xposed 应用更新模块也会请求热重载。新模块默认只需把所有同步初始化放进
+`EzXposed.onTargetReady { ... }`，工具会自动聚合并分配稳定物理 ID；规则构建成功后原子替换新旧 hook，
+不会先全量 unhook 旧 handle：
 
 ```kotlin
 class MainHook : XposedModule() {
-    private val hotReload = HotReloadSession()
-
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         EzXposed.initOnModuleLoaded(this, param)
-        hotReload.onTargetReady { installHooks() }
+        EzXposed.onTargetReady { installHooks() }
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
@@ -157,19 +157,22 @@ class MainHook : XposedModule() {
     }
 
     override fun onHotReloading(param: HotReloadingParam) =
-        hotReload.prepare(param)
+        EzXposed.handleHotReloading(param)
 
     override fun onHotReloaded(param: HotReloadedParam) {
-        val result = hotReload.restore(this, param)
+        // API 102 不会重放 onModuleLoaded；这个重载会完成新 generation 的初始化与规则注册。
+        EzXposed.handleHotReloadedWithTargetReady(this, param) { installHooks() }
     }
 }
 ```
 
-session 内所有同步安装的 hook 都必须显式设置非空、稳定的 `reloadKey`。外部 listener / receiver /
-线程可通过 `hotReload.scope.onReloading { ... }` 清理；资源缓存、已 inflate 的 View 和异步延迟创建的
-hook 不会由 framework 自动重建，必要时应重启目标进程。旧的 `EzXposed.handleHotReloading` /
-`handleHotReloaded` 仍兼容保留。首次从无 id 的旧版本迁移到 session 时也需要先重启一次目标进程。
-完整约束和 Java 写法见 `doc/overview.md`。
+新增、删除或重排同一目标/优先级/异常模式组内的逻辑 hook 不会改变默认物理 ID。`reloadKey`、
+`HotReloadSession`、`HookReloadBatch` 与
+`handleHotReloaded(..., onOldHooks = ...)` 保留给需要自定义 identity 或旧 handle 迁移的场景。
+默认自动模式会要求物理 hook identity 集合不变；若新增或删除了目标 executable、优先级/异常模式组或显式
+hook ID，它会在发布任何新 hook 前拒绝本次热重载，要求重启目标进程。
+外部 listener / receiver / 线程、资源缓存或已 inflate 的 View 仍需模块自行恢复；必要时应重启目标进程。
+完整约束、迁移条件和 Java 写法见 `doc/overview.md`。
 
 ### 模块说明
 

@@ -10,7 +10,6 @@ import io.github.libxposed.api.XposedInterfaceWrapper
 import io.github.libxposed.api.XposedModuleInterface
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ModuleResources
-import io.github.lingqiqi5211.ezhooktool.xposed.dsl.unhookAll
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.ApplicationLifecycle
 import java.lang.reflect.Executable
 import java.util.function.Consumer
@@ -26,6 +25,10 @@ import java.util.function.Consumer
  *    或 `onSystemServerStarting` 里调用 [initOnSystemServerStarting]
  * 4. 通过 [onTargetReady] 注册「目标进程准备好后跑什么」
  *
+ * API 102 热重载不会自动重放 `onModuleLoaded` 或 package 生命周期回调。模块应在
+ * `onHotReloaded` 中重新执行自己的运行时初始化（包括 [initOnModuleLoaded] 与 [onTargetReady] 注册），
+ * 再调用 [handleHotReloaded] 或 [restoreHotReloadedAutomatically] 恢复目标 snapshot。
+ *
  * 行为约定：
  *
  * - [base] 在 [initOnModuleLoaded] 后可用
@@ -33,8 +36,13 @@ import java.util.function.Consumer
  * - [appContext] 采用懒解析，期望指向目标进程 application；如果应用尚未创建，请改用 [appContextOrNull] 或稍后访问
  * - [modulePath] / [moduleRes] 在 [initOnModuleLoaded] 后可用
  *
- * 热重载：新模块优先使用 [HotReloadSession]；[handleHotReloading] / [handleHotReloaded]
- * 保留给兼容旧代码和完全自定义的迁移流程。
+ * 默认热重载会把同步初始化中的 DSL/Java helper hook 按 executable、priority、exceptionMode 自动
+ * 聚合，并为物理 hook 分配稳定内部 ID；在 [handleHotReloaded] 成功重建后才清理遗留旧 handle，
+ * 通常无需逐条写 `reloadKey(...)`。默认自动模式要求物理 hook identity 集合不变；同一组内的逻辑
+ * hook 可增删重排，但新增 / 删除 executable、priority/exceptionMode 组或显式 hook ID 会在发布前拒绝
+ * 本次热重载，要求重启目标进程。
+ * 需要跨大规模重排保持精确 identity 时使用 [HotReloadSession] 的显式 `reloadKey(...)`；
+ * [HookReloadBatch] 和带 [handleHotReloaded] 的 `onOldHooks` 参数保留给自定义流程。
  */
 @SuppressLint("PrivateApi", "DiscouragedPrivateApi", "StaticFieldLeak")
 object EzXposed {
@@ -52,6 +60,12 @@ object EzXposed {
 
     /** [onTargetReady] 注册的回调列表。 */
     private val targetReadyCallbacks = mutableListOf<TargetReadyCallback>()
+
+    /** 当前 module generation 的事务外 helper hook 兜底 ID 分配器。 */
+    private var automaticHookIds = AutomaticHookIdAllocator("uninitialized")
+
+    /** 默认 [onTargetReady] 初始化使用的聚合事务；不需要模块为每条 hook 写 reloadKey。 */
+    private var automaticHookBatch: HookReloadBatch? = null
 
     /**
      * 仅在 [HotReloadSession] 重建 hook 的同步窗口内设置。
@@ -263,10 +277,11 @@ object EzXposed {
      * 但不会初始化目标进程 [classLoader]。
      */
     fun initOnModuleLoaded(base: XposedInterface, param: XposedModuleInterface.ModuleLoadedParam) {
-        // 热重载：framework 在调 onHotReloaded 前先调新 entry 的 onModuleLoaded。
-        // 这里检测 base 实例变化即丢弃上一代 onTargetReady 回调与 targetSnapshot，
-        // 防止旧 module classloader 通过这些 lambda 持续被强引用。
-        if (::base.isInitialized && this.base !== base) {
+        // API 102 不会在热重载时自动重放 onModuleLoaded；模块应从 onHotReloaded 调用本方法。
+        // 检测 base 实例变化即丢弃上一代 onTargetReady 回调与 targetSnapshot，防止旧 module
+        // classloader 通过这些 lambda 持续被强引用。
+        val isNewGeneration = !::base.isInitialized || this.base !== base
+        if (isNewGeneration) {
             synchronized(targetReadyCallbacks) { targetReadyCallbacks.clear() }
             targetSnapshot = null
             appContextValue = null
@@ -274,6 +289,10 @@ object EzXposed {
         this.base = base
         this.moduleEntry = base as? XposedInterfaceWrapper
         modulePath = base.moduleApplicationInfo.sourceDir
+        if (isNewGeneration) {
+            automaticHookIds = AutomaticHookIdAllocator(base.moduleApplicationInfo.packageName)
+            automaticHookBatch = createAutomaticHookBatch(base, param)
+        }
         initModuleResources()
         processName = param.processName
         isSystemServer = param.isSystemServer
@@ -333,6 +352,10 @@ object EzXposed {
      * 允许多次注册；按注册顺序执行。如果调用 [onTargetReady] 时目标进程已经就绪
      * （即 snapshot 已存在），新注册的回调会立即在当前线程执行一次，避免错过当前进程。
      *
+     * 默认自动热重载的聚合事务只覆盖首次 target-ready 分发前已注册的同步回调。目标已就绪后才注册的
+     * 回调会立即执行，但其后续 hook 不属于该批次；需要可靠跨代替换时使用显式 `reloadKey(...)` 或
+     * 自定义旧 handle 处置。
+     *
      * @param callback 回调，可以从 [EzXposed.packageName] / [classLoader] / [isSystemServer] 读取当前上下文
      */
     @JvmStatic
@@ -385,17 +408,20 @@ object EzXposed {
      *
      * 这里完成以下事情：
      *
-     * 1. 用 [initOnModuleLoaded] 等价逻辑重置 [base]、[modulePath]、[moduleRes]、[processName]、[isSystemServer]。
-     * 2. 处理上一代 hook handle：默认全部 unhook；传入 [onOldHooks] 时改为交给它处置
-     *    （可按 `HookHandle.id` 分桶后 `replaceHook` / `unhook`，见 `groupById` / `replaceAll`）。
-     * 3. 还原 [handleHotReloading] 透传的 snapshot，重建 [classLoader] 与 [packageName]。
-     * 4. 把 [handleHotReloading] 里 `extra` 透传的数据交给 [onExtra]（若提供）。
-     * 5. 触发已通过 [onTargetReady] 注册的回调，等价于一次 `onPackageReady` / `onSystemServerStarting`。
+     * 未传 `onOldHooks` 时，会启用默认自动流程：
      *
-     * 如果 saved state 不是由 [handleHotReloading] 生成的（例如使用者自己写了 `setSavedInstanceState`），
-     * 只会完成步骤 1、2，不会触发 [onExtra] 与 [onTargetReady]。
+     * 1. 在新 hook 注册前读取旧 handle 的 executable 与 hook ID；
+     * 2. 还原 snapshot，触发 [onTargetReady] 同步重新安装 hook；
+     * 3. 使用默认聚合 ID 或显式 ID 原子替换同名旧 hook；
+     * 4. 仅在新 generation 完整安装成功后 unhook 未继续声明的旧 handle。
      *
-     * @param onOldHooks 上一代 hook handle 的处置策略；`null` 表示沿用默认的全部 unhook
+     * 因此默认流程不会出现“先全部 unhook、再等待新 hook 安装”的空窗。传入 `onOldHooks` 即改为
+     * 完全自定义旧 handle 处置，工具不会替调用方 unhook。
+     *
+     * 默认自动流程要求 hook 初始化位于 [onTargetReady] 的同步回调中，且旧 handle 都有 hook ID。
+     * 初次从无 ID 的旧版本迁移时会拒绝本次热重载，保留旧实现并要求完整重启一次目标进程。
+     *
+     * @param onOldHooks 上一代 hook handle 的自定义处置策略；`null` 表示使用默认自动原子替换流程
      * @param onExtra    接收 [handleHotReloading] 透传的 `extra`；`null` 表示忽略
      */
     @JvmStatic
@@ -406,20 +432,96 @@ object EzXposed {
         onOldHooks: Consumer<List<XposedInterface.HookHandle>>? = null,
         onExtra: Consumer<Array<Any?>>? = null,
     ) {
-        restoreHotReloaded(
+        if (onOldHooks == null) {
+            restoreHotReloadedAutomatically(base, param, onExtra)
+        } else {
+            restoreHotReloaded(
+                base = base,
+                param = param,
+                onOldHooks = onOldHooks,
+                onExtra = onExtra,
+                propagateTargetReadyFailure = false,
+            )
+        }
+    }
+
+    /**
+     * 默认自动热重载的精简入口。
+     *
+     * API 102 不会重放 `onModuleLoaded`，因此这个重载会先初始化新 generation，并注册
+     * [targetReady]，再恢复 snapshot、同步安装 hook 和收尾旧 handle。普通模块可以在
+     * `onHotReloaded` 中直接调用它，而无需重复写初始化样板。
+     *
+     * [targetReady] 中的 hook 必须同步注册；未声明 ID 的 DSL / Java helper hook 会自动聚合为
+     * 带稳定内部 ID 的物理 hook。
+     * 需要自定义旧 handle 处置时改用带 `onOldHooks` 参数的 [handleHotReloaded]。
+     *
+     * @return 新 hook 安装、原子替换与遗留旧 hook 清理的统计结果
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun handleHotReloadedWithTargetReady(
+        base: XposedInterface,
+        param: XposedModuleInterface.HotReloadedParam,
+        targetReady: TargetReadyCallback,
+        onExtra: Consumer<Array<Any?>>? = null,
+    ): AutomaticHotReloadResult {
+        initOnModuleLoaded(base, param)
+        onTargetReady(targetReady)
+        return restoreHotReloadedAutomatically(base, param, onExtra)
+    }
+
+    /**
+     * 执行默认自动热重载流程，并返回实际替换与清理数量。
+     *
+     * 与 [handleHotReloaded] 的无 `onOldHooks` 形式等价；需要把结果写入日志、通知或 UI 时使用本入口。
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun restoreHotReloadedAutomatically(
+        base: XposedInterface,
+        param: XposedModuleInterface.HotReloadedParam,
+        onExtra: Consumer<Array<Any?>>? = null,
+    ): AutomaticHotReloadResult {
+        // 先初始化新 generation，确保默认 batch 在注册新 hook 前已持有旧 handle snapshot。
+        initOnModuleLoaded(base, param)
+        // 正常 framework 会为每一代创建新 entry；这里仍显式创建一次事务，兼容复用 wrapper 的实现，
+        // 并确保本次 reload 不会意外复用已提交的初始加载 batch。
+        automaticHookIds = AutomaticHookIdAllocator(base.moduleApplicationInfo.packageName)
+        automaticHookBatch = createAutomaticHookBatch(base, param)
+        val batch = automaticHookBatch ?: throw IllegalStateException(
+            "Automatic hot reload batch is unavailable. Call EzXposed.initOnModuleLoaded first."
+        )
+        batch.captureOldHooks(param.oldHookHandles)
+        val restored = restoreHotReloaded(
             base = base,
             param = param,
-            onOldHooks = onOldHooks,
+            // 默认流程禁止旧入口的提前 unhook；收尾统一放到新 hook 成功安装之后。
+            onOldHooks = Consumer { },
             onExtra = onExtra,
-            propagateTargetReadyFailure = false,
+            propagateTargetReadyFailure = true,
+        )
+        check(restored) {
+            "Automatic hot reload requires saved state created by EzXposed.handleHotReloading."
+        }
+        check(param.oldHookHandles.isEmpty() || batch.hasManagedHooks()) {
+            "Automatic hot reload did not observe any synchronous DSL/Java helper hook registration. " +
+                "Install hooks from EzXposed.onTargetReady(), or use the custom onOldHooks callback."
+        }
+        val result = batch.finishHotReload()
+        return AutomaticHotReloadResult(
+            installedHookCount = result.logicalHookCount + result.explicitHookCount,
+            atomicallyReplacedHookCount = result.atomicallyReplacedHookCount,
+            removedOldHookCount = result.removedOldHookCount,
         )
     }
 
     /**
-     * [HotReloadSession] 使用的底层恢复入口。
+     * [HotReloadSession] 与自定义热重载使用的底层恢复入口。
      *
-     * 保留旧的 [handleHotReloaded] 的「记录错误后继续」兼容语义；session 则要求把
-     * `onTargetReady` 的失败原样抛出，以便 framework 明确判定本次重载没有成功。
+     * 自定义 `onOldHooks` 的调用方自行决定旧 handle 的收尾；本入口绝不再默认全量 unhook。
+     * [HotReloadSession] 和默认自动流程会要求把 `onTargetReady` 的失败原样抛出，以便 framework
+     * 明确判定本次重载没有成功。
      *
      * @return 是否恢复到了由 [handleHotReloading] 保存的 EzHookTool snapshot
      */
@@ -431,11 +533,7 @@ object EzXposed {
         propagateTargetReadyFailure: Boolean,
     ): Boolean {
         initOnModuleLoaded(base, param)
-        if (onOldHooks != null) {
-            onOldHooks.accept(param.oldHookHandles)
-        } else {
-            param.oldHookHandles.unhookAll()
-        }
+        onOldHooks?.accept(param.oldHookHandles)
 
         val snapshot = TargetSnapshot.tryRestore(param.savedInstanceState) ?: return false
         EzReflect.init(snapshot.classLoader)
@@ -448,13 +546,45 @@ object EzXposed {
         return true
     }
 
-    /** 在 [HotReloadSession] 的同步安装窗口内注册 hook，并记录其稳定 key。 */
+    /**
+     * 在 [HotReloadSession]、[HookReloadBatch] 或默认自动流程中注册 hook。
+     *
+     * session 优先要求每条 hook 使用显式 `reloadKey`；默认 [onTargetReady] 与手动 batch 会聚合未分配
+     * hook ID 的 hook；事务外的 DSL/Java helper hook 才由 [AutomaticHookIdAllocator] 兜底分配内部 ID。
+     * 调用 `HookFactory.id(null)` 可显式关闭自动分配，随后应使用自定义旧 handle 处置流程。
+     */
     internal fun installHookWithHotReloadTracking(
         target: Executable,
+        priority: Int,
+        exceptionMode: XposedInterface.ExceptionMode,
         id: String?,
-        installer: () -> XposedInterface.HookHandle,
-    ): XposedInterface.HookHandle =
-        activeHotReloadSession.get()?.installHook(target, id, installer) ?: installer()
+        automaticIdEnabled: Boolean,
+        hooker: XposedInterface.Hooker,
+        installer: (String?, XposedInterface.Hooker) -> XposedInterface.HookHandle,
+    ): XposedInterface.HookHandle {
+        val session = activeHotReloadSession.get()
+        if (session != null) {
+            return session.installHook(target, id, hooker, installer)
+        }
+        val batch = HookReloadBatch.currentActive()
+        if (batch != null) {
+            return batch.installHook(
+                target = target,
+                priority = priority,
+                exceptionMode = exceptionMode,
+                hookId = id,
+                automaticIdEnabled = automaticIdEnabled,
+                hooker = hooker,
+                installer = installer,
+            )
+        }
+        val effectiveId = id ?: if (automaticIdEnabled) {
+            automaticHookIds.allocate(target, priority, exceptionMode)
+        } else {
+            null
+        }
+        return installer(effectiveId, hooker)
+    }
 
     /** 让 [HotReloadSession] 暂时成为当前线程的 hook 安装上下文。 */
     internal fun <T> withHotReloadSession(
@@ -519,6 +649,16 @@ object EzXposed {
         return base.moduleApplicationInfo.sourceDir.also { modulePath = it }
     }
 
+    private fun createAutomaticHookBatch(
+        base: XposedInterface,
+        param: XposedModuleInterface.ModuleLoadedParam,
+    ): HookReloadBatch = HookReloadBatch(
+        namespace = "ezhooktool.default.v1:${base.moduleApplicationInfo.packageName}:" +
+            "${param.processName}:${param.isSystemServer}",
+        xposed = base,
+        requireStableTopologyOnHotReload = true,
+    )
+
     private val addAssetPathMethod by lazy {
         AssetManager::class.java.getDeclaredMethod("addAssetPath", String::class.java).apply {
             isAccessible = true
@@ -528,6 +668,19 @@ object EzXposed {
     /** 触发当前已注册的 [onTargetReady] 回调。 */
     private fun dispatchTargetReady(propagateFailure: Boolean = false) {
         val snapshot = synchronized(targetReadyCallbacks) { targetReadyCallbacks.toList() }
+        val batch = automaticHookBatch?.takeIf { it.canStartInstall }
+        if (batch != null) {
+            batch.install(Runnable {
+                for (callback in snapshot) {
+                    if (propagateFailure) {
+                        callback.run()
+                    } else {
+                        runCallbackSafely(callback)
+                    }
+                }
+            })
+            return
+        }
         for (callback in snapshot) {
             if (propagateFailure) {
                 callback.run()
@@ -545,6 +698,16 @@ object EzXposed {
         }
     }
 }
+
+/** 一次默认自动热重载成功完成后的实际替换与收尾统计。 */
+data class AutomaticHotReloadResult(
+    /** 新 generation 中由默认事务管理的逻辑 hook 与显式 hook 数量。 */
+    val installedHookCount: Int,
+    /** 通过相同 executable + hook ID 由 framework 原子替换的旧 hook 数量。 */
+    val atomicallyReplacedHookCount: Int,
+    /** 新代码未继续声明、在新 generation 安装成功后才 unhook 的旧 hook 数量。 */
+    val removedOldHookCount: Int,
+)
 
 /**
  * [EzXposed.onTargetReady] 注册的回调。

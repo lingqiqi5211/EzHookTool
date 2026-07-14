@@ -18,11 +18,21 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
         sourceCompatibility = JavaVersion.VERSION_21
     }
+
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+        }
+    }
 }
 
 dependencies {
     implementation(project(":core"))
     compileOnly(libs.libxposedApi)
+    testImplementation(libs.junit.api)
+    testImplementation(libs.libxposedApi)
+    testRuntimeOnly(libs.junit.engine)
+    testRuntimeOnly(libs.junit.launcher)
 }
 
 dokka {

@@ -55,8 +55,9 @@ internal object ApplicationLifecycle {
             }
 
             // 复用 HookFactory：在 safeMode 下回调异常会被库统一捕获，不会影响目标 Application.attach。
-            // hook 安装后不再 unhook——application 生命周期等价进程生命周期。固定 key 让
-            // HotReloadSession 能原子替换这个库内部 hook，避免新旧 dispatcher 同时存活。
+            // hook 安装后不再 unhook——application 生命周期等价进程生命周期。显式 reloadKey 让
+            // HotReloadSession 与 HookReloadBatch 都能原子替换这个库内部 hook，
+            // 避免新旧 dispatcher 同时存活。
             hookHandle = attachMethod.createHook {
                 reloadKey("ezhooktool.internal.application-attach")
                 after { param ->

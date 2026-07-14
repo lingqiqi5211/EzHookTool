@@ -25,7 +25,8 @@ class HookFactory internal constructor(
     private val stages = mutableListOf<ChainStage>()
     private var priority: Int = XposedInterface.PRIORITY_DEFAULT
     private var exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT
-    private var id: String? = null
+    private var hookId: String? = null
+    private var automaticIdEnabled: Boolean = true
 
     /**
      * 注册 before 回调。
@@ -132,37 +133,48 @@ class HookFactory internal constructor(
     }
 
     /**
-     * 为当前 hook 设置 id。
+     * 为当前 hook 设置底层 hook ID。
      *
-     * 同模块、同 executable 下相同 id 的新 hook 会原子替换旧 hook，旧 [XposedInterface.HookHandle] 失效。
-     * 传 `null` 表示不分配 id。
+     * 同模块、同 executable 下相同 hook ID 的新 hook 会原子替换旧 hook，旧 [XposedInterface.HookHandle] 失效。
+     * 传 `null` 表示明确不分配 hook ID，并关闭本库的默认自动聚合 / ID；为热重载保持稳定的 hook ID 请优先
+     * 使用 [reloadKey]，避免把一般内部 hook ID 和跨版本契约混为一谈。
      *
-     * @param value hook id，可为 `null`
+     * @param value hook ID，可为 `null`，非空时不得为空白字符串
      */
     fun id(value: String?) {
-        id = value
+        require(value == null || value.isNotBlank()) { "hook ID must not be blank." }
+        hookId = value
+        automaticIdEnabled = value != null
     }
 
     /**
-     * 为 [io.github.lingqiqi5211.ezhooktool.xposed.HotReloadSession] 指定稳定重载 key。
+     * 为 [io.github.lingqiqi5211.ezhooktool.xposed.HotReloadSession] 指定稳定 reloadKey。
      *
-     * 同一目标方法（或构造器）在新旧代码中使用相同 key 时，libxposed 会原子替换旧 hook。
-     * 与 [id] 的底层含义相同；这个名称专门用于声明「该 id 是跨版本稳定契约」。
+     * 同一目标方法（或构造器）在新旧代码中使用相同 reloadKey 时，libxposed 会原子替换旧 hook。
+     * 与 [id] 的底层含义相同；这个名称专门用于声明「该 hook ID 是跨版本稳定契约」。
      */
     fun reloadKey(value: String) {
         require(value.isNotBlank()) { "reloadKey must not be blank." }
-        id = value
+        hookId = value
+        automaticIdEnabled = true
     }
 
     internal fun create(): XposedInterface.HookHandle {
         require(stages.isNotEmpty()) { "No hook callback specified" }
         val hooker = buildHooker(target, stages.toList())
-        return EzXposed.installHookWithHotReloadTracking(target, id) {
+        return EzXposed.installHookWithHotReloadTracking(
+            target = target,
+            priority = priority,
+            exceptionMode = exceptionMode,
+            id = hookId,
+            automaticIdEnabled = automaticIdEnabled,
+            hooker = hooker,
+        ) { effectiveId, effectiveHooker ->
             EzXposed.base.hook(target)
                 .setPriority(priority)
                 .setExceptionMode(exceptionMode)
-                .setId(id)
-                .intercept(hooker)
+                .setId(effectiveId)
+                .intercept(effectiveHooker)
         }
     }
 }

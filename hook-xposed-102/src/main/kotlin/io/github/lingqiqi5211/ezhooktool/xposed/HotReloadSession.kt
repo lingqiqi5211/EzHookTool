@@ -11,7 +11,8 @@ import java.util.function.Consumer
  * API 102 的会话式热重载协调器。
  *
  * 把同一代的 hook 安装集中到 [onTargetReady]，并在每个 hook 上使用
- * `reloadKey("...")`。重载时，libxposed 会先原子替换 key 与 executable 都相同的 hook；
+ * `reloadKey("...")`。重载时，libxposed 会先原子替换 reloadKey（即底层 hook ID）与 executable
+ * 都相同的 hook；
  * 本类在所有新 hook 成功安装后，才 unhook 没有被新代码重新声明的旧 hook。
  * 因此不会出现旧实现先被全部摘掉、再等待新实现逐个安装的空窗。
  *
@@ -37,7 +38,7 @@ class HotReloadSession {
      * 注册目标进程就绪后的 hook 安装逻辑。
      *
      * 初次加载和热重载恢复都会调用一次。回调中的所有 EzHookTool DSL hook 必须设置非空的
-     * [io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookFactory.reloadKey]；缺 key、重复 key
+     * [io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookFactory.reloadKey]；缺 reloadKey、重复 reloadKey
      * 或安装异常都会抛出 [IllegalStateException]，而不是静默留下无法收尾的旧 hook。
      */
     fun onTargetReady(callback: TargetReadyCallback) {
@@ -85,7 +86,7 @@ class HotReloadSession {
      * 在新 entry 的 `onHotReloaded` 中调用。
      *
      * 与旧的 [EzXposed.handleHotReloaded] 不同，此入口不会一开始就 unhook 全部旧 handle：
-     * 先严格运行新一代 `onTargetReady` 回调，成功注册的同 key hook 由 libxposed 原子替换；
+     * 先严格运行新一代 `onTargetReady` 回调，成功注册的相同 reloadKey hook 由 libxposed 原子替换；
      * 之后才清理没有重新声明的旧 hook。任一初始化错误会原样抛出，避免把失败伪装成成功。
      *
      * [onExtra] 在 [scope] 状态恢复后、`onTargetReady` 回调前同步调用。
@@ -98,7 +99,7 @@ class HotReloadSession {
     ): HotReloadResult {
         check(!restored) { "HotReloadSession.restore can only be called once per module entry." }
 
-        // 新 hook 注册前先读出旧 handle 的 identity。成功替换后旧 handle 会失效，届时不应再读它。
+        // 新 hook 注册前先读出旧 handle 的 executable 与 hook ID。成功替换后旧 handle 会失效，届时不应再读它。
         val oldHooks = param.oldHookHandles.map { handle ->
             OldHook(handle, HookIdentity.from(handle.executable, handle.id))
         }
@@ -134,7 +135,8 @@ class HotReloadSession {
     internal fun installHook(
         target: Executable,
         id: String?,
-        installer: () -> XposedInterface.HookHandle,
+        hooker: XposedInterface.Hooker,
+        installer: (String?, XposedInterface.Hooker) -> XposedInterface.HookHandle,
     ): XposedInterface.HookHandle {
         val identity = HookIdentity.from(target, id)
             ?: throw IllegalStateException(
@@ -148,7 +150,7 @@ class HotReloadSession {
         }
 
         return try {
-            installer().also {
+            installer(identity.key, hooker).also {
                 synchronized(this) {
                     pendingHooks -= identity
                     installedHooks += identity
@@ -170,7 +172,7 @@ class HotReloadSession {
 
         for (oldHook in oldHooks) {
             if (oldHook.identity != null && oldHook.identity in currentHooks) {
-                // libxposed 已根据 executable + id 原子替换它；旧 handle 现在无效，不能再 unhook。
+                // libxposed 已根据 executable + hook ID 原子替换它；旧 handle 现在无效，不能再 unhook。
                 replacedCount++
                 continue
             }

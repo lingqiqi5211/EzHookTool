@@ -38,9 +38,10 @@ object Hooks {
         }
 
     /**
-     * 为方法创建可由 [io.github.lingqiqi5211.ezhooktool.xposed.HotReloadSession] 原子替换的普通 hook。
+     * 为方法创建带显式 reloadKey 的普通 hook，可由
+     * [io.github.lingqiqi5211.ezhooktool.xposed.HotReloadSession] 原子替换。
      *
-     * @param key 跨版本稳定的 hook key；同一目标方法中保持不变
+     * @param key 跨版本稳定的 reloadKey；同一目标方法中保持不变
      */
     @JvmStatic
     fun createHook(
@@ -426,7 +427,7 @@ object Hooks {
     /**
      * 用 before / after 回调原子替换已有 hook。
      *
-     * 上游约束：替换会保留原 hook 的 executable、priority、exceptionMode 和 id；
+     * 上游约束：替换会保留原 hook 的 executable、priority、exceptionMode 和 hook ID；
      * 替换成功后传入的 `handle` 失效，调用方应使用返回的新 handle。
      *
      * @param handle 已有 hook 句柄
@@ -450,7 +451,7 @@ object Hooks {
     /**
      * 用 replace 回调原子替换已有 hook。
      *
-     * 上游约束：替换会保留原 hook 的 executable、priority、exceptionMode 和 id；
+     * 上游约束：替换会保留原 hook 的 executable、priority、exceptionMode 和 hook ID；
      * 替换成功后传入的 `handle` 失效，调用方应使用返回的新 handle。
      *
      * @param handle 已有 hook 句柄
