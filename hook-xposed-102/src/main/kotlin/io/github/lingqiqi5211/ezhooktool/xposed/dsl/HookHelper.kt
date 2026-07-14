@@ -96,6 +96,21 @@ fun Method.createBeforeHook(
 ): XposedInterface.HookHandle = createHook(priority, exceptionMode) { before(callback) }
 
 /**
+ * 为 [Method] 创建带稳定 `reloadKey` 的 before hook。
+ *
+ * 适合在 [io.github.lingqiqi5211.ezhooktool.xposed.HotReloadSession] 中使用。
+ */
+fun Method.createBeforeHook(
+    key: String,
+    priority: Int = XposedInterface.PRIORITY_DEFAULT,
+    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+    callback: (HookParam) -> Unit,
+): XposedInterface.HookHandle = createHook(priority, exceptionMode) {
+    reloadKey(key)
+    before(callback)
+}
+
+/**
  * 为 [Method] 创建 after hook。
  *
  * @param priority hook 优先级，数值越大越先执行
@@ -107,6 +122,17 @@ fun Method.createAfterHook(
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
     callback: (HookParam) -> Unit,
 ): XposedInterface.HookHandle = createHook(priority, exceptionMode) { after(callback) }
+
+/** 为 [Method] 创建带稳定 `reloadKey` 的 after hook。 */
+fun Method.createAfterHook(
+    key: String,
+    priority: Int = XposedInterface.PRIORITY_DEFAULT,
+    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+    callback: (HookParam) -> Unit,
+): XposedInterface.HookHandle = createHook(priority, exceptionMode) {
+    reloadKey(key)
+    after(callback)
+}
 
 /**
  * 为 [Method] 创建 replace hook。
@@ -120,6 +146,17 @@ fun Method.createReplaceHook(
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
     callback: (HookParam) -> Any?,
 ): XposedInterface.HookHandle = createHook(priority, exceptionMode) { replace(callback) }
+
+/** 为 [Method] 创建带稳定 `reloadKey` 的 replace hook。 */
+fun Method.createReplaceHook(
+    key: String,
+    priority: Int = XposedInterface.PRIORITY_DEFAULT,
+    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+    callback: (HookParam) -> Any?,
+): XposedInterface.HookHandle = createHook(priority, exceptionMode) {
+    reloadKey(key)
+    replace(callback)
+}
 
 /**
  * 为 [Method] 创建 intercept hook。
@@ -140,6 +177,19 @@ fun Method.createInterceptHook(
     intercept(callback)
 }.create()
 
+/** 为 [Method] 创建带稳定 `reloadKey` 的 intercept hook。 */
+fun Method.createInterceptHook(
+    key: String,
+    priority: Int = XposedInterface.PRIORITY_DEFAULT,
+    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+    callback: (XposedInterface.Chain) -> Any?,
+): XposedInterface.HookHandle = HookFactory(this).apply {
+    priority(priority)
+    exceptionMode(exceptionMode)
+    reloadKey(key)
+    intercept(callback)
+}.create()
+
 /**
  * 让 [Method] 直接返回固定值。
  *
@@ -152,6 +202,17 @@ fun Method.createReturnConstantHook(
     priority: Int = XposedInterface.PRIORITY_DEFAULT,
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
 ): XposedInterface.HookHandle = createHook(priority, exceptionMode) { returnConstant(value) }
+
+/** 为 [Method] 创建带稳定 `reloadKey` 的固定返回值 hook。 */
+fun Method.createReturnConstantHook(
+    key: String,
+    value: Any?,
+    priority: Int = XposedInterface.PRIORITY_DEFAULT,
+    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+): XposedInterface.HookHandle = createHook(priority, exceptionMode) {
+    reloadKey(key)
+    returnConstant(value)
+}
 
 /**
  * 为 [Constructor] 创建 hook。
@@ -183,6 +244,17 @@ fun Constructor<*>.createBeforeHook(
     callback: (HookParam) -> Unit,
 ): XposedInterface.HookHandle = createHook(priority, exceptionMode) { before(callback) }
 
+/** 为 [Constructor] 创建带稳定 `reloadKey` 的 before hook。 */
+fun Constructor<*>.createBeforeHook(
+    key: String,
+    priority: Int = XposedInterface.PRIORITY_DEFAULT,
+    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+    callback: (HookParam) -> Unit,
+): XposedInterface.HookHandle = createHook(priority, exceptionMode) {
+    reloadKey(key)
+    before(callback)
+}
+
 /**
  * 为 [Constructor] 创建 after hook。
  *
@@ -196,6 +268,17 @@ fun Constructor<*>.createAfterHook(
     callback: (HookParam) -> Unit,
 ): XposedInterface.HookHandle = createHook(priority, exceptionMode) { after(callback) }
 
+/** 为 [Constructor] 创建带稳定 `reloadKey` 的 after hook。 */
+fun Constructor<*>.createAfterHook(
+    key: String,
+    priority: Int = XposedInterface.PRIORITY_DEFAULT,
+    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+    callback: (HookParam) -> Unit,
+): XposedInterface.HookHandle = createHook(priority, exceptionMode) {
+    reloadKey(key)
+    after(callback)
+}
+
 /**
  * 为 [Constructor] 创建 replace hook。
  *
@@ -208,6 +291,17 @@ fun Constructor<*>.createReplaceHook(
     exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
     callback: (HookParam) -> Any?,
 ): XposedInterface.HookHandle = createHook(priority, exceptionMode) { replace(callback) }
+
+/** 为 [Constructor] 创建带稳定 `reloadKey` 的 replace hook。 */
+fun Constructor<*>.createReplaceHook(
+    key: String,
+    priority: Int = XposedInterface.PRIORITY_DEFAULT,
+    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+    callback: (HookParam) -> Any?,
+): XposedInterface.HookHandle = createHook(priority, exceptionMode) {
+    reloadKey(key)
+    replace(callback)
+}
 
 /**
  * 为 [Constructor] 创建 intercept hook。
@@ -223,6 +317,19 @@ fun Constructor<*>.createInterceptHook(
 ): XposedInterface.HookHandle = HookFactory(this).apply {
     priority(priority)
     exceptionMode(exceptionMode)
+    intercept(callback)
+}.create()
+
+/** 为 [Constructor] 创建带稳定 `reloadKey` 的 intercept hook。 */
+fun Constructor<*>.createInterceptHook(
+    key: String,
+    priority: Int = XposedInterface.PRIORITY_DEFAULT,
+    exceptionMode: XposedInterface.ExceptionMode = XposedInterface.ExceptionMode.DEFAULT,
+    callback: (XposedInterface.Chain) -> Any?,
+): XposedInterface.HookHandle = HookFactory(this).apply {
+    priority(priority)
+    exceptionMode(exceptionMode)
+    reloadKey(key)
     intercept(callback)
 }.create()
 

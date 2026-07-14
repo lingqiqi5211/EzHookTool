@@ -9,6 +9,6 @@ object ExampleVipHook : BaseHook() {
     override fun init() {
         "com.example.target.License".findMethod {
             name("isVip")
-        }.createReplaceHook { true }
+        }.createReplaceHook("license-is-vip") { true }
     }
 }

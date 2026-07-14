@@ -38,6 +38,22 @@ object Hooks {
         }
 
     /**
+     * 为方法创建可由 [io.github.lingqiqi5211.ezhooktool.xposed.HotReloadSession] 原子替换的普通 hook。
+     *
+     * @param key 跨版本稳定的 hook key；同一目标方法中保持不变
+     */
+    @JvmStatic
+    fun createHook(
+        method: Method,
+        key: String,
+        callback: IMethodHook,
+    ): XposedInterface.HookHandle = method.createHook {
+        reloadKey(key)
+        before { callback.before(it) }
+        after { callback.after(it) }
+    }
+
+    /**
      * 为构造器创建普通 hook。
      *
      * @param constructor 目标构造器
@@ -49,6 +65,18 @@ object Hooks {
             before { callback.before(it) }
             after { callback.after(it) }
         }
+
+    /** 为构造器创建带稳定 `reloadKey` 的普通 hook。 */
+    @JvmStatic
+    fun createHook(
+        constructor: Constructor<*>,
+        key: String,
+        callback: IMethodHook,
+    ): XposedInterface.HookHandle = constructor.createHook {
+        reloadKey(key)
+        before { callback.before(it) }
+        after { callback.after(it) }
+    }
 
     /**
      * 为方法创建替换 hook。
@@ -62,6 +90,17 @@ object Hooks {
             replace { callback.replace(it) }
         }
 
+    /** 为方法创建带稳定 `reloadKey` 的替换 hook。 */
+    @JvmStatic
+    fun createHook(
+        method: Method,
+        key: String,
+        callback: IReplaceHook,
+    ): XposedInterface.HookHandle = method.createHook {
+        reloadKey(key)
+        replace { callback.replace(it) }
+    }
+
     /**
      * 为构造器创建替换 hook。
      *
@@ -74,6 +113,17 @@ object Hooks {
             replace { callback.replace(it) }
         }
 
+    /** 为构造器创建带稳定 `reloadKey` 的替换 hook。 */
+    @JvmStatic
+    fun createHook(
+        constructor: Constructor<*>,
+        key: String,
+        callback: IReplaceHook,
+    ): XposedInterface.HookHandle = constructor.createHook {
+        reloadKey(key)
+        replace { callback.replace(it) }
+    }
+
     /**
      * 为方法列表批量创建普通 hook。
      *
@@ -84,6 +134,14 @@ object Hooks {
     fun createHooks(methods: Iterable<Method>, callback: IMethodHook): List<XposedInterface.HookHandle> =
         methods.map { createHook(it, callback) }
 
+    /** 为方法列表创建带同一稳定 `reloadKey` 的普通 hook。 */
+    @JvmStatic
+    fun createHooks(
+        methods: Iterable<Method>,
+        key: String,
+        callback: IMethodHook,
+    ): List<XposedInterface.HookHandle> = methods.map { createHook(it, key, callback) }
+
     /**
      * 为方法列表批量创建替换 hook。
      *
@@ -93,6 +151,14 @@ object Hooks {
     @JvmStatic
     fun createHooks(methods: Iterable<Method>, callback: IReplaceHook): List<XposedInterface.HookHandle> =
         methods.map { createHook(it, callback) }
+
+    /** 为方法列表创建带同一稳定 `reloadKey` 的替换 hook。 */
+    @JvmStatic
+    fun createHooks(
+        methods: Iterable<Method>,
+        key: String,
+        callback: IReplaceHook,
+    ): List<XposedInterface.HookHandle> = methods.map { createHook(it, key, callback) }
 
     /**
      * 为构造器列表批量创建普通 hook。
@@ -106,6 +172,14 @@ object Hooks {
         callback: IMethodHook,
     ): List<XposedInterface.HookHandle> = constructors.map { createHook(it, callback) }
 
+    /** 为构造器列表创建带同一稳定 `reloadKey` 的普通 hook。 */
+    @JvmStatic
+    fun createConstructorHooks(
+        constructors: Iterable<Constructor<*>>,
+        key: String,
+        callback: IMethodHook,
+    ): List<XposedInterface.HookHandle> = constructors.map { createHook(it, key, callback) }
+
     /**
      * 为构造器列表批量创建替换 hook。
      *
@@ -117,6 +191,14 @@ object Hooks {
         constructors: Iterable<Constructor<*>>,
         callback: IReplaceHook,
     ): List<XposedInterface.HookHandle> = constructors.map { createHook(it, callback) }
+
+    /** 为构造器列表创建带同一稳定 `reloadKey` 的替换 hook。 */
+    @JvmStatic
+    fun createConstructorHooks(
+        constructors: Iterable<Constructor<*>>,
+        key: String,
+        callback: IReplaceHook,
+    ): List<XposedInterface.HookHandle> = constructors.map { createHook(it, key, callback) }
 
     /**
      * 按方法名和参数类型查找方法并立即创建 hook。
@@ -136,6 +218,19 @@ object Hooks {
         return installCallback(method, callback)
     }
 
+    /** 按方法名查找并以稳定 `reloadKey` 安装 hook。 */
+    @JvmStatic
+    fun findAndHookMethodWithKey(
+        clazz: Class<*>,
+        methodName: String,
+        key: String,
+        vararg parameterTypesAndCallback: Any,
+    ): XposedInterface.HookHandle {
+        val callback = requireCallback(parameterTypesAndCallback)
+        val method = resolveMethod(clazz, methodName, parameterTypesAndCallback)
+        return installCallback(method, callback, key)
+    }
+
     /**
      * 按类名、方法名和参数类型查找方法并立即创建 hook。
      *
@@ -152,6 +247,20 @@ object Hooks {
         vararg parameterTypesAndCallback: Any,
     ): XposedInterface.HookHandle =
         findAndHookMethod(loadClass(className, HookClassLoader.currentOrDefault()), methodName, *parameterTypesAndCallback)
+
+    /** 按类名查找并以稳定 `reloadKey` 安装方法 hook。 */
+    @JvmStatic
+    fun findAndHookMethodWithKey(
+        className: String,
+        methodName: String,
+        key: String,
+        vararg parameterTypesAndCallback: Any,
+    ): XposedInterface.HookHandle = findAndHookMethodWithKey(
+        loadClass(className, HookClassLoader.currentOrDefault()),
+        methodName,
+        key,
+        *parameterTypesAndCallback,
+    )
 
     /**
      * 按类名、指定 `ClassLoader`、方法名和参数类型查找方法并立即创建 hook。
@@ -170,6 +279,21 @@ object Hooks {
     ): XposedInterface.HookHandle =
         findAndHookMethod(loadClass(className, classLoader), methodName, *parameterTypesAndCallback)
 
+    /** 按类名和 ClassLoader 查找并以稳定 `reloadKey` 安装方法 hook。 */
+    @JvmStatic
+    fun findAndHookMethodWithKey(
+        className: String,
+        classLoader: ClassLoader,
+        methodName: String,
+        key: String,
+        vararg parameterTypesAndCallback: Any,
+    ): XposedInterface.HookHandle = findAndHookMethodWithKey(
+        loadClass(className, classLoader),
+        methodName,
+        key,
+        *parameterTypesAndCallback,
+    )
+
     /**
      * 按参数类型查找构造器并立即创建 hook。
      *
@@ -184,6 +308,18 @@ object Hooks {
         val callback = requireCallback(parameterTypesAndCallback)
         val constructor = resolveConstructor(clazz, parameterTypesAndCallback)
         return installCallback(constructor, callback)
+    }
+
+    /** 按参数类型查找并以稳定 `reloadKey` 安装构造器 hook。 */
+    @JvmStatic
+    fun findAndHookConstructorWithKey(
+        clazz: Class<*>,
+        key: String,
+        vararg parameterTypesAndCallback: Any,
+    ): XposedInterface.HookHandle {
+        val callback = requireCallback(parameterTypesAndCallback)
+        val constructor = resolveConstructor(clazz, parameterTypesAndCallback)
+        return installCallback(constructor, callback, key)
     }
 
     /**
@@ -201,6 +337,18 @@ object Hooks {
     ): XposedInterface.HookHandle =
         findAndHookConstructor(loadClass(className, HookClassLoader.currentOrDefault()), *parameterTypesAndCallback)
 
+    /** 按类名查找并以稳定 `reloadKey` 安装构造器 hook。 */
+    @JvmStatic
+    fun findAndHookConstructorWithKey(
+        className: String,
+        key: String,
+        vararg parameterTypesAndCallback: Any,
+    ): XposedInterface.HookHandle = findAndHookConstructorWithKey(
+        loadClass(className, HookClassLoader.currentOrDefault()),
+        key,
+        *parameterTypesAndCallback,
+    )
+
     /**
      * 按类名、指定 `ClassLoader` 和参数类型查找构造器并立即创建 hook。
      *
@@ -216,6 +364,19 @@ object Hooks {
     ): XposedInterface.HookHandle =
         findAndHookConstructor(loadClass(className, classLoader), *parameterTypesAndCallback)
 
+    /** 按类名和 ClassLoader 查找并以稳定 `reloadKey` 安装构造器 hook。 */
+    @JvmStatic
+    fun findAndHookConstructorWithKey(
+        className: String,
+        classLoader: ClassLoader,
+        key: String,
+        vararg parameterTypesAndCallback: Any,
+    ): XposedInterface.HookHandle = findAndHookConstructorWithKey(
+        loadClass(className, classLoader),
+        key,
+        *parameterTypesAndCallback,
+    )
+
     /**
      * 为方法创建 intercept hook。
      *
@@ -228,6 +389,17 @@ object Hooks {
         callback: XposedInterface.Hooker,
     ): XposedInterface.HookHandle = method.createInterceptHook { callback.intercept(it) }
 
+    /** 为方法创建带稳定 `reloadKey` 的 intercept hook。 */
+    @JvmStatic
+    fun intercept(
+        method: Method,
+        key: String,
+        callback: XposedInterface.Hooker,
+    ): XposedInterface.HookHandle = method.createHook {
+        reloadKey(key)
+        intercept(callback)
+    }
+
     /**
      * 为构造器创建 intercept hook。
      *
@@ -239,6 +411,17 @@ object Hooks {
         constructor: Constructor<*>,
         callback: XposedInterface.Hooker,
     ): XposedInterface.HookHandle = constructor.createInterceptHook { callback.intercept(it) }
+
+    /** 为构造器创建带稳定 `reloadKey` 的 intercept hook。 */
+    @JvmStatic
+    fun intercept(
+        constructor: Constructor<*>,
+        key: String,
+        callback: XposedInterface.Hooker,
+    ): XposedInterface.HookHandle = constructor.createHook {
+        reloadKey(key)
+        intercept(callback)
+    }
 
     /**
      * 用 before / after 回调原子替换已有 hook。
@@ -322,6 +505,29 @@ object Hooks {
         is XposedInterface.Hooker -> when (member) {
             is Method -> intercept(member, callback)
             is Constructor<*> -> intercept(member, callback)
+            else -> error("Unsupported member: $member")
+        }
+        else -> throw IllegalArgumentException("Unsupported callback type: ${callback.javaClass.name}")
+    }
+
+    private fun installCallback(
+        member: Any,
+        callback: Any,
+        key: String,
+    ): XposedInterface.HookHandle = when (callback) {
+        is IMethodHook -> when (member) {
+            is Method -> createHook(member, key, callback)
+            is Constructor<*> -> createHook(member, key, callback)
+            else -> error("Unsupported member: $member")
+        }
+        is IReplaceHook -> when (member) {
+            is Method -> createHook(member, key, callback)
+            is Constructor<*> -> createHook(member, key, callback)
+            else -> error("Unsupported member: $member")
+        }
+        is XposedInterface.Hooker -> when (member) {
+            is Method -> intercept(member, key, callback)
+            is Constructor<*> -> intercept(member, key, callback)
             else -> error("Unsupported member: $member")
         }
         else -> throw IllegalArgumentException("Unsupported callback type: ${callback.javaClass.name}")

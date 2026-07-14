@@ -370,10 +370,12 @@ Hooks.intercept(method, chain -> {
 
 `HookFactory.id(...)` 给当前 hook 分配一个模块和 executable 范围内唯一的 id。
 之后用同一个 id 在同一个 executable 上创建新 hook，旧 hook 会被原子替换，原 handle 失效。
+如果这个 id 是为了跨模块更新保持稳定，请使用语义更明确的 `reloadKey(...)`；底层仍完全使用
+libxposed 原生的 id/原子替换机制。
 
 ```kotlin
 val handle = method.createHook {
-    id("license-check")
+    reloadKey("license-check")
     before {
         // ...
     }
@@ -401,6 +403,9 @@ Java 调用方：
 HookHandle newHandle = Hooks.replaceHook(oldHandle, methodHook);  // IMethodHook
 HookHandle newHandle = Hooks.replaceHook(oldHandle, replaceHook); // IReplaceHook
 HookHandle newHandle = oldHandle.replaceHook(hooker);             // 原生 Hooker
+
+// 新建、可参与 HotReloadSession 的 Java hook：
+HookHandle handle = Hooks.createHook(method, "license-check", methodHook);
 ```
 
 `HookHandle.id` 是 `getId()` 的 Kotlin 直通属性：
@@ -435,91 +440,121 @@ override fun onPackageReady(param: PackageReadyParam) {
 
 ## libxposed 102 热重载
 
-是否允许热重载由 framework 在调用 `onHotReloading` 时决定，模块侧不再持有显式的查询入口（上游
-102 SNAPSHOT 已移除 `PROP_RT_HOT_RELOAD`）。
+API 102 的热重载由 framework 在 `onHotReloading` 时发起。要让模块 APK 更新后自动触发，
+在 `META-INF/xposed/module.prop` 中声明：
 
-EzHookTool 把热重载里跨代 snapshot、`EzReflect.classLoader` 重建、旧 handle unhook、
-重新分发到使用者的「目标进程准备好后跑什么」逻辑都收在 `EzXposed` 里。模块作者只需要：
+```properties
+minApiVersion=102
+targetApiVersion=102
+autoHotReload=true
+```
 
-1. 用 `EzXposed.onTargetReady { ... }` 注册「目标进程就绪后跑什么」。
-2. 覆写 `onHotReloading` 和 `onHotReloaded`，各一行调用。
+启用 `autoHotReload` 的模块应只保留一个 Java entry。framework 不会因为热重载重新分发
+`onPackageLoaded`、`onPackageReady` 或 `onSystemServerStarting`；新 entry 会先收到
+`onModuleLoaded`，随后收到 `onHotReloaded`。因此必须把当前目标进程的 classloader 等信息保存并恢复。
+
+### 推荐：HotReloadSession
+
+`HotReloadSession` 是 API 102 的推荐入口。它不重新实现 hook 替换：每个新 hook 仍通过
+libxposed 原生 `executable + id` 规则原子替换旧 hook。session 只负责保存目标 snapshot、在新 hook
+全部同步安装成功后清理未复建的旧 handle，并把初始化错误直接反馈给 framework。
 
 ```kotlin
 class MainHook : XposedModule() {
+    private val hotReload = HotReloadSession()
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         EzXposed.initOnModuleLoaded(this, param)
-        // 初次加载和热重载后，EzXposed 都会自动触发一次这里。
-        EzXposed.onTargetReady {
+        hotReload.onTargetReady {
             installHooks()
         }
     }
 
+    override fun onPackageLoaded(param: PackageLoadedParam) {
+        if (param.packageName == TargetApp) {
+            EzXposed.initOnPackageLoaded(param)
+        }
+    }
+
     override fun onPackageReady(param: PackageReadyParam) {
-        if (param.packageName != TargetApp) return
-        EzXposed.initOnPackageReady(param)
+        if (param.packageName == TargetApp) {
+            EzXposed.initOnPackageReady(param)
+        }
     }
 
     override fun onHotReloading(param: HotReloadingParam): Boolean =
-        EzXposed.handleHotReloading(param)
+        hotReload.prepare(param)
 
-    override fun onHotReloaded(param: HotReloadedParam) =
-        EzXposed.handleHotReloaded(this, param)
+    override fun onHotReloaded(param: HotReloadedParam) {
+        val result = hotReload.restore(this, param)
+        // result 可用于模块自己的日志、通知或 Toast 反馈。
+    }
 }
 ```
 
-`EzXposed.onTargetReady { ... }` 在初次 `initOnPackageReady` 或 `initOnSystemServerStarting`
-末尾触发；热重载时 `handleHotReloaded` 还原 snapshot 后再触发一次。允许多次注册，按注册顺序执行；
-如果在 snapshot 已存在的状态下注册，会立即执行一次，避免错过当前进程。
-
-`handleHotReloaded` 内部做的事：
-
-1. 用 [initOnModuleLoaded] 等价逻辑重置 `base`、`modulePath`、`moduleRes`、`processName`、`isSystemServer`。
-2. 处理 `param.oldHookHandles`：默认全部 unhook；传入 `onOldHooks` 时改为交给它处置。
-3. 还原 `handleHotReloading` 透传的 snapshot，重建 `EzReflect.classLoader` 与 `packageName`。
-4. 把 `handleHotReloading` 里 `extra` 透传的数据交给 `onExtra`（若提供）。
-5. 重新触发 [onTargetReady] 已注册的回调。
-
-### 夹带自己的跨代状态（进阶）
-
-`handleHotReloading` 会把工具库自己的 snapshot 塞到 `setSavedInstanceState`。如果还想跨代传递
-hook 里攒下的宿主对象、构造器 `this`、额外 classloader 等，直接把它们放进 `extra`：
+在 `installHooks()` 中，每个会改变目标进程行为的 hook 都要显式声明稳定 `reloadKey`：
 
 ```kotlin
-override fun onHotReloading(param: HotReloadingParam): Boolean =
-    EzXposed.handleHotReloading(param, extra = arrayOf(hostConfig, targetView))
+method.createHook {
+    reloadKey("license-check") // 稳定字符串；不要用堆栈、lambda 或临时对象自动生成
+    before {
+        // ...
+    }
+}
 
-override fun onHotReloaded(param: HotReloadedParam) =
-    EzXposed.handleHotReloaded(this, param, onExtra = { extra ->
-        val hostConfig = extra.getOrNull(0)
-        val targetView = extra.getOrNull(1)
-        // 用回收到的宿主对象重建状态
-    })
+// 单阶段快捷入口也可把 key 放在第一个参数：
+method.createBeforeHook("license-check") { /* ... */ }
 ```
 
-`extra` 与库 snapshot 受同一条硬约束：跨代 `setSavedInstanceState` 只接受 system /
-system_server / app classloader 创建的对象（`String`、`ClassLoader`、`ApplicationInfo`、
-`Bundle`、宿主类实例等），**拒绝**旧 module classloader 创建的对象——比如模块自己定义的
-data class、lambda、持有模块类引用的容器。放这类对象会让 framework 拒绝本次热重载。
+同一 `Executable` 内不能重复使用相同 key；不同目标方法可以复用同一个 key。session 会在同步安装时
+立即拒绝空 key、重复 key 和安装异常。热重载阶段 `onTargetReady` 的异常不会再被吞掉：旧 hook 不会被
+批量提前卸载，framework 能收到失败；成功时 `HotReloadResult` 给出新建、原子替换和最终清理数量。
 
-如果要完全自定义 saved state 格式，跳过 `handleHotReloading` 直接覆写 `onHotReloading`。
+从未设置 id 的旧版本首次迁移时，session 会拒绝热重载并提示重启目标进程一次；否则新旧 hook 会在
+迁移窗口内同时生效。完成这一次重启后，后续更新即可按稳定 key 原子替换。
 
-### 按 id 替换 hook（进阶）
+Java 对应使用带 key 的入口，例如 `Hooks.createHook(method, "license-check", callback)`、
+`Hooks.findAndHookMethodWithKey(...)`、`Hooks.findAndHookConstructorWithKey(...)`。
 
-`handleHotReloaded` 默认把所有旧 handle unhook，新 code 在 `onTargetReady` 里重挂。如果想保留
-部分 hook 不重挂、改用 [HookHandle.replaceHook] 平滑迁移，传入 `onOldHooks` 即可——库仍负责
-snapshot 恢复和 `onTargetReady` 触发，只把旧 handle 的处置交回给你：
+### 外部回调与跨代宿主状态
+
+hook 之外的 listener、receiver、binder callback、线程或资源 observer 不是 `HookHandle`，必须由模块自己
+取消注册。把清理放进 `scope`，旧代码会在允许重载前执行它；scope 状态会在新代码的
+`onTargetReady` 前恢复：
 
 ```kotlin
-override fun onHotReloaded(param: HotReloadedParam) =
-    EzXposed.handleHotReloaded(this, param, onOldHooks = { oldHandles ->
-        val byId = oldHandles.groupById()
-        byId["license-check"]?.replaceAll(LicenseHooker())
-        byId[null].orEmpty().unhookAll()
-    })
+hotReload.scope.onReloading {
+    hostObserver.unregister()
+}
+hotReload.scope.putState("host-view", targetView)
+
+// 新 entry 的 hotReload.onTargetReady { ... } 中：
+val oldView = hotReload.scope.state("host-view", View::class.java)
 ```
 
-`HookHandle` 列表辅助函数：
+`scope` 与 `prepare(..., extra)` 只接受 system、system_server 或目标 app classloader 创建的对象。
+模块自身的 data class、lambda、匿名对象，或包含这些对象的容器不能跨代保存；工具库会尽早报错，
+framework 仍会做最终校验。
+
+### 不适合承诺“无缝”的情况
+
+会话能无缝替换的是**已经存在、同步声明且有稳定 key 的代码 hook**，不是任意运行时副作用：
+
+- 首次调用、异步任务或回调内部才创建的延迟 hook，无法在 `onHotReloaded` 时知道它何时会出现。应改为
+  在 `onTargetReady` 同步安装，或自行定义明确的延迟安装/清理边界。
+- `Resources`、`AssetManager`、`ResourcesLoader`、已 inflate 的 View、静态缓存和 SystemUI 资源缓存
+  可能仍指向旧 APK 或已计算结果。热重载不会自动重跑资源覆盖、重新 inflate UI 或清空宿主缓存；这类
+  改动需要模块自行撤销并重新应用，若宿主没有可逆 API，就应回退到重启目标进程。
+- 已启动的线程和向 framework/系统服务注册的外部回调必须在 `scope.onReloading` 中停止或注销，否则旧
+  module classloader 仍可能被引用。
+
+### 兼容旧入口
+
+`EzXposed.handleHotReloading` / `handleHotReloaded` 仍保留，用于已有模块或完全自定义的迁移流程。
+旧 `handleHotReloaded` 的默认行为是先 unhook 全部旧 handle、再触发新一代回调，存在短暂空窗，且为了
+保护目标 app 会记录并继续处理 `onTargetReady` 异常。新模块应优先使用 `HotReloadSession`。
+
+需要手动处理旧 handle 时，辅助函数仍可使用：
 
 - `oldHandles.groupById()` → `Map<String?, List<HookHandle>>`
 - `oldHandles.replaceAll(hooker)` → `List<HookHandle>`，按原顺序返回新 handle

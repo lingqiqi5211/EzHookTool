@@ -8,14 +8,14 @@ import io.github.lingqiqi5211.ezhooktool.xposed.dsl.id
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.replaceWith
 
 /**
- * 演示 hook id 与运行时替换。
+ * 演示稳定 reload key 与运行时替换。
  *
- * 第一次注册时为 hook 设置了 id，便于在 onHotReloaded 中重新挂钩或运行时切换实现。
+ * 同一 key 会由 HotReloadSession 在模块更新时原子替换；句柄也可用于运行时切换实现。
  */
 object ExampleReplaceHook : BaseHook() {
     override val name: String = "ExampleReplaceHook"
 
-    /** 暴露给 MainHook，用于热重载场景下的句柄迁移。 */
+    /** 用于运行时切换实现的当前句柄。 */
     var handle: XposedInterface.HookHandle? = null
         private set
 
@@ -24,7 +24,7 @@ object ExampleReplaceHook : BaseHook() {
             name("getBoolean")
             params(String::class.java)
         }.createHook {
-            id(HookId)
+            reloadKey(HookId)
             before { param ->
                 Log.i(name, "before, key=${param.argAs<String>(0)}, id=${handle?.id}")
             }

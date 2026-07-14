@@ -33,7 +33,8 @@ import java.util.function.Consumer
  * - [appContext] 采用懒解析，期望指向目标进程 application；如果应用尚未创建，请改用 [appContextOrNull] 或稍后访问
  * - [modulePath] / [moduleRes] 在 [initOnModuleLoaded] 后可用
  *
- * 热重载：见 [handleHotReloading] / [handleHotReloaded]。
+ * 热重载：新模块优先使用 [HotReloadSession]；[handleHotReloading] / [handleHotReloaded]
+ * 保留给兼容旧代码和完全自定义的迁移流程。
  */
 @SuppressLint("PrivateApi", "DiscouragedPrivateApi", "StaticFieldLeak")
 object EzXposed {
@@ -51,6 +52,14 @@ object EzXposed {
 
     /** [onTargetReady] 注册的回调列表。 */
     private val targetReadyCallbacks = mutableListOf<TargetReadyCallback>()
+
+    /**
+     * 仅在 [HotReloadSession] 重建 hook 的同步窗口内设置。
+     *
+     * ThreadLocal 避免把 session（以及新 module classloader）泄漏给异步任务；异步注册 hook
+     * 本来就不可能构成一次可原子收尾的热重载，因此必须在 session 的同步回调里完成。
+     */
+    private val activeHotReloadSession = ThreadLocal<HotReloadSession?>()
 
     @JvmStatic
     @Volatile
@@ -319,7 +328,7 @@ object EzXposed {
      * 注册「目标进程准备好后跑什么」的回调。
      *
      * 初次加载：在 [initOnPackageReady] / [initOnSystemServerStarting] 末尾触发。
-     * 热重载：[handleHotReloaded] 还原 snapshot 后触发。
+     * 热重载：[handleHotReloaded] 或 [HotReloadSession.restore] 还原 snapshot 后触发。
      *
      * 允许多次注册；按注册顺序执行。如果调用 [onTargetReady] 时目标进程已经就绪
      * （即 snapshot 已存在），新注册的回调会立即在当前线程执行一次，避免错过当前进程。
@@ -397,6 +406,30 @@ object EzXposed {
         onOldHooks: Consumer<List<XposedInterface.HookHandle>>? = null,
         onExtra: Consumer<Array<Any?>>? = null,
     ) {
+        restoreHotReloaded(
+            base = base,
+            param = param,
+            onOldHooks = onOldHooks,
+            onExtra = onExtra,
+            propagateTargetReadyFailure = false,
+        )
+    }
+
+    /**
+     * [HotReloadSession] 使用的底层恢复入口。
+     *
+     * 保留旧的 [handleHotReloaded] 的「记录错误后继续」兼容语义；session 则要求把
+     * `onTargetReady` 的失败原样抛出，以便 framework 明确判定本次重载没有成功。
+     *
+     * @return 是否恢复到了由 [handleHotReloading] 保存的 EzHookTool snapshot
+     */
+    internal fun restoreHotReloaded(
+        base: XposedInterface,
+        param: XposedModuleInterface.HotReloadedParam,
+        onOldHooks: Consumer<List<XposedInterface.HookHandle>>?,
+        onExtra: Consumer<Array<Any?>>?,
+        propagateTargetReadyFailure: Boolean,
+    ): Boolean {
         initOnModuleLoaded(base, param)
         if (onOldHooks != null) {
             onOldHooks.accept(param.oldHookHandles)
@@ -404,14 +437,41 @@ object EzXposed {
             param.oldHookHandles.unhookAll()
         }
 
-        val snapshot = TargetSnapshot.tryRestore(param.savedInstanceState) ?: return
+        val snapshot = TargetSnapshot.tryRestore(param.savedInstanceState) ?: return false
         EzReflect.init(snapshot.classLoader)
         packageName = snapshot.packageName
         processName = snapshot.processName
         isSystemServer = snapshot.isSystemServer
         targetSnapshot = snapshot
         onExtra?.accept(TargetSnapshot.restoreExtra(param.savedInstanceState))
-        dispatchTargetReady()
+        dispatchTargetReady(propagateTargetReadyFailure)
+        return true
+    }
+
+    /** 在 [HotReloadSession] 的同步安装窗口内注册 hook，并记录其稳定 key。 */
+    internal fun installHookWithHotReloadTracking(
+        target: Executable,
+        id: String?,
+        installer: () -> XposedInterface.HookHandle,
+    ): XposedInterface.HookHandle =
+        activeHotReloadSession.get()?.installHook(target, id, installer) ?: installer()
+
+    /** 让 [HotReloadSession] 暂时成为当前线程的 hook 安装上下文。 */
+    internal fun <T> withHotReloadSession(
+        session: HotReloadSession,
+        block: () -> T,
+    ): T {
+        val previous = activeHotReloadSession.get()
+        activeHotReloadSession.set(session)
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                activeHotReloadSession.remove()
+            } else {
+                activeHotReloadSession.set(previous)
+            }
+        }
     }
 
     @JvmStatic
@@ -466,10 +526,14 @@ object EzXposed {
     }
 
     /** 触发当前已注册的 [onTargetReady] 回调。 */
-    private fun dispatchTargetReady() {
+    private fun dispatchTargetReady(propagateFailure: Boolean = false) {
         val snapshot = synchronized(targetReadyCallbacks) { targetReadyCallbacks.toList() }
         for (callback in snapshot) {
-            runCallbackSafely(callback)
+            if (propagateFailure) {
+                callback.run()
+            } else {
+                runCallbackSafely(callback)
+            }
         }
     }
 

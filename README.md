@@ -114,11 +114,12 @@ EzReflect.init(yourClassLoader)
 
 详细说明见 `doc/overview.md`。
 
-`HookFactory` 支持给 hook 分配 id；同模块同 executable 上相同 id 的新 hook 会原子替换旧 hook：
+`HookFactory` 支持给 hook 分配 id；同模块同 executable 上相同 id 的新 hook 会原子替换旧 hook。
+用于跨版本热重载时，推荐用语义更明确的 `reloadKey`：
 
 ```kotlin
 val handle = method.createHook {
-    id("license-check")
+    reloadKey("license-check")
     before { /* ... */ }
 }
 
@@ -137,14 +138,17 @@ override fun onPackageReady(param: PackageReadyParam) {
 }
 ```
 
-热重载：把目标进程要跑的逻辑写在 `EzXposed.onTargetReady { ... }`，
-再加两行模板让 `EzXposed` 接管跨代 snapshot 和重建：
+热重载：API 102 模块在 `META-INF/xposed/module.prop` 中设置 `autoHotReload=true` 后，
+Xposed 应用更新模块也会请求热重载。新模块推荐使用 `HotReloadSession`；它用 libxposed 原生
+`executable + reloadKey` 原子替换已声明的 hook，等新 hook 成功安装后才清理未复建的旧 handle：
 
 ```kotlin
 class MainHook : XposedModule() {
+    private val hotReload = HotReloadSession()
+
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         EzXposed.initOnModuleLoaded(this, param)
-        EzXposed.onTargetReady { installHooks() }
+        hotReload.onTargetReady { installHooks() }
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
@@ -153,17 +157,19 @@ class MainHook : XposedModule() {
     }
 
     override fun onHotReloading(param: HotReloadingParam) =
-        EzXposed.handleHotReloading(param)
+        hotReload.prepare(param)
 
-    override fun onHotReloaded(param: HotReloadedParam) =
-        EzXposed.handleHotReloaded(this, param)
+    override fun onHotReloaded(param: HotReloadedParam) {
+        val result = hotReload.restore(this, param)
+    }
 }
 ```
 
-`onTargetReady` 在初次加载和热重载后都会触发；`handleHotReloaded` 默认 unhook 上一代全部
-handle 并重建 `EzReflect.classLoader`。需要跨代夹带自己的状态时给 `handleHotReloading` 传
-`extra`、给 `handleHotReloaded` 传 `onExtra`；需要按 id 保留 / 替换旧 hook 时给
-`handleHotReloaded` 传 `onOldHooks`。详见 `doc/overview.md`。
+session 内所有同步安装的 hook 都必须显式设置非空、稳定的 `reloadKey`。外部 listener / receiver /
+线程可通过 `hotReload.scope.onReloading { ... }` 清理；资源缓存、已 inflate 的 View 和异步延迟创建的
+hook 不会由 framework 自动重建，必要时应重启目标进程。旧的 `EzXposed.handleHotReloading` /
+`handleHotReloaded` 仍兼容保留。首次从无 id 的旧版本迁移到 session 时也需要先重启一次目标进程。
+完整约束和 Java 写法见 `doc/overview.md`。
 
 ### 模块说明
 

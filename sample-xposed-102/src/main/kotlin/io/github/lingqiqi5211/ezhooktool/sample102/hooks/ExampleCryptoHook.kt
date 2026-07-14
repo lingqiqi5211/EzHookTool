@@ -9,7 +9,7 @@ object ExampleCryptoHook : BaseHook() {
     override fun init() {
         "com.example.target.Crypto".findMethod {
             name("encrypt")
-        }.createInterceptHook { chain ->
+        }.createInterceptHook("crypto-encrypt") { chain ->
             chain.proceed()
         }
     }

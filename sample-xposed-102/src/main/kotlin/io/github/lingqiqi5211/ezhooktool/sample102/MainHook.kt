@@ -15,15 +15,19 @@ import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleReplaceHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleReporterHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleVipHook
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
+import io.github.lingqiqi5211.ezhooktool.xposed.HotReloadSession
 
 private const val TargetApp = "com.example.target"
 private const val TAG = "MainHook"
 
 class MainHook : XposedModule() {
+    private val hotReload = HotReloadSession()
+
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         EzXposed.initOnModuleLoaded(this, param)
-        // 注册「目标进程准备好后跑什么」。初次加载和热重载后 EzXposed 都会自动触发一次。
-        EzXposed.onTargetReady {
+        // 初次加载和热重载后都会触发。session 会要求每个 hook 声明稳定 reloadKey，
+        // 让新旧实现由 libxposed 原子替换，而不是先把所有旧 hook 摘掉。
+        hotReload.onTargetReady {
             initHooks(ExampleVipHook, ExampleCryptoHook, ExampleReporterHook, ExampleReplaceHook)
         }
     }
@@ -43,23 +47,20 @@ class MainHook : XposedModule() {
         EzXposed.initOnPackageReady(param)
     }
 
-    // 启用热重载只需要下面两个一行模板。EzXposed 会自动透传目标进程 snapshot，
-    // 在新 code 里 unhook 上一代 handle、重建 EzReflect.classLoader 并再次触发 onTargetReady。
+    // autoHotReload=true 时，Xposed 应用更新模块后也会走这里。
     override fun onHotReloading(param: HotReloadingParam): Boolean =
-        EzXposed.handleHotReloading(param)
+        hotReload.prepare(param)
 
-    override fun onHotReloaded(param: HotReloadedParam) =
-        EzXposed.handleHotReloaded(this, param)
+    override fun onHotReloaded(param: HotReloadedParam) {
+        val result = hotReload.restore(this, param)
+        Log.i(TAG, "Hot reload finished: $result")
+    }
 
     private fun initHooks(vararg hooks: BaseHook) {
         for (hook in hooks) {
-            try {
-                if (hook.isInit) continue
-                hook.init()
-                hook.isInit = true
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize hook: ${hook.name}", e)
-            }
+            if (hook.isInit) continue
+            hook.init()
+            hook.isInit = true
         }
     }
 }

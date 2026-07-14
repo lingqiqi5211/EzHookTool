@@ -143,14 +143,27 @@ class HookFactory internal constructor(
         id = value
     }
 
+    /**
+     * 为 [io.github.lingqiqi5211.ezhooktool.xposed.HotReloadSession] 指定稳定重载 key。
+     *
+     * 同一目标方法（或构造器）在新旧代码中使用相同 key 时，libxposed 会原子替换旧 hook。
+     * 与 [id] 的底层含义相同；这个名称专门用于声明「该 id 是跨版本稳定契约」。
+     */
+    fun reloadKey(value: String) {
+        require(value.isNotBlank()) { "reloadKey must not be blank." }
+        id = value
+    }
+
     internal fun create(): XposedInterface.HookHandle {
         require(stages.isNotEmpty()) { "No hook callback specified" }
         val hooker = buildHooker(target, stages.toList())
-        return EzXposed.base.hook(target)
-            .setPriority(priority)
-            .setExceptionMode(exceptionMode)
-            .setId(id)
-            .intercept(hooker)
+        return EzXposed.installHookWithHotReloadTracking(target, id) {
+            EzXposed.base.hook(target)
+                .setPriority(priority)
+                .setExceptionMode(exceptionMode)
+                .setId(id)
+                .intercept(hooker)
+        }
     }
 }
 
