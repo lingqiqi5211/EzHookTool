@@ -1,0 +1,228 @@
+<!doctype html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>HookReloadBatch</title>
+<link href="../../../images/logo-icon.svg" rel="icon" type="image/svg"><script>var pathToRoot = "../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../scripts/sourceset_dependencies.js" async></script>
+<link href="../../../styles/style.css" rel="Stylesheet">
+<link href="../../../styles/main.css" rel="Stylesheet">
+<link href="../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../scripts/navigation-loader.js" async></script>
+<script type="text/javascript" src="../../../scripts/platform-content-handler.js" async></script>
+<script type="text/javascript" src="../../../scripts/main.js" defer></script>
+<script type="text/javascript" src="../../../scripts/prism.js" async></script>
+<script type="text/javascript" src="../../../ui-kit/ui-kit.min.js" defer></script></head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+<a class="library-name--link" href="../../../index.html" tabindex="1">
+                    EzHookTool
+            </a>        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle" type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true" data-filter=":hook-xposed-102/release">release</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox" data-role="dropdown-toggle" aria-controls="platform-tags-listbox" aria-haspopup="listbox" aria-expanded="false" aria-label="Toggle source sets"></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option jvm-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":hook-xposed-102/release" data-filter=":hook-xposed-102/release">
+                                <span class="checkbox--icon"></span>
+                                release
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button" type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config="{&quot;defaultSize&quot;: 280, &quot;minSize&quot;: 200, &quot;maxSize&quot;: 400}">
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list" data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    EzHookTool
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageids="hook-xposed-102::io.github.lingqiqi5211.ezhooktool.xposed/HookReloadBatch///PointingToDeclaration//619576607">
+  <div class="breadcrumbs"><a href="../../index.html">hook-xposed-102</a><span class="delimiter">/</span><a href="../index.html">io.github.lingqiqi5211.ezhooktool.xposed</a><span class="delimiter">/</span><span class="current">HookReloadBatch</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span>Hook</span><wbr><span>Reload</span><wbr><span><span>Batch</span></span></h1>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">HookReloadBatch</a>&nbsp;<span><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a>&nbsp;</span><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">namespace<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">xposed<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedInterface///PointingToDeclaration/">XposedInterface</span><span class="token operator"> = </span>EzXposed.base<span class="token punctuation">, </span></span><span class="parameter ">requireStableTopologyOnHotReload<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span></div><p class="paragraph">API 102 的批次聚合式热重载协调器。</p><p class="paragraph"><a href="../-hot-reload-session/index.html">HotReloadSession</a> 适合新模块：每条 hook 都显式声明稳定的 <code class="lang-kotlin">reloadKey(...)</code>。本类适合已有的大型 规则集：把一次<strong>完整、同步</strong>的目标进程初始化包进 <a href="install.html">install</a>，其中未设置 hook ID 的 EzHookTool DSL hook 会按 <code class="lang-kotlin">executable + priority + exceptionMode</code> 聚合成一个带稳定内部 hook ID 的底层 hook。</p><p class="paragraph">新 generation 重新执行同一初始化批次时，framework 会原子替换每个聚合后的底层 hook。因此规则可以 在不为每条既有 hook 补写 <code class="lang-kotlin">reloadKey</code> 的情况下新增、删除或调整同一目标上的回调。显式调用 <a href="../../io.github.lingqiqi5211.ezhooktool.xposed.dsl/-hook-factory/id.html">io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookFactory.id</a> 或 <code class="lang-kotlin">reloadKey(...)</code> 的 hook 不会被聚合， 仍按官方 <code class="lang-kotlin">executable + hook ID</code> 语义原子替换。</p><p class="paragraph">使用约束：</p><ul><li><p class="paragraph">一个 module entry、一个目标进程初始化周期只创建一个 batch，并只调用一次 <a href="install.html">install</a>。</p></li><li><p class="paragraph"><a href="install.html">install</a> 必须包住所有会注册 hook 的同步初始化代码；异步或初始化完成后才创建的 hook 不属于本批次， 应改为同步安装，或使用默认自动模式 / 显式 <code class="lang-kotlin">reloadKey</code> 自行定义收尾边界。</p></li><li><p class="paragraph">新 generation 必须先在旧 handle 仍有效时调用 <a href="capture-old-hooks.html">captureOldHooks</a>，再执行 <a href="install.html">install</a>，最后调用 <a href="finish-hot-reload.html">finishHotReload</a>。不要与同一批 hook 的 <a href="../-hot-reload-session/index.html">HotReloadSession</a> 混用。</p></li><li><p class="paragraph">本类只管理 EzHookTool API 102 DSL/Java helper 创建的 hook。直接调用 libxposed 或旧 Xposed API 的 hook 不会自动进入批次，应迁移到 helper，或在热重载前主动拒绝。</p></li></ul><p class="paragraph">内部聚合 ID 以 <code class="lang-kotlin">ezhooktool.batch.v1:</code> 开头，属于本库保留命名空间。</p></div></div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="CONSTRUCTOR">
+        <h2 class="tableheader">Constructors</h2>
+        <div class="table"><a data-name="783450884%2FConstructors%2F619576607" anchor-label="HookReloadBatch" id="783450884%2FConstructors%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-togglable="CONSTRUCTOR" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-hook-reload-batch.html"><span>Hook</span><wbr><span>Reload</span><wbr><span><span>Batch</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="783450884%2FConstructors%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a></div></div><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">namespace<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">xposed<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedInterface///PointingToDeclaration/">XposedInterface</span><span class="token operator"> = </span>EzXposed.base<span class="token punctuation">, </span></span><span class="parameter ">requireStableTopologyOnHotReload<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="TYPE">
+        <h2 class="tableheader">Types</h2>
+        <div class="table"><a data-name="609255251%2FClasslikes%2F619576607" anchor-label="Companion" id="609255251%2FClasslikes%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-companion/index.html"><span><span>Companion</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="609255251%2FClasslikes%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><span class="token keyword">object </span><a href="-companion/index.html">Companion</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="236888931%2FProperties%2F619576607" anchor-label="hotReloadBlockReason" id="236888931%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="hot-reload-block-reason.html"><span>hot</span><wbr><span>Reload</span><wbr><span>Block</span><wbr><span><span>Reason</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="236888931%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="hot-reload-block-reason.html">hotReloadBlockReason</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">当前 generation 是否可安全发起下一次热重载；<code class="lang-kotlin">null</code> 表示 batch 自身没有发现阻塞条件。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="FUNCTION">
+        <h2 class="tableheader">Functions</h2>
+        <div class="table"><a data-name="451985195%2FFunctions%2F619576607" anchor-label="captureOldHooks" id="451985195%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="capture-old-hooks.html"><span>capture</span><wbr><span>Old</span><wbr><span><span>Hooks</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="451985195%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><span class="token keyword">fun </span><a href="capture-old-hooks.html"><span class="token function">captureOldHooks</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">handles<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-iterable/index.html">Iterable</a><span class="token operator">&lt;</span><span data-unresolved-link="io.github.libxposed.api/XposedInterface.HookHandle///PointingToDeclaration/">XposedInterface.HookHandle</span><span class="token operator">&gt;</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">在新 generation 注册 hook 之前拍下旧 handle 的 executable 与 hook ID。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1078329657%2FFunctions%2F619576607" anchor-label="finishHotReload" id="1078329657%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="finish-hot-reload.html"><span>finish</span><wbr><span>Hot</span><wbr><span><span>Reload</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1078329657%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><span class="token keyword">fun </span><a href="finish-hot-reload.html"><span class="token function">finishHotReload</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../-hook-reload-batch-result/index.html">HookReloadBatchResult</a></div><div class="brief "><p class="paragraph">完成新 generation 的旧 handle 收尾。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1822675200%2FFunctions%2F619576607" anchor-label="install" id="1822675200%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="install.html"><span><span>install</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1822675200%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><span class="token keyword">fun </span><a href="install.html"><span class="token function">install</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">block<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/lang/Runnable.html">Runnable</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">执行一次完整的同步 hook 初始化，并在回调正常返回后一次性提交所有聚合 hook。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>© 2026 Copyright</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
