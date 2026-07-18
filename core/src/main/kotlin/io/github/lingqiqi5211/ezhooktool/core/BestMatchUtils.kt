@@ -62,6 +62,30 @@ private fun scoreMatch(actual: Array<Class<*>>, expected: Array<Class<*>>): Int 
     return score
 }
 
+private fun bestMatchMethodCandidates(clz: Class<*>, methodName: String): List<String> {
+    if (!EzReflect.debugMode) return emptyList()
+    val candidates = mutableListOf<String>()
+    var current: Class<*>? = clz
+    var considerPrivate = true
+    while (current != null) {
+        for (method in EzReflect.memberResolver.methodsOf(current)) {
+            if (method.name != methodName) continue
+            if (!considerPrivate && Modifier.isPrivate(method.modifiers)) continue
+            candidates += "${method.declaringClass.toReadableTypeName()}#${method.toReadableString()}"
+        }
+        current = current.superclass
+        considerPrivate = false
+    }
+    return candidates
+}
+
+private fun bestMatchConstructorCandidates(clz: Class<*>): List<String> {
+    if (!EzReflect.debugMode) return emptyList()
+    return EzReflect.memberResolver.constructorsOf(clz).map {
+        "${it.declaringClass.toReadableTypeName()}#${it.toReadableString()}"
+    }
+}
+
 /**
  * 按参数类型查找最合适的方法。
  *
@@ -133,7 +157,7 @@ fun findMethodBestMatch(
         targetClass = clz.name,
         searchedSuper = true,
         conditionDesc = "bestMatch name=$methodName, argTypes=${parameterTypes.map { it.simpleName }}",
-        candidates = emptyList(),
+        candidates = bestMatchMethodCandidates(clz, methodName),
     )
 }
 
@@ -199,7 +223,7 @@ fun findMethodBestMatch(
         targetClass = clz.name,
         searchedSuper = true,
         conditionDesc = "bestMatch name=$methodName, args=${args.map { it?.javaClass?.simpleName ?: "null" }}",
-        candidates = emptyList(),
+        candidates = bestMatchMethodCandidates(clz, methodName),
     )
 }
 
@@ -265,7 +289,7 @@ fun findConstructorBestMatch(
         targetClass = clz.name,
         searchedSuper = false,
         conditionDesc = "bestMatch argTypes=${parameterTypes.map { it.simpleName }}",
-        candidates = emptyList(),
+        candidates = bestMatchConstructorCandidates(clz),
     )
 }
 
@@ -317,6 +341,6 @@ fun findConstructorBestMatch(
         targetClass = clz.name,
         searchedSuper = false,
         conditionDesc = "bestMatch args=${args.map { it?.javaClass?.simpleName ?: "null" }}",
-        candidates = emptyList(),
+        candidates = bestMatchConstructorCandidates(clz),
     )
 }

@@ -616,7 +616,7 @@ fun <T> Any.getFieldByType(type: Class<*>, isStatic: Boolean = false): T? {
             targetClass = ownerClass().name,
             searchedSuper = true,
             conditionDesc = "type=${type.simpleName}, isStatic=$isStatic",
-            candidates = emptyList(),
+            candidates = getFieldCandidates(ownerClass()),
         )
     return readFieldValue(f, if (isStatic) null else this) as T?
 }

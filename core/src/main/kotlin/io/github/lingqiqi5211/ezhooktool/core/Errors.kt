@@ -41,7 +41,7 @@ class MemberNotFoundException(
                 MemberType.FIELD -> "Field"
                 MemberType.CONSTRUCTOR -> "Constructor"
             }
-            val searchDesc = if (searchedSuper) "current class + superclasses (smart mode)" else "current class only"
+            val searchDesc = if (searchedSuper) "current class and superclasses" else "current class only"
 
             if (!EzReflect.debugMode) {
                 // 简洁模式
@@ -68,7 +68,7 @@ class MemberNotFoundException(
             }
             if (candidates.isNotEmpty()) {
                 sb.appendLine("│")
-                sb.appendLine("│ Candidates in this class:")
+                sb.appendLine("│ Candidates from target class:")
                 for (c in candidates) {
                     sb.appendLine("│   ✗ $c")
                 }
@@ -137,7 +137,8 @@ class SingleResultExpectedException(
     val conditionDesc: String? = null,
 ) : RuntimeException(
     buildString {
-        append("Expected single result for $target, but found multiple matches.")
+        append("Expected exactly one result for $target, but found multiple matches.")
+        append(" Use `findAll...` when multiple results are acceptable.")
         if (conditionDesc != null) append("\n  Condition: $conditionDesc")
     }
 )
