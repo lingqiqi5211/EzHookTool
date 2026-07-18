@@ -5,8 +5,6 @@
 
 当前 Maven 最新构建版本为: ![Maven Central Version](https://img.shields.io/maven-central/v/io.github.lingqiqi5211.ezhooktool/core)
 
-> `hook-xposed-102` 依赖 libxposed API `102.0.0` 正式版；如需使用其他版本，请自行替换为对应的 runtime API。
-
 ### 快速开始
 
 `build.gradle`
