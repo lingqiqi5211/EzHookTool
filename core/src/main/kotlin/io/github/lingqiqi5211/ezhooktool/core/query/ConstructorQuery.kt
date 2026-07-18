@@ -5,6 +5,7 @@ import io.github.lingqiqi5211.ezhooktool.core.canAcceptAll
 import io.github.lingqiqi5211.ezhooktool.core.describeTypes
 import io.github.lingqiqi5211.ezhooktool.core.isSynthetic
 import io.github.lingqiqi5211.ezhooktool.core.paramCount
+import io.github.lingqiqi5211.ezhooktool.core.toReadableTypeName
 import java.lang.reflect.Constructor
 import java.lang.reflect.Modifier
 import java.util.function.Predicate
@@ -14,6 +15,7 @@ private enum class ConstructorCachePart {
     PARAM_COUNT_RANGE,
     PARAMETER_TYPES,
     ASSIGNABLE_PARAMETER_TYPES,
+    VAGUE_PARAMETER_TYPES,
     EXCEPTION_TYPES,
     FLAGS,
 }
@@ -25,6 +27,7 @@ private val constructorCachePartOrder = listOf(
     ConstructorCachePart.PARAM_COUNT_RANGE,
     ConstructorCachePart.PARAMETER_TYPES,
     ConstructorCachePart.ASSIGNABLE_PARAMETER_TYPES,
+    ConstructorCachePart.VAGUE_PARAMETER_TYPES,
     ConstructorCachePart.EXCEPTION_TYPES,
     ConstructorCachePart.FLAGS,
 )
@@ -117,6 +120,32 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
     /** [parameterTypesAssignableFrom] 的短名称。 */
     fun paramsAssignableFrom(vararg types: Class<*>) {
         parameterTypesAssignableFrom(*types)
+    }
+
+    /**
+     * 限定参数类型，允许其中某些位置用 [VagueType] 占位跳过精确匹配。
+     *
+     * 参数数量仍必须与 [types] 长度一致；非 [VagueType] 的位置按 [parameterTypes] 语义要求完全相等。
+     */
+    fun parameterTypesVague(vararg types: Any) {
+        val expected = types.map { if (it === VagueType) null else it as Class<*> }
+        conditions += { parameterTypesMatchVague(parameterTypes, expected) }
+        cacheParts[ConstructorCachePart.VAGUE_PARAMETER_TYPES] = expected
+        val described = types.joinToString(", ") { if (it === VagueType) "*" else (it as Class<*>).toReadableTypeName() }
+        descriptions += "paramsVague=[$described]"
+    }
+
+    /**
+     * 限定形参在 [Constructor.getGenericParameterTypes] 层面的类型，按 [GenericTypeMatcher] 逐位匹配。
+     *
+     * 与 [parameterTypes] 不同，这里使用擦除前的 `Type`，可以匹配类型变量或参数化类型的 raw type。
+     * 此条件禁用查询缓存。
+     */
+    fun genericParameterTypes(vararg matchers: GenericTypeMatcher) {
+        val snapshot = matchers.toList()
+        conditions += { matchesGenericTypes(genericParameterTypes, snapshot) }
+        cacheable = false
+        descriptions += "genericParams=[${snapshot.joinToString(", ")}]"
     }
 
     /** 限定声明的异常类型。 */

@@ -7,6 +7,7 @@ import io.github.lingqiqi5211.ezhooktool.core.query.methodCondition
 import io.github.lingqiqi5211.ezhooktool.core.query.methodExactCacheKeys
 import io.github.lingqiqi5211.ezhooktool.core.query.methodQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 
 /**
@@ -514,6 +515,27 @@ fun Class<*>.findAllMethods(
 // ═══════════════════════ 实例方法调用 ═══════════════════════
 
 /**
+ * 只吞查找/调用前置校验失败，目标方法自身抛出的异常原样重新抛出。
+ *
+ * 用于 [callMethodOrNull]/[callStaticMethodOrNull] 系列：这些函数名字里的 "OrNull" 指"方法找不到、
+ * 参数不匹配、无权限访问时返回 null"，不代表"目标方法内部抛出的业务异常也会被吞掉"——那类异常应该让
+ * 调用方看到，否则会掩盖真实的崩溃原因。
+ */
+private inline fun <T> callCatchingLookupFailure(block: () -> T): T? = try {
+    block()
+} catch (e: InvocationTargetException) {
+    throw e.targetException ?: e
+} catch (_: MemberNotFoundException) {
+    null
+} catch (_: SingleResultExpectedException) {
+    null
+} catch (_: IllegalAccessException) {
+    null
+} catch (_: IllegalArgumentException) {
+    null
+}
+
+/**
  * 按名称调用实例方法。
  *
  * ```kotlin
@@ -532,19 +554,19 @@ fun Any.callMethod(
 }
 
 /**
- * 按名称调用实例方法，方法找不到或调用异常时返回 `null`。
+ * 按名称调用实例方法，方法找不到、参数不匹配或无权限访问时返回 `null`。
  *
- * 失败被静默吞掉，不打印日志；需要日志请用 [tryOrLogNull] 包裹普通 [callMethod]。
+ * 目标方法自身抛出的异常会原样重新抛出，不会被吞掉——需要区分"方法不存在"和"方法存在但调用失败"时，
+ * 应捕获目标异常类型而不是依赖这里返回 `null`。失败被静默吞掉的部分不打印日志；需要日志请用
+ * [tryOrLogNull] 包裹普通 [callMethod]。
  */
 fun Any.callMethodOrNull(
     methodName: String,
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Any? = try {
+): Any? = callCatchingLookupFailure {
     callMethod(methodName, args, argTypes, returnType)
-} catch (_: Throwable) {
-    null
 }
 
 /**
@@ -589,14 +611,12 @@ fun Any.callMethod(methodName: String, vararg args: Any?): Any? =
     invokeAutoMatchedMethod(javaClass, this, methodName, args)
 
 /**
- * 自动匹配参数并调用实例方法，方法找不到或调用异常时返回 `null`。
+ * 自动匹配参数并调用实例方法，方法找不到、参数不匹配或无权限访问时返回 `null`。
  *
- * 失败被静默吞掉，不打印日志。
+ * 目标方法自身抛出的异常会原样重新抛出，不会被吞掉。失败被静默吞掉的部分不打印日志。
  */
-fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? = try {
+fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? = callCatchingLookupFailure {
     callMethod(methodName, *args)
-} catch (_: Throwable) {
-    null
 }
 
 /**
@@ -669,17 +689,17 @@ fun Class<*>.callStaticMethod(
 }
 
 /**
- * 调用静态方法，方法找不到或调用异常时返回 `null`。
+ * 调用静态方法，方法找不到、参数不匹配或无权限访问时返回 `null`。
+ *
+ * 目标方法自身抛出的异常会原样重新抛出，不会被吞掉。
  */
 fun Class<*>.callStaticMethodOrNull(
     methodName: String,
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Any? = try {
+): Any? = callCatchingLookupFailure {
     callStaticMethod(methodName, args, argTypes, returnType)
-} catch (_: Throwable) {
-    null
 }
 
 /**
@@ -719,12 +739,12 @@ fun Class<*>.callStaticMethod(methodName: String, vararg args: Any?): Any? =
     invokeAutoMatchedMethod(this, null, methodName, args)
 
 /**
- * 自动匹配参数并调用静态方法，方法找不到或调用异常时返回 `null`。
+ * 自动匹配参数并调用静态方法，方法找不到、参数不匹配或无权限访问时返回 `null`。
+ *
+ * 目标方法自身抛出的异常会原样重新抛出，不会被吞掉。
  */
-fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any? = try {
+fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any? = callCatchingLookupFailure {
     callStaticMethod(methodName, *args)
-} catch (_: Throwable) {
-    null
 }
 
 /**

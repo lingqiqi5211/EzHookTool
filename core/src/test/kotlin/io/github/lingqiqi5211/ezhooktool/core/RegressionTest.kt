@@ -1,5 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.core
 
+import io.github.lingqiqi5211.ezhooktool.core.query.GenericTypeMatcher
+import io.github.lingqiqi5211.ezhooktool.core.query.VagueType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNotSame
@@ -59,6 +61,15 @@ class RegressionTest {
     private class OrNullTarget {
         @Suppress("unused")
         fun greet(name: String): String = "Hello, $name"
+
+        @Suppress("unused")
+        fun explode(): String = throw IllegalStateException("target boom")
+
+        companion object {
+            @Suppress("unused")
+            @JvmStatic
+            fun explodeStatic(): String = throw IllegalStateException("static target boom")
+        }
     }
 
     @Test
@@ -82,6 +93,40 @@ class RegressionTest {
     fun `callStaticMethodOrNull returns null on missing method`() {
         val result = OrNullTarget::class.java.callStaticMethodOrNull("noSuchStatic")
         assertNull(result)
+    }
+
+    @Test
+    fun `callMethodOrNull rethrows target exception instead of swallowing it`() {
+        val target = OrNullTarget()
+        val ex = assertThrows(IllegalStateException::class.java) {
+            target.callMethodOrNull("explode")
+        }
+        assertTrue(ex.message!!.contains("target boom"))
+    }
+
+    @Test
+    fun `callMethodOrNull with explicit args rethrows target exception`() {
+        val target = OrNullTarget()
+        val ex = assertThrows(IllegalStateException::class.java) {
+            target.callMethodOrNull(methodName = "explode", args = args())
+        }
+        assertTrue(ex.message!!.contains("target boom"))
+    }
+
+    @Test
+    fun `callStaticMethodOrNull rethrows target exception instead of swallowing it`() {
+        val ex = assertThrows(IllegalStateException::class.java) {
+            OrNullTarget::class.java.callStaticMethodOrNull("explodeStatic")
+        }
+        assertTrue(ex.message!!.contains("static target boom"))
+    }
+
+    @Test
+    fun `callStaticMethodOrNull with explicit args rethrows target exception`() {
+        val ex = assertThrows(IllegalStateException::class.java) {
+            OrNullTarget::class.java.callStaticMethodOrNull(methodName = "explodeStatic", args = args())
+        }
+        assertTrue(ex.message!!.contains("static target boom"))
     }
 
     // ───────────────────────── 1.9 ResolveSession.optional() 不再撒谎 ─────────────────────────
@@ -215,6 +260,115 @@ class RegressionTest {
         }
     }
 
+    private class DescriptorTarget {
+        @JvmField
+        var value: String = "value"
+
+        @Suppress("unused")
+        fun convert(input: Int): String = input.toString()
+    }
+
+    private fun descriptorOwner(clazz: Class<*>): String = "L${clazz.name.replace('.', '/')};"
+
+    @Test
+    fun `descriptor lookup validates method return type`() {
+        val owner = descriptorOwner(DescriptorTarget::class.java)
+        assertNotNull(getMethodByDescOrNull("$owner->convert(I)Ljava/lang/String;"))
+        assertNull(getMethodByDescOrNull("$owner->convert(I)I"))
+    }
+
+    @Test
+    fun `descriptor lookup validates field type`() {
+        val owner = descriptorOwner(DescriptorTarget::class.java)
+        assertNotNull(getFieldByDescOrNull("$owner->value:Ljava/lang/String;"))
+        assertNull(getFieldByDescOrNull("$owner->value:I"))
+    }
+
+    @Test
+    fun `descriptor parser rejects void params and trailing type content`() {
+        val owner = descriptorOwner(DescriptorTarget::class.java)
+        assertThrows(IllegalArgumentException::class.java) {
+            getMethodByDescOrNull("$owner->convert(V)Ljava/lang/String;")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            getMethodByDescOrNull("$owner->convert(I)Ljava/lang/String;ignored")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            getFieldByDescOrNull("$owner->value:V")
+        }
+    }
+
+    @Test
+    fun `descriptor orNull returns null when a referenced type is unavailable`() {
+        val owner = descriptorOwner(DescriptorTarget::class.java)
+        assertNull(getMethodByDescOrNull("$owner->convert(Lmissing/Parameter;)Ljava/lang/String;"))
+        assertNull(getFieldByDescOrNull("$owner->value:Lmissing/FieldType;"))
+    }
+
+    // ───────────────────────── best-match 边界 ──────────────────────
+
+    @Test
+    fun `findMethodBestMatch failure includes candidates in debug mode`() {
+        EzReflect.debugMode = true
+        try {
+            val error = assertThrows(MemberNotFoundException::class.java) {
+                // convert(Int) 存在，但用不兼容类型触发 best-match 失败；
+                // 候选列表按方法名过滤，用已存在的方法名才能验证候选收集逻辑。
+                findMethodBestMatch(DescriptorTarget::class.java, "convert", DescriptorTarget::class.java)
+            }
+            assertTrue(error.candidates.isNotEmpty(), "Expected candidates in debug mode")
+        } finally {
+            EzReflect.debugMode = false
+        }
+    }
+
+    @Test
+    fun `findConstructorBestMatch failure includes candidates in debug mode`() {
+        EzReflect.debugMode = true
+        try {
+            val error = assertThrows(MemberNotFoundException::class.java) {
+                findConstructorBestMatch(DescriptorTarget::class.java, Double::class.java, Double::class.java)
+            }
+            assertTrue(error.candidates.isNotEmpty(), "Expected candidates in debug mode")
+        } finally {
+            EzReflect.debugMode = false
+        }
+    }
+
+    // ───────────────────────── ResolveSession 边界 ──────────────────────
+
+    @Test
+    fun `ResolveSession callOrNull returns null without bound instance`() {
+        val session = ResolveSession.of(DescriptorTarget::class.java)
+        assertNull(session.callOrNull("missingMethod"))
+    }
+
+    @Test
+    fun `ResolveSession callStaticOrNull returns null for missing static method`() {
+        val session = ResolveSession.of(DescriptorTarget::class.java)
+        assertNull(session.callStaticOrNull("missingStaticMethod"))
+    }
+
+    // ───────────────────────── OrNull 一致性 ──────────────────────
+
+    @Test
+    fun `methodOrNull returns null when method does not exist`() {
+        assertNull(DescriptorTarget::class.java.methodOrNull("nonExistentMethod"))
+    }
+
+    @Test
+    fun `fieldOrNull returns null when field does not exist`() {
+        assertNull(DescriptorTarget::class.java.fieldOrNull("nonExistentField"))
+    }
+
+    @Test
+    fun `constructorOrNull returns null when constructor does not exist`() {
+        assertNull(findConstructorOrNull(DescriptorTarget::class.java) {
+            params(Double::class.java, Double::class.java)
+        })
+    }
+
+
     // ───────────────────────── 1.6 callMethodAs 对 null 抛清晰异常 ─────────────────────────
 
     private class NullReturning {
@@ -240,4 +394,71 @@ class RegressionTest {
         val result = target.callMethodAsOrNull<String>("whatever")
         assertNull(result)
     }
+
+    // ───────────────────────── VagueType 参数占位符 ─────────────────────────
+
+    private class VagueTarget {
+        @Suppress("unused")
+        fun bind(name: String, flag: Boolean, count: Int): String = "$name-$flag-$count"
+
+        @Suppress("unused")
+        fun bind(name: String, flag: Boolean): String = "$name-$flag"
+    }
+
+    @Test
+    fun `parameterTypesVague matches when non-vague positions are exact`() {
+        val method = VagueTarget::class.java.findMethod {
+            name("bind")
+            parameterTypesVague(String::class.java, VagueType, Int::class.javaPrimitiveType!!)
+        }
+        assertEquals(3, method.parameterCount)
+    }
+
+    @Test
+    fun `parameterTypesVague requires exact count and rejects mismatched fixed position`() {
+        val result = VagueTarget::class.java.findMethodOrNull {
+            name("bind")
+            parameterTypesVague(
+                Int::class.javaPrimitiveType!!, // name 位是 String，这里传 int，应该不命中
+                VagueType,
+                Int::class.javaPrimitiveType!!,
+            )
+        }
+        assertNull(result)
+    }
+
+    // ───────────────────────── 泛型条件匹配 ─────────────────────────
+
+    private open class GenericBase<T> {
+        @Suppress("unused")
+        open fun echo(value: T): T = value
+    }
+
+    private class GenericTarget : GenericBase<String>() {
+        override fun echo(value: String): String = value
+    }
+
+    @Test
+    fun `genericParameterTypes matches type variable on the declaring generic method`() {
+        val declaredMethod = GenericBase::class.java.declaredMethods.first { it.name == "echo" }
+        val matched = GenericBase::class.java.findMethodOrNull {
+            name("echo")
+            genericParameterTypes(GenericTypeMatcher.typeVariableNamed("T"))
+        }
+        assertNotNull(matched)
+        assertEquals(declaredMethod, matched)
+    }
+
+    @Test
+    fun `genericParameterTypes does not match the erased bridge method`() {
+        // GenericTarget 声明的 echo(String) 和编译器生成的桥接方法 echo(Object) 参数都已是具体类型，
+        // 不再是 TypeVariable("T")；用 findOnlyClass() 排除父类的真正泛型声明，验证当前类没有命中。
+        val bridgeOnly = GenericTarget::class.java.findAllMethods {
+            name("echo")
+            findOnlyClass()
+            genericParameterTypes(GenericTypeMatcher.typeVariableNamed("T"))
+        }
+        assertTrue(bridgeOnly.isEmpty(), "桥接方法的参数已擦除为具体类型，不应命中类型变量匹配")
+    }
 }
+

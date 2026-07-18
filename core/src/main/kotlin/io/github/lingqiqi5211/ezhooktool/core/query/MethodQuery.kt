@@ -23,6 +23,7 @@ private enum class MethodCachePart {
     RETURN_TYPE_EXTENDS_FROM,
     PARAMETER_TYPES,
     ASSIGNABLE_PARAMETER_TYPES,
+    VAGUE_PARAMETER_TYPES,
     EXCEPTION_TYPES,
     FLAGS,
 }
@@ -42,6 +43,7 @@ private val methodCachePartOrder = listOf(
     MethodCachePart.RETURN_TYPE_EXTENDS_FROM,
     MethodCachePart.PARAMETER_TYPES,
     MethodCachePart.ASSIGNABLE_PARAMETER_TYPES,
+    MethodCachePart.VAGUE_PARAMETER_TYPES,
     MethodCachePart.EXCEPTION_TYPES,
     MethodCachePart.FLAGS,
 )
@@ -190,6 +192,53 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
     /** [parameterTypesAssignableFrom] 的短名称。 */
     fun paramsAssignableFrom(vararg types: Class<*>) {
         parameterTypesAssignableFrom(*types)
+    }
+
+    /**
+     * 限定参数类型，允许其中某些位置用 [VagueType] 占位跳过精确匹配。
+     *
+     * 参数数量仍必须与 [types] 长度一致；非 [VagueType] 的位置按 [parameterTypes] 语义要求完全相等。
+     * 常用于只关心部分参数类型、其余参数类型随版本变化的场景。
+     *
+     * ```kotlin
+     * clazz.findMethod {
+     *     name("bind")
+     *     parameterTypesVague(String::class.java, VagueType, Boolean::class.javaObjectType)
+     * }
+     * ```
+     */
+    fun parameterTypesVague(vararg types: Any) {
+        val expected = types.map { if (it === VagueType) null else it as Class<*> }
+        conditions += { parameterTypesMatchVague(parameterTypes, expected) }
+        cacheParts[MethodCachePart.VAGUE_PARAMETER_TYPES] = expected
+        val described = types.joinToString(", ") { if (it === VagueType) "*" else (it as Class<*>).toReadableTypeName() }
+        descriptions += "paramsVague=[$described]"
+    }
+
+    /**
+     * 限定形参在 [Method.getGenericParameterTypes] 层面的类型，按 [GenericTypeMatcher] 逐位匹配。
+     *
+     * 与 [parameterTypes] 不同，这里使用擦除前的 `Type`：可以匹配 [GenericTypeMatcher.typeVariableNamed]
+     * 声明的类型变量，或 [GenericTypeMatcher.rawType] 匹配的参数化类型；桥接方法（bridge method）在此处
+     * 已被擦除为具体 `Class`，不会命中类型变量条件。此条件禁用查询缓存。
+     *
+     * @param matchers 按参数位置提供的匹配器；数量必须与目标方法的参数数量一致才能命中
+     */
+    fun genericParameterTypes(vararg matchers: GenericTypeMatcher) {
+        val snapshot = matchers.toList()
+        conditions += { matchesGenericTypes(genericParameterTypes, snapshot) }
+        cacheable = false
+        descriptions += "genericParams=[${snapshot.joinToString(", ")}]"
+    }
+
+    /**
+     * 限定 [Method.getGenericReturnType]，用于区分擦除前的泛型返回类型（例如声明为 `T` 的方法）。
+     * 此条件禁用查询缓存。
+     */
+    fun genericReturnType(matcher: GenericTypeMatcher) {
+        conditions += { matcher.matches(genericReturnType) }
+        cacheable = false
+        descriptions += "genericReturnType=$matcher"
     }
 
     /** 限定声明的异常类型。 */

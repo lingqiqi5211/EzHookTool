@@ -235,12 +235,36 @@ class ResolveSession private constructor(
     }
 
     /**
+     * 对绑定实例按名称执行实例方法自动匹配调用，找不到或调用失败时返回 `null`。
+     *
+     * 失败语义与顶层 [callMethodOrNull] 保持一致；如果当前会话没有绑定实例，也直接返回 `null`。
+     *
+     * @param methodName 目标方法名
+     * @param args 传给目标方法的实参
+     */
+    fun callOrNull(methodName: String, vararg args: Any?): Any? {
+        val instance = targetInstance ?: return null
+        return instance.callMethodOrNull(methodName, *args)
+    }
+
+    /**
      * 对绑定类按名称执行静态方法自动匹配调用。
      *
      * @param methodName 目标静态方法名
      * @param args 传给目标方法的实参
      */
     fun callStatic(methodName: String, vararg args: Any?): Any? = targetClass.callStaticMethod(methodName, *args)
+
+    /**
+     * 对绑定类按名称执行静态方法自动匹配调用，找不到或调用失败时返回 `null`。
+     *
+     * 失败语义与顶层 [callStaticMethodOrNull] 保持一致。
+     *
+     * @param methodName 目标静态方法名
+     * @param args 传给目标方法的实参
+     */
+    fun callStaticOrNull(methodName: String, vararg args: Any?): Any? =
+        targetClass.callStaticMethodOrNull(methodName, *args)
 
     private fun copy(
         targetClass: Class<*> = this.targetClass,
