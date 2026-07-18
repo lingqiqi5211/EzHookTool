@@ -5,9 +5,12 @@ import java.lang.reflect.Executable
 import java.util.Collections
 
 internal class InvocationContext(private val chain: XposedInterface.Chain) {
+    private val originalThisObject: Any? = chain.thisObject
+    private val originalArgs: Array<Any?> = chain.args.toTypedArray()
+
     val executable: Executable = chain.executable
-    var thisObject: Any? = chain.thisObject
-    var args: Array<Any?> = chain.args.toTypedArray()
+    var thisObject: Any? = originalThisObject
+    var args: Array<Any?> = originalArgs.copyOf()
     var isAfterStage: Boolean = false
     var skipped: Boolean = false
     var result: Any? = null
@@ -28,6 +31,16 @@ internal class InvocationContext(private val chain: XposedInterface.Chain) {
             throwable = t
         }
     }
+
+    fun fallbackToOriginal(): Any? {
+        thisObject = originalThisObject
+        args = originalArgs.copyOf()
+        skipped = false
+        result = null
+        throwable = null
+        proceedOriginal()
+        return resultOrThrow()
+    }
 }
 
 /**
@@ -38,7 +51,15 @@ internal class InvocationContext(private val chain: XposedInterface.Chain) {
 internal class HookStageException(
     val phase: String,
     cause: Throwable,
-) : RuntimeException(cause)
+    private val fallback: () -> Any?,
+) : RuntimeException(cause) {
+    fun fallback(): Any? = fallback.invoke()
+}
+
+private fun InvocationContext.resultOrThrow(): Any? {
+    throwable?.let { throw it }
+    return result
+}
 
 internal fun interface ChainStage {
     fun intercept(context: InvocationContext, proceed: () -> Unit)
@@ -87,7 +108,7 @@ internal class BeforeChainStage(
         try {
             callback(HookParam(context))
         } catch (t: Throwable) {
-            throw HookStageException("before", t)
+            throw HookStageException("before", t, context::fallbackToOriginal)
         }
         if (!context.skipped) proceed()
     }
@@ -98,11 +119,16 @@ internal class AfterChainStage(
 ) : ChainStage {
     override fun intercept(context: InvocationContext, proceed: () -> Unit) {
         proceed()
+        val savedResult = context.result
+        val savedThrowable = context.throwable
         context.isAfterStage = true
         try {
             callback(HookParam(context))
         } catch (t: Throwable) {
-            throw HookStageException("after", t)
+            throw HookStageException("after", t) {
+                savedThrowable?.let { throw it }
+                savedResult
+            }
         } finally {
             context.isAfterStage = false
         }
@@ -118,7 +144,7 @@ internal class ReplaceChainStage(
         context.result = try {
             callback(HookParam(context))
         } catch (t: Throwable) {
-            throw HookStageException("replace", t)
+            throw HookStageException("replace", t, context::fallbackToOriginal)
         }
         context.throwable = null
     }
@@ -198,7 +224,10 @@ internal class InterceptChainStage(
             val result = try {
                 callback(chain)
             } catch (t: Throwable) {
-                throw HookStageException("intercept", t)
+                if (t is HookStageException || context.throwable === t) throw t
+                throw HookStageException("intercept", t) {
+                    if (proceedCount == 0) context.fallbackToOriginal() else context.resultOrThrow()
+                }
             }
             if (proceedCount == 0) {
                 context.skipped = true

@@ -121,13 +121,14 @@ class HookFactory internal constructor(
             callback(HookParam(raw))
             return
         }
-        // safeMode: 记录 callback 执行前的 result / throwable 快照；callback 抛出时回退到原始调用，
-        // 避免半成品的 setResult 让目标 app 接收到错误返回值。
+        // safeMode: callback 抛出时恢复完整调用状态，避免参数或返回值只修改了一半。
+        val savedArgs = raw.args.copyOf()
         val savedResult = raw.result
         val savedThrowable = raw.throwable
         try {
             callback(HookParam(raw))
         } catch (t: Throwable) {
+            raw.args = savedArgs
             raw.result = savedResult
             raw.throwable = savedThrowable
             EzReflect.logger.error("Hook", "before hook failed for $target; reverted to original call", t)

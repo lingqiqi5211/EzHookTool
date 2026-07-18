@@ -193,13 +193,12 @@ internal fun buildHooker(
         if (!EzXposed.safeMode) {
             hookChain.invoke(chain)
         } else {
-            runCatching { hookChain.invoke(chain) }
-                .getOrElse { t ->
-                    val (phase, cause) = if (t is HookStageException) t.phase to (t.cause ?: t)
-                    else "chain" to t
-                    EzReflect.logger.error("Hook", "$phase hook failed for $target", cause)
-                    chain.proceed()
-                }
+            try {
+                hookChain.invoke(chain)
+            } catch (t: HookStageException) {
+                EzReflect.logger.error("Hook", "${t.phase} hook failed for $target", t.cause ?: t)
+                t.fallback()
+            }
         }
     }
 }

@@ -87,6 +87,7 @@ EzHookTool 是 Kotlin 反射工具库，同时提供 Android / Xposed / libxpose
 - Kotlin 逻辑改动：至少执行 `git diff --check`。
 - 涉及 `core`：需要时运行 `./gradlew :core:test`。
 - 涉及 API 82 / 102：需要时分别运行对应模块的编译任务。
+- `hook-xposed-82` / `hook-xposed-102` 不保留、不新增测试项；若发现已有测试，应删除测试源码及对应测试配置。相关改动以对应模块编译检查为主要验证方式。
 - 涉及 public API、初始化流程、资源注入或 safe mode：优先同时检查 API 82 和 API 102。
 - 涉及 descriptor、重载匹配、finder 条件组合：优先补充或更新 `core` 测试。
 
