@@ -9,6 +9,7 @@ import android.content.res.XResources
 import de.robv.android.xposed.IXposedHookZygoteInit
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.ApplicationLifecycle
 
 /**
  * 经典 Xposed API 82 的运行时入口。
@@ -31,13 +32,13 @@ object EzXposed {
     var safeMode: Boolean = true
 
     @JvmStatic
-    /** 当前包名。 */
-    lateinit var packageName: String
+    /** 当前包名；`init(lpparam)` 之前为空字符串。 */
+    var packageName: String = ""
         private set
 
     @JvmStatic
-    /** 当前进程名。 */
-    lateinit var processName: String
+    /** 当前进程名；`init(lpparam)` 之前为空字符串。 */
+    var processName: String = ""
         private set
 
     @JvmStatic
@@ -88,18 +89,70 @@ object EzXposed {
     /**
      * 手动缓存当前进程的 application context。
      *
-     * 若需要把模块资源路径注入到目标应用资源，请显式打开 [injectModuleAssetPath]。
+     * 默认行为：仅当 [appContext] 尚未初始化时才写入；已初始化时入参 `context` 会被忽略，
+     * 避免不同 hook 回调以非 application context（如 Activity / ContextWrapper）反复覆盖全局缓存。
+     *
+     * 仍需覆盖现有缓存时把 [force] 设为 `true`。
+     *
+     * [injectModuleAssetPath] 的资源注入副作用始终按入参 `context` 执行，与 [force] 无关。
+     *
+     * 推荐通过 [runOnApplicationAttach] 让库自动在 `Application.attach` 阶段填充 application context，
+     * 而不是在业务 hook 回调里手工调用本方法。
      */
+    @JvmOverloads
     fun initAppContext(
         context: Context? = getCurrentApplicationContext(),
         injectModuleAssetPath: Boolean = false,
+        force: Boolean = false,
     ) {
         val resolved = context ?: throw NullPointerException(
             "Cannot init appContext with null context."
         )
-        appContextValue = resolved
+        synchronized(this) {
+            if (force || appContextValue == null) {
+                if (!force && resolved.applicationContext !== resolved) {
+                    EzReflect.logger.warn(
+                        "EzXposed",
+                        "initAppContext received non-Application context " +
+                                "(${resolved.javaClass.name}); using it as application cache. " +
+                                "Prefer EzXposed.runOnApplicationAttach for the global application context."
+                    )
+                }
+                appContextValue = resolved
+            }
+        }
         if (injectModuleAssetPath) {
             addModuleAssetPath(resolved)
+        }
+    }
+
+    /**
+     * 注册「`Application.attach(Context)` 之后跑什么」的回调。
+     *
+     * 第一次注册时库会自动 hook `Application.attach`，回调按注册顺序在 attach after 阶段执行。
+     *
+     * - 回调里收到的 `context` 是目标进程的 application，库会在触发回调前把它写入 [appContext] 缓存（仅当未初始化时）。
+     * - 如果注册时 application 已经 attach 过（即 [appContextOrNull] 非 null），新注册的回调会立即在当前线程同步触发一次。
+     * - callback 抛出的异常会被库捕获并记日志，不会影响其它已注册回调，也不会影响目标 app 的 `Application.attach`。
+     *
+     * 仅依赖 `XposedBridge.hookMethod`，无需先调用 [initZygote]，因此在 `handleLoadPackage` 阶段就可以注册。
+     *
+     * 与 102 的差异：102 必须先调 `initOnModuleLoaded` 拿到 `XposedInterface.base` 后才能 hook，因此 102 上有一道
+     * `IllegalStateException` 检查；82 没有该限制。跨工件共用代码请按 102 的契约走。
+     */
+    @JvmStatic
+    fun runOnApplicationAttach(callback: ApplicationAttachCallback) {
+        ApplicationLifecycle.register(callback)
+    }
+
+    /**
+     * 仅供 [ApplicationLifecycle] 内部回填：在 `Application.attach` 触发瞬间把 application context 写进缓存。
+     */
+    internal fun cacheApplicationContextFromLifecycle(context: Context) {
+        synchronized(this) {
+            if (appContextValue == null) {
+                appContextValue = context
+            }
         }
     }
 
@@ -184,4 +237,13 @@ object EzXposed {
             isAccessible = true
         }
     }
+}
+
+/**
+ * [EzXposed.runOnApplicationAttach] 注册的回调。
+ *
+ * 在目标进程 `Application.attach(Context)` 之后触发，参数为该 application context。
+ */
+fun interface ApplicationAttachCallback {
+    fun onApplicationAttached(context: Context)
 }

@@ -1,7 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.sample82
 
-import android.util.Log
 import de.robv.android.xposed.IXposedHookLoadPackage
+import de.robv.android.xposed.IXposedHookZygoteInit
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import io.github.lingqiqi5211.ezhooktool.sample82.hooks.BaseHook
 import io.github.lingqiqi5211.ezhooktool.sample82.hooks.ExampleJavaHook
@@ -12,7 +12,11 @@ import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 
 private const val TargetApp = "com.example.target"
 
-class MainHook : IXposedHookLoadPackage {
+class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
+    override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
+        EzXposed.initZygote(startupParam)
+    }
+
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (lpparam.packageName != TargetApp) return
 
@@ -22,12 +26,12 @@ class MainHook : IXposedHookLoadPackage {
 
     private fun initHooks(vararg hooks: BaseHook) {
         for (hook in hooks) {
+            if (hook.isInit) continue
             try {
-                if (hook.isInit) continue
                 hook.init()
                 hook.isInit = true
-            } catch (e: Exception) {
-                Log.e("MainHook", "Failed to initialize hook: ${hook.name}", e)
+            } catch (t: Throwable) {
+                throw IllegalStateException("Failed to initialize hook: ${hook.name}", t)
             }
         }
     }

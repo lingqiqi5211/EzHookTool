@@ -132,7 +132,18 @@ class ResolveSession private constructor(
     private val optionalMode: Boolean = false,
     private val findSuper: Boolean? = null,
 ) {
-    /** 切换到可选模式，未命中时返回 `null` 风格结果。 */
+    /**
+     * 保留以兼容旧代码，但**不再改变查找语义**。
+     *
+     * 历史版本里 `optional()` 试图把后续 `method()/field()/constructor()` 改成"未命中返回 null"，
+     * 但这些方法返回类型非空，实现只能在未命中时抛 [MemberNotFoundException]——与名字预期相反。
+     *
+     * 想要"未命中返回 null" 的行为，直接使用 [methodOrNull]、[fieldOrNull]、[constructorOrNull] 即可。
+     */
+    @Deprecated(
+        message = "optional() 不再改变查找语义；请改用 methodOrNull / fieldOrNull / constructorOrNull",
+        level = DeprecationLevel.WARNING,
+    )
     fun optional(): ResolveSession = copy(optionalMode = true)
 
     /**
@@ -158,13 +169,11 @@ class ResolveSession private constructor(
         }
     }
 
-    /** 按查询条件解析单个方法。 */
-    fun method(query: MethodQuery.() -> Unit): Method =
-        if (optionalMode) methodOrNull(query) ?: throw MemberNotFoundException(MemberType.METHOD, targetClass.name, findSuper != false)
-        else findMethod(targetClass) {
-            applySearchScope()
-            query()
-        }
+    /** 按查询条件解析单个方法。未命中抛 [MemberNotFoundException]，需要 null 结果请用 [methodOrNull]。 */
+    fun method(query: MethodQuery.() -> Unit): Method = findMethod(targetClass) {
+        applySearchScope()
+        query()
+    }
 
     /** 按查询条件解析单个方法，未命中时返回 `null`。 */
     fun methodOrNull(query: MethodQuery.() -> Unit): Method? = findMethodOrNull(targetClass) {
@@ -181,13 +190,11 @@ class ResolveSession private constructor(
     /** 解析全部方法。 */
     fun methods(): List<Method> = findAllMethods(targetClass) { applySearchScope() }
 
-    /** 按查询条件解析单个字段。 */
-    fun field(query: FieldQuery.() -> Unit): Field =
-        if (optionalMode) fieldOrNull(query) ?: throw MemberNotFoundException(MemberType.FIELD, targetClass.name, findSuper != false)
-        else findField(targetClass) {
-            applySearchScope()
-            query()
-        }
+    /** 按查询条件解析单个字段。未命中抛 [MemberNotFoundException]，需要 null 结果请用 [fieldOrNull]。 */
+    fun field(query: FieldQuery.() -> Unit): Field = findField(targetClass) {
+        applySearchScope()
+        query()
+    }
 
     /** 按查询条件解析单个字段，未命中时返回 `null`。 */
     fun fieldOrNull(query: FieldQuery.() -> Unit): Field? = findFieldOrNull(targetClass) {
@@ -204,10 +211,8 @@ class ResolveSession private constructor(
     /** 解析全部字段。 */
     fun fields(): List<Field> = findAllFields(targetClass) { applySearchScope() }
 
-    /** 按查询条件解析单个构造器。 */
-    fun constructor(query: ConstructorQuery.() -> Unit): Constructor<*> =
-        if (optionalMode) constructorOrNull(query) ?: throw MemberNotFoundException(MemberType.CONSTRUCTOR, targetClass.name, false)
-        else findConstructor(targetClass, query)
+    /** 按查询条件解析单个构造器。未命中抛 [MemberNotFoundException]，需要 null 结果请用 [constructorOrNull]。 */
+    fun constructor(query: ConstructorQuery.() -> Unit): Constructor<*> = findConstructor(targetClass, query)
 
     /** 按查询条件解析单个构造器，未命中时返回 `null`。 */
     fun constructorOrNull(query: ConstructorQuery.() -> Unit): Constructor<*>? = findConstructorOrNull(targetClass, query)
@@ -230,12 +235,36 @@ class ResolveSession private constructor(
     }
 
     /**
+     * 对绑定实例按名称执行实例方法自动匹配调用，找不到或调用失败时返回 `null`。
+     *
+     * 失败语义与顶层 [callMethodOrNull] 保持一致；如果当前会话没有绑定实例，也直接返回 `null`。
+     *
+     * @param methodName 目标方法名
+     * @param args 传给目标方法的实参
+     */
+    fun callOrNull(methodName: String, vararg args: Any?): Any? {
+        val instance = targetInstance ?: return null
+        return instance.callMethodOrNull(methodName, *args)
+    }
+
+    /**
      * 对绑定类按名称执行静态方法自动匹配调用。
      *
      * @param methodName 目标静态方法名
      * @param args 传给目标方法的实参
      */
     fun callStatic(methodName: String, vararg args: Any?): Any? = targetClass.callStaticMethod(methodName, *args)
+
+    /**
+     * 对绑定类按名称执行静态方法自动匹配调用，找不到或调用失败时返回 `null`。
+     *
+     * 失败语义与顶层 [callStaticMethodOrNull] 保持一致。
+     *
+     * @param methodName 目标静态方法名
+     * @param args 传给目标方法的实参
+     */
+    fun callStaticOrNull(methodName: String, vararg args: Any?): Any? =
+        targetClass.callStaticMethodOrNull(methodName, *args)
 
     private fun copy(
         targetClass: Class<*> = this.targetClass,

@@ -287,14 +287,18 @@ fun Class<*>.findAllConstructors(query: ConstructorQuery.() -> Unit): List<Const
  * 创建实例（精确参数类型）。
  *
  * ```kotlin
- * val obj = clz.newInstance()
- * val obj = clz.newInstance(args("param1", 42), argTypes(String::class.java, Int::class.java))
+ * val obj = clz.instantiate()
+ * val obj = clz.instantiate(args("param1", 42), argTypes(String::class.java, Int::class.java))
  * ```
+ *
+ * **不要使用 `clz.newInstance()` 的无参写法**：Kotlin 重载解析会优先选 JDK `Class.newInstance()`，
+ * 与本扩展函数行为不同（不会 setAccessible、JDK 9+ 已 @Deprecated）。
+ * 使用 [instantiate] 可以避免这个陷阱。
  *
  * @param args 构造器参数值包装
  * @param argTypes 构造器参数类型；为空时会根据 [args] 自动推断
  */
-fun Class<*>.newInstance(args: Args = args(), argTypes: ArgTypes = argTypes()): Any {
+fun Class<*>.instantiate(args: Args = args(), argTypes: ArgTypes = argTypes()): Any {
     val types = if (argTypes.types.isNotEmpty()) argTypes.types
     else if (args.args.isEmpty()) emptyArray()
     else inferArgTypes(args.args)
@@ -304,14 +308,37 @@ fun Class<*>.newInstance(args: Args = args(), argTypes: ArgTypes = argTypes()): 
 }
 
 /**
+ * [instantiate] 的旧名字。仅供已有调用兼容；新代码请用 [instantiate]，避免无参写法落入 JDK `Class.newInstance()`。
+ */
+@Deprecated(
+    message = "改用 instantiate(...)；无参写法 clz.newInstance() 会落到 JDK 实现，行为不同",
+    replaceWith = ReplaceWith("instantiate(args, argTypes)"),
+    level = DeprecationLevel.WARNING,
+)
+fun Class<*>.newInstance(args: Args = args(), argTypes: ArgTypes = argTypes()): Any =
+    instantiate(args, argTypes)
+
+/**
  * 类型安全的实例创建。
  *
  * @param args 构造器参数值包装
  * @param argTypes 构造器参数类型；为空时会根据 [args] 自动推断
  */
 @Suppress("UNCHECKED_CAST")
+fun <T> Class<*>.instantiateAs(args: Args = args(), argTypes: ArgTypes = argTypes()): T =
+    instantiate(args, argTypes) as T
+
+/**
+ * [instantiateAs] 的旧名字。
+ */
+@Deprecated(
+    message = "改用 instantiateAs(...)",
+    replaceWith = ReplaceWith("instantiateAs<T>(args, argTypes)"),
+    level = DeprecationLevel.WARNING,
+)
+@Suppress("UNCHECKED_CAST")
 fun <T> Class<*>.newInstanceAs(args: Args = args(), argTypes: ArgTypes = argTypes()): T =
-    newInstance(args, argTypes) as T
+    instantiate(args, argTypes) as T
 
 /**
  * 自动匹配构造器参数类型。
@@ -344,7 +371,7 @@ fun newInstance(
     args: Args = args(),
     argTypes: ArgTypes = argTypes(),
     classLoader: ClassLoader = EzReflect.classLoader,
-): Any = loadClass(className, classLoader).newInstance(args, argTypes)
+): Any = loadClass(className, classLoader).instantiate(args, argTypes)
 
 /**
  * 按类名创建实例（类型安全）。

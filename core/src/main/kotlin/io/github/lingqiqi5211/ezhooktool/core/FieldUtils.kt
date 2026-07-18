@@ -8,6 +8,7 @@ import io.github.lingqiqi5211.ezhooktool.core.query.fieldExactCacheKeys
 import io.github.lingqiqi5211.ezhooktool.core.query.fieldQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
 import java.lang.reflect.Field
+import java.lang.reflect.Modifier
 
 /**
  * 字段查找条件。以 Field 为 receiver。
@@ -399,6 +400,11 @@ fun Any.fieldOrNull(
                 current = current.superclass
                 continue
             }
+            if (isStatic != Modifier.isStatic(f.modifiers)) {
+                // 名字命中但 static 修饰符不符；继续向上找同名字段。
+                current = current.superclass
+                continue
+            }
             f.isAccessible = true
             if (EzReflect.cacheEnabled) {
                 EzReflect.cachePut(
@@ -610,7 +616,7 @@ fun <T> Any.getFieldByType(type: Class<*>, isStatic: Boolean = false): T? {
             targetClass = ownerClass().name,
             searchedSuper = true,
             conditionDesc = "type=${type.simpleName}, isStatic=$isStatic",
-            candidates = emptyList(),
+            candidates = getFieldCandidates(ownerClass()),
         )
     return readFieldValue(f, if (isStatic) null else this) as T?
 }

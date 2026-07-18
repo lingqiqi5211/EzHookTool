@@ -18,7 +18,7 @@ subprojects {
 dependencies {
     dokka(project(":core"))
     dokka(project(":hook-xposed-82"))
-    dokka(project(":hook-xposed-101"))
+    dokka(project(":hook-xposed-102"))
 }
 
 dokka {
@@ -41,6 +41,6 @@ tasks.register("publishAllToMavenLocal") {
     dependsOn(
         ":core:publishToMavenLocal",
         ":hook-xposed-82:publishToMavenLocal",
-        ":hook-xposed-101:publishToMavenLocal",
+        ":hook-xposed-102:publishToMavenLocal",
     )
 }

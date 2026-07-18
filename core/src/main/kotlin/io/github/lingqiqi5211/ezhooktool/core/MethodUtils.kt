@@ -7,6 +7,7 @@ import io.github.lingqiqi5211.ezhooktool.core.query.methodCondition
 import io.github.lingqiqi5211.ezhooktool.core.query.methodExactCacheKeys
 import io.github.lingqiqi5211.ezhooktool.core.query.methodQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 
 /**
@@ -514,6 +515,27 @@ fun Class<*>.findAllMethods(
 // ═══════════════════════ 实例方法调用 ═══════════════════════
 
 /**
+ * 只吞查找/调用前置校验失败，目标方法自身抛出的异常原样重新抛出。
+ *
+ * 用于 [callMethodOrNull]/[callStaticMethodOrNull] 系列：这些函数名字里的 "OrNull" 指"方法找不到、
+ * 参数不匹配、无权限访问时返回 null"，不代表"目标方法内部抛出的业务异常也会被吞掉"——那类异常应该让
+ * 调用方看到，否则会掩盖真实的崩溃原因。
+ */
+private inline fun <T> callCatchingLookupFailure(block: () -> T): T? = try {
+    block()
+} catch (e: InvocationTargetException) {
+    throw e.targetException ?: e
+} catch (_: MemberNotFoundException) {
+    null
+} catch (_: SingleResultExpectedException) {
+    null
+} catch (_: IllegalAccessException) {
+    null
+} catch (_: IllegalArgumentException) {
+    null
+}
+
+/**
  * 按名称调用实例方法。
  *
  * ```kotlin
@@ -532,17 +554,26 @@ fun Any.callMethod(
 }
 
 /**
- * 按名称调用实例方法，返回可空结果。
+ * 按名称调用实例方法，方法找不到、参数不匹配或无权限访问时返回 `null`。
+ *
+ * 目标方法自身抛出的异常会原样重新抛出，不会被吞掉——需要区分"方法不存在"和"方法存在但调用失败"时，
+ * 应捕获目标异常类型而不是依赖这里返回 `null`。失败被静默吞掉的部分不打印日志；需要日志请用
+ * [tryOrLogNull] 包裹普通 [callMethod]。
  */
 fun Any.callMethodOrNull(
     methodName: String,
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Any? = callMethod(methodName, args, argTypes, returnType)
+): Any? = callCatchingLookupFailure {
+    callMethod(methodName, args, argTypes, returnType)
+}
 
 /**
  * 类型安全的方法调用。
+ *
+ * 找不到方法按 [callMethod] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
+ * 期望 `null` 结果请改用 [callMethodAsOrNull]。
  *
  * ```kotlin
  * val name: String = instance.callMethodAs("getName")
@@ -554,7 +585,9 @@ fun <T> Any.callMethodAs(
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): T = callMethod(methodName, args, argTypes, returnType) as T
+): T = checkNotNull(callMethod(methodName, args, argTypes, returnType)) {
+    "Method \"$methodName\" returned null; use callMethodAsOrNull for nullable results."
+} as T
 
 /**
  * 类型安全的方法调用，类型不匹配时返回 null。
@@ -578,17 +611,25 @@ fun Any.callMethod(methodName: String, vararg args: Any?): Any? =
     invokeAutoMatchedMethod(javaClass, this, methodName, args)
 
 /**
- * 自动匹配参数并调用实例方法，返回可空结果。
+ * 自动匹配参数并调用实例方法，方法找不到、参数不匹配或无权限访问时返回 `null`。
+ *
+ * 目标方法自身抛出的异常会原样重新抛出，不会被吞掉。失败被静默吞掉的部分不打印日志。
  */
-fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? =
+fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? = callCatchingLookupFailure {
     callMethod(methodName, *args)
+}
 
 /**
  * 自动匹配参数并调用实例方法。
+ *
+ * 找不到方法按 [callMethod] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
+ * 期望 `null` 结果请改用 [callMethodAsOrNull]。
  */
 @Suppress("UNCHECKED_CAST")
 fun <T> Any.callMethodAs(methodName: String, vararg args: Any?): T =
-    callMethod(methodName, *args) as T
+    checkNotNull(callMethod(methodName, *args)) {
+        "Method \"$methodName\" returned null; use callMethodAsOrNull for nullable results."
+    } as T
 
 /**
  * 自动匹配参数并调用实例方法，类型不匹配时返回 null。
@@ -616,12 +657,16 @@ fun Any.callMethodBy(
 
 /**
  * 按条件查找并调用。
+ *
+ * 找不到方法按 [callMethodBy] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
  */
 @Suppress("UNCHECKED_CAST")
 fun <T> Any.callMethodByAs(
     args: Array<out Any?> = emptyArray(),
     query: MethodQuery.() -> Unit,
-): T = callMethodBy(args, query) as T
+): T = checkNotNull(callMethodBy(args, query)) {
+    "callMethodByAs returned null; use a nullable T or a dedicated OrNull helper for nullable results."
+} as T
 
 // ═══════════════════════ 静态方法调用 ═══════════════════════
 
@@ -644,17 +689,24 @@ fun Class<*>.callStaticMethod(
 }
 
 /**
- * 调用静态方法，返回可空结果。
+ * 调用静态方法，方法找不到、参数不匹配或无权限访问时返回 `null`。
+ *
+ * 目标方法自身抛出的异常会原样重新抛出，不会被吞掉。
  */
 fun Class<*>.callStaticMethodOrNull(
     methodName: String,
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Any? = callStaticMethod(methodName, args, argTypes, returnType)
+): Any? = callCatchingLookupFailure {
+    callStaticMethod(methodName, args, argTypes, returnType)
+}
 
 /**
  * 静态方法调用。
+ *
+ * 找不到方法按 [callStaticMethod] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
+ * 期望 `null` 结果请改用 [callStaticMethodAsOrNull]。
  */
 @Suppress("UNCHECKED_CAST")
 fun <T> Class<*>.callStaticMethodAs(
@@ -662,7 +714,9 @@ fun <T> Class<*>.callStaticMethodAs(
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): T = callStaticMethod(methodName, args, argTypes, returnType) as T
+): T = checkNotNull(callStaticMethod(methodName, args, argTypes, returnType)) {
+    "Static method \"$methodName\" returned null; use callStaticMethodAsOrNull for nullable results."
+} as T
 
 /**
  * 静态方法调用，类型不匹配时返回 null。
@@ -685,17 +739,25 @@ fun Class<*>.callStaticMethod(methodName: String, vararg args: Any?): Any? =
     invokeAutoMatchedMethod(this, null, methodName, args)
 
 /**
- * 自动匹配参数并调用静态方法，返回可空结果。
+ * 自动匹配参数并调用静态方法，方法找不到、参数不匹配或无权限访问时返回 `null`。
+ *
+ * 目标方法自身抛出的异常会原样重新抛出，不会被吞掉。
  */
-fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any? =
+fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any? = callCatchingLookupFailure {
     callStaticMethod(methodName, *args)
+}
 
 /**
  * 自动匹配参数并调用静态方法。
+ *
+ * 找不到方法按 [callStaticMethod] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
+ * 期望 `null` 结果请改用 [callStaticMethodAsOrNull]。
  */
 @Suppress("UNCHECKED_CAST")
 fun <T> Class<*>.callStaticMethodAs(methodName: String, vararg args: Any?): T =
-    callStaticMethod(methodName, *args) as T
+    checkNotNull(callStaticMethod(methodName, *args)) {
+        "Static method \"$methodName\" returned null; use callStaticMethodAsOrNull for nullable results."
+    } as T
 
 /**
  * 自动匹配参数并调用静态方法，类型不匹配时返回 null。

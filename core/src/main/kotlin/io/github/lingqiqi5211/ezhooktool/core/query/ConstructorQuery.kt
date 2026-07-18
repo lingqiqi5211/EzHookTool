@@ -1,7 +1,9 @@
 package io.github.lingqiqi5211.ezhooktool.core.query
 
 import io.github.lingqiqi5211.ezhooktool.core.ConstructorCondition
-import io.github.lingqiqi5211.ezhooktool.core.isTypeMatch
+import io.github.lingqiqi5211.ezhooktool.core.canAcceptAll
+import io.github.lingqiqi5211.ezhooktool.core.describeTypes
+import io.github.lingqiqi5211.ezhooktool.core.isSynthetic
 import io.github.lingqiqi5211.ezhooktool.core.paramCount
 import io.github.lingqiqi5211.ezhooktool.core.toReadableTypeName
 import java.lang.reflect.Constructor
@@ -13,6 +15,7 @@ private enum class ConstructorCachePart {
     PARAM_COUNT_RANGE,
     PARAMETER_TYPES,
     ASSIGNABLE_PARAMETER_TYPES,
+    VAGUE_PARAMETER_TYPES,
     EXCEPTION_TYPES,
     FLAGS,
 }
@@ -24,6 +27,7 @@ private val constructorCachePartOrder = listOf(
     ConstructorCachePart.PARAM_COUNT_RANGE,
     ConstructorCachePart.PARAMETER_TYPES,
     ConstructorCachePart.ASSIGNABLE_PARAMETER_TYPES,
+    ConstructorCachePart.VAGUE_PARAMETER_TYPES,
     ConstructorCachePart.EXCEPTION_TYPES,
     ConstructorCachePart.FLAGS,
 )
@@ -37,19 +41,6 @@ private fun constructorCacheKeyOf(parts: Map<ConstructorCachePart, Any>): List<A
     }
     return result
 }
-
-private fun Array<Class<*>>.canAcceptAll(types: Array<out Class<*>>): Boolean {
-    if (size != types.size) return false
-    for (index in indices) {
-        if (!isTypeMatch(types[index], this[index])) return false
-    }
-    return true
-}
-
-private fun Constructor<*>.isSyntheticConstructor(): Boolean = modifiers and 0x00001000 != 0
-
-private fun Array<out Class<*>>.describeTypes(): String =
-    joinToString(prefix = "[", postfix = "]") { it.toReadableTypeName() }
 
 /**
  * 构造器查询条件。
@@ -100,7 +91,9 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
     /**
      * 限定完整参数类型。
      *
-     * 参数数量和顺序都必须一致。
+     * 参数数量和顺序都必须一致，且类型必须 **完全相等**：
+     * `Int::class.java`（即 `int.class`）与 `Integer.class` 视为不同类型。
+     * 如果需要让 primitive 与 wrapper 互相匹配（或允许子类）请改用 [parameterTypesAssignableFrom]。
      */
     fun parameterTypes(vararg types: Class<*>) {
         conditions += { parameterTypes.contentEquals(types) }
@@ -127,6 +120,32 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
     /** [parameterTypesAssignableFrom] 的短名称。 */
     fun paramsAssignableFrom(vararg types: Class<*>) {
         parameterTypesAssignableFrom(*types)
+    }
+
+    /**
+     * 限定参数类型，允许其中某些位置用 [VagueType] 占位跳过精确匹配。
+     *
+     * 参数数量仍必须与 [types] 长度一致；非 [VagueType] 的位置按 [parameterTypes] 语义要求完全相等。
+     */
+    fun parameterTypesVague(vararg types: Any) {
+        val expected = types.map { if (it === VagueType) null else it as Class<*> }
+        conditions += { parameterTypesMatchVague(parameterTypes, expected) }
+        cacheParts[ConstructorCachePart.VAGUE_PARAMETER_TYPES] = expected
+        val described = types.joinToString(", ") { if (it === VagueType) "*" else (it as Class<*>).toReadableTypeName() }
+        descriptions += "paramsVague=[$described]"
+    }
+
+    /**
+     * 限定形参在 [Constructor.getGenericParameterTypes] 层面的类型，按 [GenericTypeMatcher] 逐位匹配。
+     *
+     * 与 [parameterTypes] 不同，这里使用擦除前的 `Type`，可以匹配类型变量或参数化类型的 raw type。
+     * 此条件禁用查询缓存。
+     */
+    fun genericParameterTypes(vararg matchers: GenericTypeMatcher) {
+        val snapshot = matchers.toList()
+        conditions += { matchesGenericTypes(genericParameterTypes, snapshot) }
+        cacheable = false
+        descriptions += "genericParams=[${snapshot.joinToString(", ")}]"
     }
 
     /** 限定声明的异常类型。 */
@@ -178,12 +197,12 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
 
     /** 限定为 synthetic 构造器。 */
     fun isSynthetic() {
-        flag("synthetic", true) { isSyntheticConstructor() }
+        flag("synthetic", true) { isSynthetic }
     }
 
     /** 限定为非 synthetic 构造器。 */
     fun notSynthetic() {
-        flag("synthetic", false) { isSyntheticConstructor() }
+        flag("synthetic", false) { isSynthetic }
     }
 
     /** 添加自定义 Kotlin 条件。 */

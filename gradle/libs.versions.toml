@@ -1,11 +1,11 @@
 [versions]
 kotlin = "2.3.21"
-junit = "6.0.3"
+junit = "6.1.1"
 agp = "9.2.1"
-libxposed = "101.0.1"
+libxposed = "102.0.0"
 oldxposed = "82"
 dokka = "2.2.0"
-vanniktechMavenPublish = "0.36.0"
+vanniktechMavenPublish = "0.37.0"
 annotationJvm = "1.10.0"
 
 [libraries]

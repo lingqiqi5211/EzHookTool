@@ -13,6 +13,50 @@ import java.lang.reflect.Method
  */
 internal object DexDescriptor {
 
+    private data class ParsedType(val type: Class<*>, val endIndex: Int)
+
+    private fun parseTypeAt(
+        desc: String,
+        startIndex: Int,
+        classLoader: ClassLoader,
+        allowVoid: Boolean,
+    ): ParsedType {
+        if (startIndex >= desc.length) throw IllegalArgumentException("Empty type descriptor")
+        val primitive = when (desc[startIndex]) {
+            'V' -> {
+                if (!allowVoid) throw IllegalArgumentException("void is not valid here: $desc")
+                Void.TYPE
+            }
+            'Z' -> Boolean::class.javaPrimitiveType!!
+            'B' -> Byte::class.javaPrimitiveType!!
+            'C' -> Char::class.javaPrimitiveType!!
+            'S' -> Short::class.javaPrimitiveType!!
+            'I' -> Int::class.javaPrimitiveType!!
+            'J' -> Long::class.javaPrimitiveType!!
+            'F' -> Float::class.javaPrimitiveType!!
+            'D' -> Double::class.javaPrimitiveType!!
+            else -> null
+        }
+        if (primitive != null) return ParsedType(primitive, startIndex + 1)
+
+        return when (desc[startIndex]) {
+            'L' -> {
+                val end = desc.indexOf(';', startIndex + 1)
+                if (end == -1) throw IllegalArgumentException("Invalid object type descriptor: $desc")
+                val internalName = desc.substring(startIndex + 1, end)
+                if (internalName.isEmpty()) throw IllegalArgumentException("Empty object type descriptor: $desc")
+                ParsedType(loadClass(internalName.replace('/', '.'), classLoader), end + 1)
+            }
+            '[' -> {
+                val component = parseTypeAt(desc, startIndex + 1, classLoader, allowVoid = false)
+                ParsedType(java.lang.reflect.Array.newInstance(component.type, 0).javaClass, component.endIndex)
+            }
+            else -> throw IllegalArgumentException(
+                "Unknown type descriptor '${desc[startIndex]}' at pos $startIndex in: $desc"
+            )
+        }
+    }
+
     /**
      * Parse a Dex type descriptor to a Class.
      *
@@ -25,33 +69,11 @@ internal object DexDescriptor {
      * @param classLoader 用于解析对象类型的 `ClassLoader`
      */
     fun parseType(desc: String, classLoader: ClassLoader): Class<*> {
-        if (desc.isEmpty()) throw IllegalArgumentException("Empty type descriptor")
-        return when (desc[0]) {
-            'V' -> Void.TYPE
-            'Z' -> Boolean::class.javaPrimitiveType!!
-            'B' -> Byte::class.javaPrimitiveType!!
-            'C' -> Char::class.javaPrimitiveType!!
-            'S' -> Short::class.javaPrimitiveType!!
-            'I' -> Int::class.javaPrimitiveType!!
-            'J' -> Long::class.javaPrimitiveType!!
-            'F' -> Float::class.javaPrimitiveType!!
-            'D' -> Double::class.javaPrimitiveType!!
-            'L' -> {
-                // Lcom/example/Foo; → com.example.Foo
-                val end = desc.indexOf(';')
-                if (end == -1) throw IllegalArgumentException("Invalid object type descriptor: $desc")
-                val className = desc.substring(1, end).replace('/', '.')
-                loadClass(className, classLoader)
-            }
-
-            '[' -> {
-                // Array: recursively resolve component type
-                val componentType = parseType(desc.substring(1), classLoader)
-                java.lang.reflect.Array.newInstance(componentType, 0).javaClass
-            }
-
-            else -> throw IllegalArgumentException("Unknown type descriptor: $desc")
+        val parsed = parseTypeAt(desc, 0, classLoader, allowVoid = true)
+        if (parsed.endIndex != desc.length) {
+            throw IllegalArgumentException("Trailing content in type descriptor at pos ${parsed.endIndex}: $desc")
         }
+        return parsed.type
     }
 
     /**
@@ -66,37 +88,9 @@ internal object DexDescriptor {
         val types = mutableListOf<Class<*>>()
         var i = 0
         while (i < paramDesc.length) {
-            when (paramDesc[i]) {
-                'V', 'Z', 'B', 'C', 'S', 'I', 'J', 'F', 'D' -> {
-                    types.add(parseType(paramDesc[i].toString(), classLoader))
-                    i++
-                }
-
-                'L' -> {
-                    val end = paramDesc.indexOf(';', i)
-                    if (end == -1) throw IllegalArgumentException("Invalid param descriptor at pos $i: $paramDesc")
-                    types.add(parseType(paramDesc.substring(i, end + 1), classLoader))
-                    i = end + 1
-                }
-
-                '[' -> {
-                    // Find the end of the array type
-                    var arrayEnd = i + 1
-                    while (arrayEnd < paramDesc.length && paramDesc[arrayEnd] == '[') arrayEnd++
-                    if (arrayEnd >= paramDesc.length) throw IllegalArgumentException("Invalid array descriptor at pos $i: $paramDesc")
-                    val componentEnd = if (paramDesc[arrayEnd] == 'L') {
-                        val semi = paramDesc.indexOf(';', arrayEnd)
-                        if (semi == -1) throw IllegalArgumentException("Invalid array object descriptor at pos $i: $paramDesc")
-                        semi + 1
-                    } else {
-                        arrayEnd + 1
-                    }
-                    types.add(parseType(paramDesc.substring(i, componentEnd), classLoader))
-                    i = componentEnd
-                }
-
-                else -> throw IllegalArgumentException("Unknown char '${paramDesc[i]}' at pos $i in: $paramDesc")
-            }
+            val parsed = parseTypeAt(paramDesc, i, classLoader, allowVoid = false)
+            types += parsed.type
+            i = parsed.endIndex
         }
         return types.toTypedArray()
     }
@@ -132,12 +126,15 @@ internal object DexDescriptor {
         val rest = desc.substring(arrowIdx + 2)
         val parenOpen = rest.indexOf('(')
         val parenClose = rest.indexOf(')')
-        if (parenOpen == -1 || parenClose == -1)
+        if (parenOpen <= 0 || parenClose <= parenOpen || rest.indexOf('(', parenOpen + 1) != -1 ||
+            rest.indexOf(')', parenClose + 1) != -1
+        )
             throw IllegalArgumentException("Invalid method descriptor (no parentheses): $desc")
 
         val methodName = rest.substring(0, parenOpen)
         val paramSection = rest.substring(parenOpen + 1, parenClose)
         val returnSection = rest.substring(parenClose + 1)
+        if (returnSection.isEmpty()) throw IllegalArgumentException("Missing return type in method descriptor: $desc")
 
         val paramTypes = parseParamTypes(paramSection, classLoader)
         val returnType = parseType(returnSection, classLoader)
@@ -166,7 +163,10 @@ internal object DexDescriptor {
 
         val fieldName = rest.substring(0, colonIdx)
         val typeSection = rest.substring(colonIdx + 1)
+        if (fieldName.isEmpty()) throw IllegalArgumentException("Missing field name in descriptor: $desc")
+        if (typeSection.isEmpty()) throw IllegalArgumentException("Missing field type in descriptor: $desc")
         val fieldType = parseType(typeSection, classLoader)
+        if (fieldType == Void.TYPE) throw IllegalArgumentException("Field type cannot be void: $desc")
 
         return FieldDesc(className, fieldName, fieldType)
     }
@@ -182,6 +182,9 @@ internal object DexDescriptor {
  * ```
  *
  * 签名格式: `L<class>;-><method>(<param_types>)<return_type>`
+ *
+ * 仅查找 `declaredMethods`；不会沿父类查找。这跟 `findMethod` 默认 smart 模式不同——
+ * 因为 descriptor 已显式声明了 owner class。
  *
  * @param desc 方法的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
@@ -199,17 +202,35 @@ fun getMethodByDesc(desc: String, classLoader: ClassLoader = EzReflect.classLoad
 /**
  * 通过 Dex/Smali 签名获取方法，找不到返回 null。
  *
+ * 描述符格式错误会抛 [IllegalArgumentException]——这跟"目标不存在"是两类不同问题，
+ * 应该尽早暴露而不是被吞成 null。
+ *
  * @param desc 方法的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
  */
 fun getMethodByDescOrNull(desc: String, classLoader: ClassLoader = EzReflect.classLoader): Method? {
+    val parsed = try {
+        DexDescriptor.parseMethodDesc(desc, classLoader)
+    } catch (_: ClassNotFoundError) {
+        return null
+    } catch (_: ClassNotFoundException) {
+        return null
+    } catch (_: NoClassDefFoundError) {
+        return null
+    }
     return try {
-        val parsed = DexDescriptor.parseMethodDesc(desc, classLoader)
         val clz = loadClass(parsed.className, classLoader)
         val method = clz.getDeclaredMethod(parsed.methodName, *parsed.paramTypes)
+        if (method.returnType != parsed.returnType) return null
         method.isAccessible = true
         method
-    } catch (_: Throwable) {
+    } catch (_: NoSuchMethodException) {
+        null
+    } catch (_: ClassNotFoundError) {
+        null
+    } catch (_: ClassNotFoundException) {
+        null
+    } catch (_: NoClassDefFoundError) {
         null
     }
 }
@@ -222,6 +243,8 @@ fun getMethodByDescOrNull(desc: String, classLoader: ClassLoader = EzReflect.cla
  * ```
  *
  * 签名格式: `L<class>;-><field>:<type>`
+ *
+ * 仅查找 `declaredFields`；不会沿父类查找。
  *
  * @param desc 字段的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
@@ -239,17 +262,35 @@ fun getFieldByDesc(desc: String, classLoader: ClassLoader = EzReflect.classLoade
 /**
  * 通过 Dex/Smali 签名获取字段，找不到返回 null。
  *
+ * 描述符格式错误会抛 [IllegalArgumentException]——这跟"目标不存在"是两类不同问题，
+ * 应该尽早暴露而不是被吞成 null。
+ *
  * @param desc 字段的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
  */
 fun getFieldByDescOrNull(desc: String, classLoader: ClassLoader = EzReflect.classLoader): Field? {
+    val parsed = try {
+        DexDescriptor.parseFieldDesc(desc, classLoader)
+    } catch (_: ClassNotFoundError) {
+        return null
+    } catch (_: ClassNotFoundException) {
+        return null
+    } catch (_: NoClassDefFoundError) {
+        return null
+    }
     return try {
-        val parsed = DexDescriptor.parseFieldDesc(desc, classLoader)
         val clz = loadClass(parsed.className, classLoader)
         val field = clz.getDeclaredField(parsed.fieldName)
+        if (field.type != parsed.fieldType) return null
         field.isAccessible = true
         field
-    } catch (_: Throwable) {
+    } catch (_: NoSuchFieldException) {
+        null
+    } catch (_: ClassNotFoundError) {
+        null
+    } catch (_: ClassNotFoundException) {
+        null
+    } catch (_: NoClassDefFoundError) {
         null
     }
 }

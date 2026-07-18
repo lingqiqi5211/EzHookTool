@@ -41,7 +41,7 @@ class MemberNotFoundException(
                 MemberType.FIELD -> "Field"
                 MemberType.CONSTRUCTOR -> "Constructor"
             }
-            val searchDesc = if (searchedSuper) "current class + superclasses (smart mode)" else "current class only"
+            val searchDesc = if (searchedSuper) "current class and superclasses" else "current class only"
 
             if (!EzReflect.debugMode) {
                 // 简洁模式
@@ -68,7 +68,7 @@ class MemberNotFoundException(
             }
             if (candidates.isNotEmpty()) {
                 sb.appendLine("│")
-                sb.appendLine("│ Candidates in this class:")
+                sb.appendLine("│ Candidates from target class:")
                 for (c in candidates) {
                     sb.appendLine("│   ✗ $c")
                 }
@@ -83,6 +83,10 @@ class MemberNotFoundException(
 
 /**
  * 类加载失败时的异常。
+ *
+ * 注意：尽管类名以 `Error` 结尾，本类继承 [RuntimeException] 而非 [Error]；
+ * 名字保留是为了对应 JDK 的 [NoClassDefFoundError]，但行为更像受查的 RuntimeException。
+ * 不要据此假设它"不可恢复"——可以正常 `try/catch` 处理。
  */
 class ClassNotFoundError(
     val className: String,
@@ -133,7 +137,8 @@ class SingleResultExpectedException(
     val conditionDesc: String? = null,
 ) : RuntimeException(
     buildString {
-        append("Expected single result for $target, but found multiple matches.")
+        append("Expected exactly one result for $target, but found multiple matches.")
+        append(" Use `findAll...` when multiple results are acceptable.")
         if (conditionDesc != null) append("\n  Condition: $conditionDesc")
     }
 )

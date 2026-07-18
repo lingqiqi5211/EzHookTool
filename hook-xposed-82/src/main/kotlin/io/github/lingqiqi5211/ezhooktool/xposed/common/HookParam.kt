@@ -1,6 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.xposed.common
 
 import de.robv.android.xposed.XC_MethodHook
+import java.lang.reflect.Executable
 import java.lang.reflect.Member
 
 /** Xposed 82 hook 回调参数包装。 */
@@ -12,7 +13,15 @@ class HookParam internal constructor(
     val member: Member
         get() = raw.method
 
-    /** 当前实例方法的 `this` 对象；静态方法时通常为 `null`。 */
+    /**
+     * 当前正在被 hook 的方法或构造器，便于与 102 的 API 表面统一。
+     *
+     * 经典 Xposed 82 把方法和构造器都包装为 `Member`，这里在需要时向下转型为 [Executable]。
+     */
+    val executable: Executable
+        get() = raw.method as Executable
+
+    /** 当前实例方法的 `this` 对象；静态方法时为 `null`。 */
     val thisObject: Any?
         get() = raw.thisObject
 
@@ -25,8 +34,12 @@ class HookParam internal constructor(
     fun <T> thisObjectAs(): T = thisObject as T
 
     /** 当前调用的参数数组。 */
+    @Suppress("UNCHECKED_CAST")
     val args: Array<Any?>
         get() = raw.args as Array<Any?>
+
+    /** 按下标读取参数。 */
+    fun arg(index: Int): Any? = args[index]
 
     /** 按下标读取参数并转换成目标类型。 */
     @Suppress("UNCHECKED_CAST")

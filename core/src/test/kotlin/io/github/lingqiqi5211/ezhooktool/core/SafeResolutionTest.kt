@@ -103,6 +103,13 @@ class SafeResolutionTest {
     }
 
     @Test
+    fun `resolveSession callOrNull returns null without bound instance`() {
+        val session = ResolveSession.of(SafeResolveMethodTarget::class.java)
+        assertNull(session.callOrNull("missingCall"))
+        assertNull(session.callStaticOrNull("missingStaticCall"))
+    }
+
+    @Test
     fun `member not found message includes query conditions`() {
         val error = assertThrows(MemberNotFoundException::class.java) {
             SafeMemberTarget::class.java.findMethod {
@@ -111,6 +118,17 @@ class SafeResolutionTest {
             }
         }
 
-        assertTrue(error.message.orEmpty().contains("Condition: name=missingMethod, params=[java.lang.String]"))
+        val message = error.message.orEmpty()
+        assertTrue(message.contains("Condition: name=missingMethod, params=[java.lang.String]"))
+        assertTrue(message.contains("Search: current class and superclasses"))
     }
+
+    @Test
+    fun `best match failure message includes lookup condition`() {
+        val error = assertThrows(MemberNotFoundException::class.java) {
+            findMethodBestMatch(SafeMemberTarget::class.java, "missingBestMatch", String::class.java)
+        }
+        assertTrue(error.message.orEmpty().contains("bestMatch name=missingBestMatch"))
+    }
+
 }

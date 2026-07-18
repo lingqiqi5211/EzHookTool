@@ -2,6 +2,7 @@ package io.github.lingqiqi5211.ezhooktool.core.query
 
 import io.github.lingqiqi5211.ezhooktool.core.FieldCondition
 import io.github.lingqiqi5211.ezhooktool.core.isStatic
+import io.github.lingqiqi5211.ezhooktool.core.isSynthetic
 import io.github.lingqiqi5211.ezhooktool.core.isTypeMatch
 import io.github.lingqiqi5211.ezhooktool.core.toReadableTypeName
 import java.lang.reflect.Field
@@ -41,8 +42,6 @@ private fun fieldCacheKeyOf(parts: Map<FieldCachePart, Any>): List<Any> {
     }
     return result
 }
-
-private fun Field.isSyntheticField(): Boolean = modifiers and 0x00001000 != 0
 
 /**
  * 字段查询条件。
@@ -197,12 +196,12 @@ class FieldQuery internal constructor() : BaseQuery<Field>() {
 
     /** 限定为 synthetic 字段。 */
     fun isSynthetic() {
-        flag("synthetic", true) { isSyntheticField() }
+        flag("synthetic", true) { isSynthetic }
     }
 
     /** 限定为非 synthetic 字段。 */
     fun notSynthetic() {
-        flag("synthetic", false) { isSyntheticField() }
+        flag("synthetic", false) { isSynthetic }
     }
 
     /**

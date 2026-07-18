@@ -1,6 +1,9 @@
 @file:Suppress("UNCHECKED_CAST")
 @file:JvmName("FieldHelper")
 
+// 镜像文件：与 hook-xposed-102/.../dsl/FieldHelper.kt 内容必须保持一致。
+// 改动时请同步修改另一侧；CI 没有强制校验，依靠人工维护。
+
 package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 
 import io.github.lingqiqi5211.ezhooktool.core.field
@@ -264,16 +267,22 @@ fun Class<*>.findFirstFieldByExactType(type: Class<*>, findSuper: Boolean? = nul
 fun Class<*>.findFirstFieldByExactTypeOrNull(type: Class<*>, findSuper: Boolean? = null): Field? =
     findFieldByTypeOrNull(type, findSuper)
 
+private fun Any.objectField(fieldName: String): Field =
+    findField(javaClass) { name(fieldName) }
+
+private fun Any.objectFieldOrNull(fieldName: String): Field? =
+    findFieldOrNull(javaClass) { name(fieldName) }
+
 /**
- * 读取实例字段。
+ * 读取对象字段。按类层级读取最近的同名字段，以兼容旧版静态字段访问。
  *
  * @param fieldName 字段名
  */
 fun Any.getObjectField(fieldName: String): Any? =
-    getField(fieldName)
+    objectField(fieldName).get(this)
 
 /**
- * 读取实例字段并转为指定类型。
+ * 读取对象字段并转为指定类型。
  *
  * @param fieldName 字段名
  */
@@ -281,29 +290,29 @@ fun <T> Any.getObjectFieldAs(fieldName: String): T =
     getObjectField(fieldName) as T
 
 /**
- * 写入实例字段。
+ * 写入对象字段。按类层级写入最近的同名字段，以兼容旧版静态字段访问。
  *
  * @param fieldName 字段名
  * @param value 新值
  */
 fun Any.setObjectField(fieldName: String, value: Any?) =
-    putField(fieldName, value)
+    objectField(fieldName).set(this, value)
 
 /**
- * 读取实例字段，失败时返回 `null`。
+ * 读取对象字段，找不到时返回 `null`；实例字段值为 `null` 时不回退。
  *
  * @param fieldName 字段名
  */
 fun Any.getObjectFieldOrNull(fieldName: String): Any? =
-    getFieldOrNull(fieldName)
+    objectFieldOrNull(fieldName)?.get(this)
 
 /**
- * 读取实例字段并转为指定类型，失败时返回 `null`。
+ * 读取对象字段并转为指定类型，失败时返回 `null`。
  *
  * @param fieldName 字段名
  */
 fun <T> Any.getObjectFieldOrNullAs(fieldName: String): T? =
-    getFieldOrNullAs(fieldName)
+    getObjectFieldOrNull(fieldName) as T?
 
 /** 读取实例 `Boolean` 字段。 */
 fun Any.getBooleanField(fieldName: String): Boolean = getObjectField(fieldName) as Boolean

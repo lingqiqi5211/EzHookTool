@@ -1,6 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.core.query
 
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
+import java.lang.reflect.Type
 
 /**
  * 反射查询的公共基础能力。
@@ -51,4 +52,27 @@ internal object QueryFilterContext {
             "Calling $apiName inside filter is discouraged. Prefer structured query conditions to avoid deep nested lookup.",
         )
     }
+}
+
+/**
+ * 按位比较实际参数类型与期望类型列表；期望列表中 `null` 表示该位置用 [VagueType] 占位，不参与比较。
+ *
+ * 数量必须完全一致；[VagueType] 只跳过精确匹配，不代表可变参数。
+ */
+internal fun parameterTypesMatchVague(actual: Array<Class<*>>, expected: List<Class<*>?>): Boolean {
+    if (actual.size != expected.size) return false
+    for (i in actual.indices) {
+        val expectedType = expected[i] ?: continue
+        if (actual[i] != expectedType) return false
+    }
+    return true
+}
+
+/** 按位用 [GenericTypeMatcher] 比较擦除前的 `Type` 数组；数量不一致直接判为不匹配。 */
+internal fun matchesGenericTypes(actual: Array<Type>, matchers: List<GenericTypeMatcher>): Boolean {
+    if (actual.size != matchers.size) return false
+    for (i in actual.indices) {
+        if (!matchers[i].matches(actual[i])) return false
+    }
+    return true
 }
