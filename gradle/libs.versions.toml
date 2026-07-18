@@ -1,7 +1,7 @@
 [versions]
-kotlin = "2.3.21"
-junit = "6.1.1"
-agp = "9.2.1"
+kotlin = "2.4.10"
+junit = "6.1.2"
+agp = "9.3.0"
 libxposed = "102.0.0"
 oldxposed = "82"
 dokka = "2.2.0"
