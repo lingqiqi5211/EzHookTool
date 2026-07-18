@@ -10,7 +10,7 @@ import io.github.lingqiqi5211.ezhooktool.xposed.dsl.replaceWith
 /**
  * 演示稳定 reload key 与运行时替换。
  *
- * 同一 key 会由 HotReloadSession 在模块更新时原子替换；句柄也可用于运行时切换实现。
+ * 同一 key 会在热重载时保持可替换；句柄也可用于运行时切换实现。
  */
 object ExampleReplaceHook : BaseHook() {
     override val name: String = "ExampleReplaceHook"
@@ -38,7 +38,7 @@ object ExampleReplaceHook : BaseHook() {
 
     /** 运行时切换实现：替换为「无论参数，永远返回 true」的 replace 行为。 */
     fun switchToAlwaysTrue() {
-        val current = handle ?: return
+        val current = requireNotNull(handle) { "ExampleReplaceHook.handle is not initialized. Call init() first." }
         handle = current.replaceWith { true }
     }
 

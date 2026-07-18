@@ -38,6 +38,7 @@ dependencies {
     implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-102:$ezHookToolVersion")
     // 或
     // implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-82:$ezHookToolVersion")
+    // 注意：hook-xposed-102 和 hook-xposed-82 二选一，不要同时引入。
 
     // 如果你的模块直接使用 Xposed / libxposed 的类型，
     // 还需要额外声明对应运行时 API。
@@ -52,7 +53,11 @@ dependencies {
 ```kotlin
 private const val TargetApp = "com.example.target"
 
-class MainHook : IXposedHookLoadPackage {
+class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
+    override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
+        EzXposed.initZygote(startupParam)
+    }
+
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (lpparam.packageName != TargetApp) return
 
@@ -161,7 +166,7 @@ class MainHook : XposedModule() {
 
     override fun onHotReloaded(param: HotReloadedParam) {
         // API 102 不会重放 onModuleLoaded；这个重载会完成新 generation 的初始化与规则注册。
-        EzXposed.handleHotReloadedWithTargetReady(this, param) { installHooks() }
+        EzXposed.handleHotReloadedWithTargetReady(this, param, targetReady = { installHooks() })
     }
 }
 ```

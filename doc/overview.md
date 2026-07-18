@@ -255,6 +255,7 @@ Hooks.createHooks(methods, new IMethodHook() {
 
 - `findOnlyClass()`：只查当前类。
 - `findAndSuper()`：查当前类和全部父类。
+- `findSuper()` 相关错误消息里的 `Search` 只描述是否继续向上查找，不代表接口继承图。
 
 不写这两个开关时，就是默认智能查找。
 
@@ -277,6 +278,14 @@ clazz.findMethod {
 - `paramCount(2)` / `paramCountIn(1..3)` / `noParams()` / `hasParams()`
 - `params(String::class.java)`：完整参数类型，数量和顺序必须一致。
 - `paramsAssignableFrom(String::class.java)`：目标方法参数能接收这些类型。
+- `parameterTypesVague(String::class.java, VagueType, Boolean::class.javaObjectType)`：参数数量固定，
+  某些位置用 `VagueType` 占位跳过精确匹配，其余位置仍要求完全相等。
+- `genericParameterTypes(GenericTypeMatcher.typeVariableNamed("T"))`：按擦除前的
+  `Method.genericParameterTypes` 逐位匹配，可命中真正声明的泛型方法参数（`TypeVariable`），
+  桥接方法（bridge method）的参数已被擦除为具体类型，不会匹配。此条件禁用查询缓存。
+- `genericReturnType(GenericTypeMatcher.rawType(List::class.java))`：按擦除前的
+  `Method.genericReturnType` 匹配，例如区分返回 `List<T>` 与返回 `List<String>` 的桥接方法。
+  此条件禁用查询缓存。
 - `returnType(String::class.java)` / `returnTypeExtendsFrom(CharSequence::class.java)` / `voidReturnType()`
 - `isStatic()` / `notStatic()` / `isPublic()` / `isPrivate()` / `isProtected()`
 - `isFinal()` / `isAbstract()` / `isNative()` / `isSynchronized()`
@@ -298,6 +307,10 @@ clazz.findMethod {
 - `paramCount(2)` / `paramCountIn(1..3)` / `noParams()` / `hasParams()`
 - `params(String::class.java)`：完整参数类型，数量和顺序必须一致。
 - `paramsAssignableFrom(String::class.java)`：目标构造器参数能接收这些类型。
+- `parameterTypesVague(String::class.java, VagueType, Boolean::class.javaObjectType)`：语义与方法查询的
+  同名条件一致。
+- `genericParameterTypes(GenericTypeMatcher.typeVariableNamed("T"))`：语义与方法查询的同名条件一致，
+  按擦除前的 `Constructor.genericParameterTypes` 匹配。此条件禁用查询缓存。
 - `isPublic()` / `isPrivate()` / `isProtected()`
 - `isVarArgs()` / `isSynthetic()`
 - `filter { ... }`：自定义条件。`filter` 里再调用查找器会产生警告，建议优先使用结构化条件。
@@ -492,7 +505,7 @@ class MainHook : XposedModule() {
 
     override fun onHotReloaded(param: HotReloadedParam) {
         // API 102 不会重放 onModuleLoaded；此重载会初始化新 generation、注册回调并恢复 snapshot。
-        EzXposed.handleHotReloadedWithTargetReady(this, param) { installHooks() }
+        EzXposed.handleHotReloadedWithTargetReady(this, param, { installHooks() })
     }
 }
 ```
@@ -537,6 +550,71 @@ EzXposed.handleHotReloaded(
 `Hooks.createHook(method, "license-check", callback)`、`Hooks.findAndHookMethodWithKey(...)` 或
 `Hooks.findAndHookConstructorWithKey(...)` 声明稳定 `reloadKey`。
 
+## 错误契约
+
+- descriptor 格式错误抛 `IllegalArgumentException`。
+- descriptor 合法但目标成员不存在，严格入口抛 `MemberNotFoundException`，`OrNull` 入口返回 `null`。
+- `MemberNotFoundException` 的 `Search` 只描述当前类或当前类 + 父类，不包含接口继承图。
+
+## safeMode 阶段语义
+
+`EzXposed.safeMode = true` 时，hook callback 阶段性失败会按以下规则回退，避免目标 app 因模块异常崩溃：
+
+**before / replace 阶段：**
+
+callback 失败时回退原调用，恢复 framework 传入的初始 `thisObject` / `args` / `result` / `throwable`，让原方法执行一次并返回真实结果。
+
+```kotlin
+method.createHook {
+    before { param ->
+        param.result = fetchCache()  // 若 fetchCache() 抛异常，before callback 整体失败
+    }
+}
+// safeMode: before 失败 → 恢复初始状态 → 执行原方法 → 返回原方法结果
+```
+
+**after 阶段：**
+
+callback 失败时保留下游已执行的原方法结果或异常，**不会重复执行原方法**。
+
+```kotlin
+method.createHook {
+    after { param ->
+        logResult(param.result)  // 若 logResult 抛异常，after callback 失败
+    }
+}
+// safeMode: after 失败 → 保留原方法已返回的 result/throwable → 直接传播给调用方
+```
+
+**intercept 阶段：**
+
+未调用 `proceed()` 时失败行为同 replace；已调用 `proceed()` 时保留下游结果，不重复执行。
+
+```kotlin
+method.createHook {
+    intercept { chain ->
+        val start = System.nanoTime()
+        val result = chain.proceed()  // 下游已执行
+        logTiming(System.nanoTime() - start)  // 若 logTiming 抛异常
+        result
+    }
+}
+// safeMode: intercept 已 proceed 后失败 → 保留 proceed 返回的结果 → 传播给调用方
+```
+
+**原方法自身异常：**
+
+原方法抛的异常直接传播给调用方，不视为 callback 失败，safeMode 不拦截。
+
+```kotlin
+method.createHook {
+    before { param ->
+        // 修改参数，让原方法内部抛 IllegalArgumentException
+    }
+}
+// 原方法抛的 IllegalArgumentException 会原样抛给调用方，safeMode 不干预
+```
+
 ### 外部回调与跨代宿主状态
 
 hook 之外的 listener、receiver、binder callback、线程或资源 observer 不是 `HookHandle`，必须由模块自己
@@ -562,6 +640,7 @@ hook 之外的 listener、receiver、binder callback、线程或资源 observer 
 
 `EzXposed.handleHotReloading` / `handleHotReloaded` 仍是默认低成本入口；
 `handleHotReloadedWithTargetReady` 可在 API 102 不重放生命周期时一并注册新 generation 的同步规则。
+`EzXposed.safeMode` 只负责回退 hook callback 的阶段性失败：before / replace / intercept 失败会回退原调用；after 失败只保留下游原结果，不会重复执行原方法。
 与旧版本不同，默认流程不再先 unhook 全部旧 handle。手动处理旧 handle 时，辅助函数仍可使用：
 
 - `oldHandles.groupById()` → `Map<String?, List<HookHandle>>`
