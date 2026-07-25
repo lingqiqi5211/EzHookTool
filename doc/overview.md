@@ -384,9 +384,10 @@ Hooks.intercept(method, chain -> {
 在默认 `EzXposed.onTargetReady` 同步初始化中，未调用 `HookFactory.id(...)` 或 `reloadKey(...)` 的
 DSL / Java helper hook 会按 `executable + priority + exceptionMode` 自动聚合成一个物理 hook，并使用稳定
 内部 hook ID。整个回调正常完成后才提交这些物理 hook；同一目标上新增、删除或重排逻辑 hook 都不会改变
-该组 ID，新 generation 会由 framework 原子替换旧组，原物理 handle 随即失效。默认自动模式还会要求
-物理 hook identity 集合保持不变；若新增或删除 executable、priority/exceptionMode 组或显式 hook ID，会在
-发布任何新 hook 前拒绝本次热重载，改由目标进程重启完成切换。
+该组 ID，新 generation 会由 framework 逐条原子替换旧组，原物理 handle 随即失效。新增或删除
+executable、priority/exceptionMode 组及显式 hook ID 也受支持：新增项先安装，相同 identity 逐条替换，
+最后才撤销新代码不再声明的旧项。新 generation 即使没有注册任何 hook，只要 `onTargetReady` 回调确实执行，
+也会正确撤销全部旧 hook。
 
 事务外才临时注册的 helper hook 会收到兜底内部 ID，但它不属于默认自动热重载的可靠边界；应改为同步注册，
 或显式声明 `reloadKey(...)`。
@@ -444,8 +445,7 @@ val current: String? = handle.id
 
 适合的场景：
 
-- 当前 entry 的初始化已完成，不再需要后续 `onPackageLoaded` 等回调。
-- 多 entry 模块里，当前 entry 检测到自己不在目标 app 中，立即停止接收回调。
+- 多 entry 模块里，当前 entry 检测到自己不在目标 app 中，并确认不需要热重载，立即停止接收回调。
 
 ```kotlin
 override fun onPackageReady(param: PackageReadyParam) {
@@ -460,6 +460,7 @@ override fun onPackageReady(param: PackageReadyParam) {
 
 `detach()` 幂等，多次调用等价于一次。该入口需要 `EzXposed.initOnModuleLoaded` 传入的是
 `XposedInterfaceWrapper`（即 `XposedModule` 或其子类）；否则会抛 `IllegalStateException`。
+调用后也不会再收到 `onHotReloading`，所以目标 entry 只要需要热重载就不能 detach。
 
 ## libxposed 102 热重载
 
@@ -489,13 +490,13 @@ class MainHook : XposedModule() {
     }
 
     override fun onPackageLoaded(param: PackageLoadedParam) {
-        if (param.packageName == TargetApp) {
+        if (param.isFirstPackage && param.packageName == TargetApp) {
             EzXposed.initOnPackageLoaded(param)
         }
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
-        if (param.packageName == TargetApp) {
+        if (param.isFirstPackage && param.packageName == TargetApp) {
             EzXposed.initOnPackageReady(param)
         }
     }
@@ -512,12 +513,96 @@ class MainHook : XposedModule() {
 
 默认事务会先完整收集 `onTargetReady` 内的逻辑 hook，再按
 `executable + priority + exceptionMode` 提交稳定物理 ID。回调抛异常时不会发布这些默认物理 hook，旧 generation
-保持有效。默认自动模式还会先验证新旧物理 hook identity 集合相同；不相同则在发布前失败，避免新增或删除
-部分 hook 造成半切换。验证通过后 framework 原子替换同 ID 的旧组。需要统计结果时，使用
+保持有效。提交时先安装新增 identity，再让 framework 逐条原子替换相同 ID 的旧组；全部成功后才撤销
+新代码不再声明的旧 hook。这允许开关导致的目标增删，也允许全部开关关闭。需要统计结果时，使用
 `EzXposed.restoreHotReloadedAutomatically(this, param)`，它返回 `AutomaticHotReloadResult`。
+
+libxposed 没有跨多个 hook 的整批事务。规则收集期间的异常可以保证零发布；新增 hook 安装失败时会尝试撤销
+本次已经新增的项。若撤销本身失败，或底层在第 N 条旧 hook 替换时失败，进程可能包含两代实现，工具会抛出
+明确错误并要求重启目标进程。这里的“原子”始终只表示单个 handle 或相同 executable + ID 的单条替换。
 
 首次从无 hook ID 的旧版本迁移时，默认模式会拒绝热重载并要求完整重启一次目标进程；这样不会在无法核对
 旧 handle 的情况下伪报成功。
+
+### 多 hook 与功能开关
+
+模块更新时重新读取持久设置，并用一个开关包住同一功能的全部**同步** hook 初始化即可。开关从开到关时，
+新 generation 不再声明这些 hook，默认流程会在其它新 hook 安装成功后统一撤销对应旧 handle；所有开关都关闭
+也属于正常结果。
+
+```kotlin
+private fun installHooks() {
+    val switches = readHookSwitches()
+
+    if (switches.loginReporter) {
+        // 一个开关管理两个目标；不需要为默认模式手写 reloadKey。
+        loginMethod.createBeforeHook { /* ... */ }
+        reportMethod.createBeforeHook { /* ... */ }
+    }
+
+    if (switches.premium) {
+        premiumMethod.createReplaceHook { true }
+    }
+}
+```
+
+同一 executable 上的多个无 key helper hook 会聚合到同一个物理 hook；分别开关、增删或重排逻辑 callback
+不会互相覆盖。若显式使用 `reloadKey`，同一 executable 内每条逻辑 hook 必须使用不同 key。
+
+如果开关要在模块不更新时立即生效，推荐固定安装 hook，只让 callback 读取可更新状态。`before` / `after`
+关闭时直接返回；replace 类功能用 `intercept` 在关闭时放行原调用：
+
+```kotlin
+method.createInterceptHook { chain ->
+    if (isFeatureEnabled()) patchedResult() else chain.proceed()
+}
+```
+
+`isFeatureEnabled()` 应读取当前 remote preferences 或由 listener 更新的线程安全状态，不能复用安装 hook 时取得的
+固定 snapshot。
+
+不要把旧 generation 的 `HookHandle`、模块 data class 或 lambda 放进 saved state。开关应来自 remote preferences、
+文件、系统服务等跨 generation 来源，新 generation 自己重新读取。若为了即时开关注册了 listener、receiver 或线程，
+还必须按后文的 `HotReloadSession.scope` 用法在旧 generation 停止它们。
+
+### 多作用域与多进程
+
+scope list 可以包含多个 app；同一 app 的主进程和 remote process 也会各自创建 module entry。每个目标进程都有
+独立 snapshot、hook batch 和热重载结果，不存在一次回调同时切换所有作用域。初始化函数按恢复后的
+`isSystemServer`、`packageName`、`processName` 分派规则：
+
+```kotlin
+private val TargetApps = setOf("com.example.alpha", "com.example.beta")
+
+override fun onPackageLoaded(param: PackageLoadedParam) {
+    if (!param.isFirstPackage || param.packageName !in TargetApps) return
+    EzXposed.initOnPackageLoaded(param)
+}
+
+override fun onPackageReady(param: PackageReadyParam) {
+    if (!param.isFirstPackage || param.packageName !in TargetApps) return
+    EzXposed.initOnPackageReady(param)
+}
+
+override fun onSystemServerStarting(param: SystemServerStartingParam) {
+    EzXposed.initOnSystemServerStarting(param)
+}
+
+private fun installHooks() {
+    when {
+        EzXposed.isSystemServer -> installSystemServerHooks()
+        EzXposed.packageName == "com.example.alpha" &&
+            EzXposed.processName.endsWith(":remote") -> installAlphaRemoteHooks()
+        EzXposed.packageName == "com.example.alpha" -> installAlphaHooks()
+        EzXposed.packageName == "com.example.beta" -> installBetaHooks()
+    }
+}
+```
+
+默认自动模式以“一个进程中的首个目标 package”为恢复边界，因此 app 场景建议只处理 `isFirstPackage`。
+如果同一进程之后通过 shared UID 或 `createPackageContext(..., CONTEXT_INCLUDE_CODE)` 加载第二个 package，并且也要
+对它安装 hook，这属于多个 target-ready 时点，不能塞进已经提交的默认 batch；应使用显式 `reloadKey` 和自定义
+旧 handle 管理。需要热重载的目标 entry 不要调用 `detachCurrentEntry()`。
 
 ### 自定义 identity 与收尾
 
@@ -549,6 +634,59 @@ EzXposed.handleHotReloaded(
 `HookFactory.id(null)` 会明确关闭自动 ID；此类 hook 不能进入默认自动 batch，必须走上述自定义流程。Java 可使用
 `Hooks.createHook(method, "license-check", callback)`、`Hooks.findAndHookMethodWithKey(...)` 或
 `Hooks.findAndHookConstructorWithKey(...)` 声明稳定 `reloadKey`。
+
+### 外部回调与 `HotReloadSession.scope`
+
+需要注销 listener、receiver、binder callback 或线程时，使用一个 `HotReloadSession` 同时管理全部 hook 和外部
+清理。每个 generation 都重新创建 session；session 会接管 `oldHookHandles` 的全部内容，所以不能与 raw
+libxposed hook、另一个 session 或其它旧 handle 管理方式混用。session 中每条 helper hook 都必须有唯一
+`reloadKey`。
+
+```kotlin
+class MainHook : XposedModule() {
+    private val reloadSession = HotReloadSession()
+
+    override fun onModuleLoaded(param: ModuleLoadedParam) {
+        EzXposed.initOnModuleLoaded(this, param)
+        registerTargetReady()
+    }
+
+    private fun registerTargetReady() {
+        reloadSession.onTargetReady {
+            watchedMethod.createHook {
+                reloadKey("watched-method")
+                before { /* ... */ }
+            }
+
+            val registration = registerHostListener()
+            reloadSession.scope.onReloading {
+                registration.unregister()
+                stopModuleThreads()
+            }
+
+            // 这里只能保存 system / app classloader 对象或 String、primitive 等中立值。
+            currentHostToken()?.let { reloadSession.scope.putState("host-token", it) }
+        }
+    }
+
+    override fun onHotReloading(param: HotReloadingParam): Boolean =
+        reloadSession.prepare(param)
+
+    override fun onHotReloaded(param: HotReloadedParam) {
+        // framework 不会重放 onModuleLoaded。
+        EzXposed.initOnModuleLoaded(this, param)
+        registerTargetReady()
+        reloadSession.restore(this, param) { extra ->
+            val token = reloadSession.scope.state("host-token")
+            // 在 target-ready callback 前恢复其它中立状态。
+        }
+    }
+}
+```
+
+`prepare` 只有在 snapshot 可恢复时才执行清理，并按登记的相反顺序调用 cleanup。cleanup 完成后旧 generation 的
+外部注册已经停止；如果新 generation 随后恢复失败，不能继续假设旧运行状态完整，应重启目标进程。saved state
+不得包含模块类、模块 lambda、模块 `ClassLoader` 或间接持有它们的容器。
 
 ## 错误契约
 
@@ -624,7 +762,7 @@ hook 之外的 listener、receiver、binder callback、线程或资源 observer 
 
 ### 不适合承诺“无缝”的情况
 
-默认模式能原子替换的是**已经存在、在 `onTargetReady` 同步回调内声明的代码 hook**，不是任意运行时副作用：
+默认模式能逐条原子替换的是**已经存在、在 `onTargetReady` 同步回调内声明的代码 hook**，不是任意运行时副作用：
 
 - 首次调用、异步任务或回调内部才创建的延迟 hook，无法在 `onHotReloaded` 时组成可靠的同步序列。应改为
   在 `onTargetReady` 同步安装，或使用显式 `reloadKey` 加自定义清理边界。
@@ -645,4 +783,4 @@ hook 之外的 listener、receiver、binder callback、线程或资源 observer 
 
 - `oldHandles.groupById()` → `Map<String?, List<HookHandle>>`
 - `oldHandles.replaceAll(hooker)` → `List<HookHandle>`，按原顺序返回新 handle
-- `oldHandles.unhookAll()`：全部 unhook
+- `oldHandles.unhookAll()`：尝试全部 unhook，最后统一报告所有失败

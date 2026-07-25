@@ -17,7 +17,9 @@ import java.util.function.Consumer
  * 因此不会出现旧实现先被全部摘掉、再等待新实现逐个安装的空窗。
  *
  * 一个 module entry 对应一个 session。不要在异步线程里安装属于该 session 的 hook：只有
- * [onTargetReady] 的同步执行窗口会被记录和收尾。
+ * [onTargetReady] 的同步执行窗口会被记录和收尾。session 会接管 `HotReloadedParam.oldHookHandles`
+ * 中的全部旧 handle，不要与 raw libxposed hook、其它 session 或其它旧 handle 管理方式混用。
+ * libxposed 只保证单个 handle / 相同 ID hook 的原子替换，不提供跨多个 hook 的整批回滚。
  */
 class HotReloadSession {
     /**
@@ -33,6 +35,7 @@ class HotReloadSession {
 
     private var prepared = false
     private var restored = false
+    private var targetReadyRegistered = false
 
     /**
      * 注册目标进程就绪后的 hook 安装逻辑。
@@ -42,6 +45,7 @@ class HotReloadSession {
      * 或安装异常都会抛出 [IllegalStateException]，而不是静默留下无法收尾的旧 hook。
      */
     fun onTargetReady(callback: TargetReadyCallback) {
+        targetReadyRegistered = true
         EzXposed.onTargetReady {
             EzXposed.withHotReloadSession(this) {
                 callback.run()
@@ -98,6 +102,9 @@ class HotReloadSession {
         onExtra: Consumer<Array<Any?>>? = null,
     ): HotReloadResult {
         check(!restored) { "HotReloadSession.restore can only be called once per module entry." }
+        check(targetReadyRegistered) {
+            "HotReloadSession.restore requires onTargetReady to be registered in the new generation."
+        }
 
         // 新 hook 注册前先读出旧 handle 的 executable 与 hook ID。成功替换后旧 handle 会失效，届时不应再读它。
         val oldHooks = param.oldHookHandles.map { handle ->

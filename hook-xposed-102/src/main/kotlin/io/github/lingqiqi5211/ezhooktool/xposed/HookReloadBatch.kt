@@ -13,8 +13,8 @@ import java.util.Collections
  * 规则集：把一次**完整、同步**的目标进程初始化包进 [install]，其中未设置 hook ID 的 EzHookTool DSL
  * hook 会按 `executable + priority + exceptionMode` 聚合成一个带稳定内部 hook ID 的底层 hook。
  *
- * 新 generation 重新执行同一初始化批次时，framework 会原子替换每个聚合后的底层 hook。因此规则可以
- * 在不为每条既有 hook 补写 `reloadKey` 的情况下新增、删除或调整同一目标上的回调。显式调用
+ * 新 generation 重新执行同一初始化批次时，framework 会逐个原子替换每个聚合后的底层 hook。因此规则可以
+ * 在不为每条既有 hook 补写 `reloadKey` 的情况下新增、删除或调整回调及目标。显式调用
  * [io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookFactory.id] 或 `reloadKey(...)` 的 hook 不会被聚合，
  * 仍按官方 `executable + hook ID` 语义原子替换。
  *
@@ -33,7 +33,7 @@ import java.util.Collections
 class HookReloadBatch @JvmOverloads constructor(
     namespace: String,
     private val xposed: XposedInterface = EzXposed.base,
-    /** 热重载时要求物理 hook identity 集合不变，避免新增 / 删除 hook 造成不可回滚的半切换。 */
+    /** 热重载时是否要求物理 hook identity 集合不变。默认允许新增和删除 hook。 */
     private val requireStableTopologyOnHotReload: Boolean = false,
 ) {
     private val namespace = namespace.also {
@@ -50,10 +50,10 @@ class HookReloadBatch @JvmOverloads constructor(
     private var hotReloadFinished = false
 
     /**
-     * 执行一次完整的同步 hook 初始化，并在回调正常返回后一次性提交所有聚合 hook。
+     * 执行一次完整的同步 hook 初始化，并在回调正常返回后统一提交所有聚合 hook。
      *
-     * 回调抛异常或底层 hook 安装失败时异常会原样抛出，batch 会进入失败状态；此后
-     * [hotReloadBlockReason] 不会再把该 generation 视为可安全热重载。
+     * 回调抛异常或底层 hook 安装失败时 batch 会进入失败状态；此后 [hotReloadBlockReason] 不会再把该
+     * generation 视为可安全热重载。若多条旧 hook 替换到一半时失败，会抛出要求重启目标进程的明确错误。
      */
     fun install(block: Runnable) {
         synchronized(lock) {
@@ -70,6 +70,7 @@ class HookReloadBatch @JvmOverloads constructor(
             } catch (t: Throwable) {
                 synchronized(lock) {
                     state = State.FAILED
+                    oldHooks = null
                 }
                 throw t
             }
@@ -159,6 +160,7 @@ class HookReloadBatch @JvmOverloads constructor(
 
         synchronized(lock) {
             hotReloadFinished = true
+            oldHooks = null
         }
         if (failures.isNotEmpty()) {
             throw IllegalStateException(
@@ -193,11 +195,6 @@ class HookReloadBatch @JvmOverloads constructor(
     /** 默认自动流程仅在首次目标初始化时进入 batch。 */
     internal val canStartInstall: Boolean
         get() = synchronized(lock) { state == State.NEW }
-
-    /** 新 generation 是否至少注册了一个由本 batch 管理的逻辑或显式 hook。 */
-    internal fun hasManagedHooks(): Boolean = synchronized(lock) {
-        state == State.READY && (groups.values.any { it.logicalHooks.isNotEmpty() } || explicitHooks.isNotEmpty())
-    }
 
     /** 仅供 [EzXposed] 的 hook 安装路径调用。 */
     internal fun installHook(
@@ -302,21 +299,79 @@ class HookReloadBatch @JvmOverloads constructor(
         synchronized(lock) {
             check(state == State.INSTALLING) { "HookReloadBatch is not installing hooks." }
             ensureStableTopologyBeforeCommit()
-            for (group in groups.values) {
-                if (group.logicalHooks.isNotEmpty()) {
-                    group.physicalHandle = installPhysicalHook(group)
-                }
+
+            val pendingHooks = pendingPhysicalHooks()
+            check(pendingHooks.map { it.identity }.toSet().size == pendingHooks.size) {
+                "HookReloadBatch contains duplicate physical hook identities. " +
+                    "Do not reuse the library-reserved ezhooktool.batch.v1 ID namespace."
             }
-            for (hook in explicitHooks.values) {
-                hook.physicalHandle = hook.installer(hook.identity.hookId, hook.hooker)
+
+            val oldIdentities = oldHooks
+                ?.mapNotNullTo(LinkedHashSet()) { it.identity }
+                .orEmpty()
+            val (replacements, additions) = pendingHooks.partition { it.identity in oldIdentities }
+            val addedHandles = ArrayList<XposedInterface.HookHandle>(additions.size)
+            var replacedCount = 0
+            try {
+                // 先发布新增 identity。若此阶段失败，会先尝试全部撤销。
+                for (pending in additions) {
+                    val handle = pending.install()
+                    pending.saveHandle(handle)
+                    addedHandles += handle
+                }
+                // 相同 executable + ID 的替换由 framework 单条原子完成。
+                for (pending in replacements) {
+                    val handle = pending.install()
+                    pending.saveHandle(handle)
+                    replacedCount++
+                }
+            } catch (t: Throwable) {
+                val cleanupFailures = mutableListOf<Throwable>()
+                for (handle in addedHandles.asReversed()) {
+                    try {
+                        handle.unhook()
+                    } catch (cleanupFailure: Throwable) {
+                        cleanupFailures += cleanupFailure
+                    }
+                }
+                if (replacedCount == 0 && cleanupFailures.isEmpty()) throw t
+                throw IllegalStateException(
+                    "HookReloadBatch failed after replacing $replacedCount old hook(s); " +
+                        "${cleanupFailures.size} newly installed hook(s) could not be rolled back. " +
+                        "The target process may contain mixed-generation hooks. " +
+                        "libxposed has no multi-hook rollback; restart the target process before continuing.",
+                    t,
+                ).also { error -> cleanupFailures.forEach(error::addSuppressed) }
             }
             state = State.READY
         }
     }
 
+    private fun pendingPhysicalHooks(): List<PendingPhysicalHook> = buildList {
+        for (group in groups.values) {
+            if (group.logicalHooks.isEmpty()) continue
+            add(
+                PendingPhysicalHook(
+                    identity = HookIdentity(group.key.executable, group.groupId),
+                    install = { installPhysicalHook(group) },
+                    saveHandle = { group.physicalHandle = it },
+                )
+            )
+        }
+        for (hook in explicitHooks.values) {
+            add(
+                PendingPhysicalHook(
+                    identity = hook.identity,
+                    install = { hook.installer(hook.identity.hookId, hook.hooker) },
+                    saveHandle = { hook.physicalHandle = it },
+                )
+            )
+        }
+    }
+
     /**
-     * 默认自动模式宁可拒绝物理 hook 拓扑变化，也不在旧 generation 已冻结后先新增 / 删除一部分 hook。
-     * 同一 executable、priority、exceptionMode 组内增删逻辑回调不会改变物理 identity，仍可热重载。
+     * 严格模式可拒绝物理 hook 拓扑变化。同一 executable、priority、exceptionMode 组内增删逻辑回调
+     * 不会改变物理 identity，因此仍可热重载。
      */
     private fun ensureStableTopologyBeforeCommit() {
         if (!requireStableTopologyOnHotReload) return
@@ -329,7 +384,7 @@ class HookReloadBatch @JvmOverloads constructor(
             addAll(explicitHooks.keys)
         }
         check(oldIdentities == newIdentities) {
-            "Automatic hot reload requires an unchanged physical hook topology. " +
+            "HookReloadBatch strict mode requires an unchanged physical hook topology. " +
                 "Restart the target process after adding or removing a hooked executable, priority/mode group, or explicit hook ID."
         }
     }
@@ -449,6 +504,12 @@ class HookReloadBatch @JvmOverloads constructor(
     private data class OldHook(
         val handle: XposedInterface.HookHandle,
         val identity: HookIdentity?,
+    )
+
+    private data class PendingPhysicalHook(
+        val identity: HookIdentity,
+        val install: () -> XposedInterface.HookHandle,
+        val saveHandle: (XposedInterface.HookHandle) -> Unit,
     )
 
     private class AggregatedHookHandle(

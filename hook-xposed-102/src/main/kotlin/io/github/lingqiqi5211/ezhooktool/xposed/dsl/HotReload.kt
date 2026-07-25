@@ -15,7 +15,7 @@ fun List<XposedInterface.HookHandle>.groupById(): Map<String?, List<XposedInterf
     groupBy { it.id }
 
 /**
- * 用同一个 [XposedInterface.Hooker] 原子替换全部旧 handle，返回新 handle 列表。
+ * 用同一个 [XposedInterface.Hooker] 逐个原子替换旧 handle，返回新 handle 列表。
  *
  * 失败语义同 [XposedInterface.HookHandle.replaceHook]：抛出异常时已替换成功的部分保留，
  * 未替换的不会回滚。返回列表的顺序与原列表一致；如果中途抛异常，返回前不包含未处理项。
@@ -24,7 +24,22 @@ fun List<XposedInterface.HookHandle>.replaceAll(
     hooker: XposedInterface.Hooker,
 ): List<XposedInterface.HookHandle> = map { it.replaceHook(hooker) }
 
-/** 全部 unhook。等价于 `HotReloadedParam` 的默认实现，但暴露成可显式调用。 */
+/**
+ * 尝试 unhook 全部 handle；单项失败不会阻止后续清理，结束后统一抛出并附带全部失败原因。
+ */
 fun List<XposedInterface.HookHandle>.unhookAll() {
-    forEach { it.unhook() }
+    val failures = mutableListOf<Throwable>()
+    for (handle in this) {
+        try {
+            handle.unhook()
+        } catch (t: Throwable) {
+            failures += t
+        }
+    }
+    if (failures.isNotEmpty()) {
+        throw IllegalStateException(
+            "Failed to unhook ${failures.size} hook handle(s).",
+            failures.first(),
+        ).also { error -> failures.drop(1).forEach(error::addSuppressed) }
+    }
 }

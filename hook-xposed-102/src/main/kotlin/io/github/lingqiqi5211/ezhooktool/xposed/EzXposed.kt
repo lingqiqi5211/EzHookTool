@@ -11,6 +11,7 @@ import io.github.libxposed.api.XposedModuleInterface
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ModuleResources
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.ApplicationLifecycle
+import java.lang.ref.WeakReference
 import java.lang.reflect.Executable
 import java.util.function.Consumer
 
@@ -38,9 +39,9 @@ import java.util.function.Consumer
  *
  * 默认热重载会把同步初始化中的 DSL/Java helper hook 按 executable、priority、exceptionMode 自动
  * 聚合，并为物理 hook 分配稳定内部 ID；在 [handleHotReloaded] 成功重建后才清理遗留旧 handle，
- * 通常无需逐条写 `reloadKey(...)`。默认自动模式要求物理 hook identity 集合不变；同一组内的逻辑
- * hook 可增删重排，但新增 / 删除 executable、priority/exceptionMode 组或显式 hook ID 会在发布前拒绝
- * 本次热重载，要求重启目标进程。
+ * 通常无需逐条写 `reloadKey(...)`。同一组内的逻辑 hook 可增删重排，也允许新增或删除目标、
+ * priority/exceptionMode 组及显式 hook ID。相同 executable + ID 的旧 hook 由 framework 单条原子替换，
+ * 新 hook 先安装，未继续声明的旧 hook 最后才移除。
  * 需要跨大规模重排保持精确 identity 时使用 [HotReloadSession] 的显式 `reloadKey(...)`；
  * [HookReloadBatch] 和带 [handleHotReloaded] 的 `onOldHooks` 参数保留给自定义流程。
  */
@@ -66,6 +67,9 @@ object EzXposed {
 
     /** 默认 [onTargetReady] 初始化使用的聚合事务；不需要模块为每条 hook 写 reloadKey。 */
     private var automaticHookBatch: HookReloadBatch? = null
+
+    /** 同一 HotReloadedParam 可能被内部初始化入口重复传递，只在首次看到时重置 generation 状态。 */
+    private var currentHotReloadParam: WeakReference<XposedModuleInterface.HotReloadedParam>? = null
 
     /**
      * 仅在 [HotReloadSession] 重建 hook 的同步窗口内设置。
@@ -278,13 +282,17 @@ object EzXposed {
      */
     fun initOnModuleLoaded(base: XposedInterface, param: XposedModuleInterface.ModuleLoadedParam) {
         // API 102 不会在热重载时自动重放 onModuleLoaded；模块应从 onHotReloaded 调用本方法。
-        // 检测 base 实例变化即丢弃上一代 onTargetReady 回调与 targetSnapshot，防止旧 module
-        // classloader 通过这些 lambda 持续被强引用。
-        val isNewGeneration = !::base.isInitialized || this.base !== base
+        // HotReloadedParam 也标识一个明确的新 generation；即使 framework wrapper 被复用，也不能
+        // 让旧 callback 因旧 snapshot 提前执行。
+        val hotReloadParam = param as? XposedModuleInterface.HotReloadedParam
+        val isNewGeneration = !::base.isInitialized ||
+            this.base !== base ||
+            (hotReloadParam != null && hotReloadParam !== currentHotReloadParam?.get())
         if (isNewGeneration) {
             synchronized(targetReadyCallbacks) { targetReadyCallbacks.clear() }
             targetSnapshot = null
             appContextValue = null
+            packageName = ""
         }
         this.base = base
         this.moduleEntry = base as? XposedInterfaceWrapper
@@ -293,6 +301,7 @@ object EzXposed {
             automaticHookIds = AutomaticHookIdAllocator(base.moduleApplicationInfo.packageName)
             automaticHookBatch = createAutomaticHookBatch(base, param)
         }
+        currentHotReloadParam = hotReloadParam?.let(::WeakReference)
         initModuleResources()
         processName = param.processName
         isSystemServer = param.isSystemServer
@@ -399,6 +408,10 @@ object EzXposed {
         extra: Array<Any?> = emptyArray(),
     ): Boolean {
         val snapshot = targetSnapshot ?: return false
+        automaticHookBatch?.hotReloadBlockReason?.let { reason ->
+            EzReflect.logger.warn("EzXposed", "Hot reload rejected: $reason")
+            return false
+        }
         param.setSavedInstanceState(snapshot.toCrossGenArray(extra))
         return true
     }
@@ -435,13 +448,16 @@ object EzXposed {
         if (onOldHooks == null) {
             restoreHotReloadedAutomatically(base, param, onExtra)
         } else {
-            restoreHotReloaded(
+            val restored = restoreHotReloaded(
                 base = base,
                 param = param,
                 onOldHooks = onOldHooks,
                 onExtra = onExtra,
                 propagateTargetReadyFailure = false,
             )
+            check(restored) {
+                "Custom hot reload requires saved state created by EzXposed.handleHotReloading."
+            }
         }
     }
 
@@ -493,6 +509,9 @@ object EzXposed {
             "Automatic hot reload batch is unavailable. Call EzXposed.initOnModuleLoaded first."
         )
         batch.captureOldHooks(param.oldHookHandles)
+        check(synchronized(targetReadyCallbacks) { targetReadyCallbacks.isNotEmpty() }) {
+            "Automatic hot reload requires at least one EzXposed.onTargetReady callback in the new generation."
+        }
         val restored = restoreHotReloaded(
             base = base,
             param = param,
@@ -503,10 +522,6 @@ object EzXposed {
         )
         check(restored) {
             "Automatic hot reload requires saved state created by EzXposed.handleHotReloading."
-        }
-        check(param.oldHookHandles.isEmpty() || batch.hasManagedHooks()) {
-            "Automatic hot reload did not observe any synchronous DSL/Java helper hook registration. " +
-                "Install hooks from EzXposed.onTargetReady(), or use the custom onOldHooks callback."
         }
         val result = batch.finishHotReload()
         return AutomaticHotReloadResult(
@@ -532,16 +547,15 @@ object EzXposed {
         onExtra: Consumer<Array<Any?>>?,
         propagateTargetReadyFailure: Boolean,
     ): Boolean {
-        initOnModuleLoaded(base, param)
-        onOldHooks?.accept(param.oldHookHandles)
-
         val snapshot = TargetSnapshot.tryRestore(param.savedInstanceState) ?: return false
+        initOnModuleLoaded(base, param)
         EzReflect.init(snapshot.classLoader)
         packageName = snapshot.packageName
         processName = snapshot.processName
         isSystemServer = snapshot.isSystemServer
         targetSnapshot = snapshot
         onExtra?.accept(TargetSnapshot.restoreExtra(param.savedInstanceState))
+        onOldHooks?.accept(param.oldHookHandles)
         dispatchTargetReady(propagateTargetReadyFailure)
         return true
     }
@@ -656,7 +670,7 @@ object EzXposed {
         namespace = "ezhooktool.default.v1:${base.moduleApplicationInfo.packageName}:" +
             "${param.processName}:${param.isSystemServer}",
         xposed = base,
-        requireStableTopologyOnHotReload = true,
+        requireStableTopologyOnHotReload = false,
     )
 
     private val addAssetPathMethod by lazy {
@@ -670,15 +684,17 @@ object EzXposed {
         val snapshot = synchronized(targetReadyCallbacks) { targetReadyCallbacks.toList() }
         val batch = automaticHookBatch?.takeIf { it.canStartInstall }
         if (batch != null) {
-            batch.install(Runnable {
-                for (callback in snapshot) {
-                    if (propagateFailure) {
+            try {
+                batch.install(Runnable {
+                    for (callback in snapshot) {
+                        // helper hook 仍处于延后发布阶段；任一 callback 失败都必须放弃整个 batch。
                         callback.run()
-                    } else {
-                        runCallbackSafely(callback)
                     }
-                }
-            })
+                })
+            } catch (t: Throwable) {
+                if (propagateFailure) throw t
+                EzReflect.logger.error("EzXposed", "onTargetReady hook batch failed", t)
+            }
             return
         }
         for (callback in snapshot) {

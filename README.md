@@ -73,6 +73,8 @@ class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
 
 ```kotlin
 import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.HotReloadedParam
+import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
@@ -82,20 +84,27 @@ private const val TargetApp = "com.example.target"
 class MainHook : XposedModule() {
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         EzXposed.initOnModuleLoaded(this, param)
+        EzXposed.onTargetReady { initHooks() }
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun onPackageLoaded(param: PackageLoadedParam) {
-        if (param.packageName != TargetApp) return
+        if (!param.isFirstPackage || param.packageName != TargetApp) return
 
         EzXposed.initOnPackageLoaded(param)
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
-        if (param.packageName != TargetApp) return
+        if (!param.isFirstPackage || param.packageName != TargetApp) return
 
         EzXposed.initOnPackageReady(param)
-        initHooks()
+    }
+
+    override fun onHotReloading(param: HotReloadingParam): Boolean =
+        EzXposed.handleHotReloading(param)
+
+    override fun onHotReloaded(param: HotReloadedParam) {
+        EzXposed.handleHotReloadedWithTargetReady(this, param, { initHooks() })
     }
 
     private fun initHooks() {
@@ -118,7 +127,9 @@ EzReflect.init(yourClassLoader)
 详细说明见 `doc/overview.md`。
 
 `HookFactory` 的默认热重载路径会把同一 executable、优先级和异常模式的 DSL / Java helper hook 自动聚合为
-一个带稳定内部 ID 的物理 hook。规则构建完成后才提交，成功后由 framework 原子替换旧组；通常无需手写 ID。
+一个带稳定内部 ID 的物理 hook。所有同步规则构建完成后才提交；相同 ID 的旧组由 framework 逐条原子替换，
+通常无需手写 ID。新增目标会先安装，已经关闭或删除的旧目标会在最后撤销，因此支持开关引起的 hook 增删，
+也支持新版本关闭全部 hook。
 需要独立的跨版本 identity 时，再使用语义更明确的 `reloadKey`：
 
 ```kotlin
@@ -142,10 +153,13 @@ override fun onPackageReady(param: PackageReadyParam) {
 }
 ```
 
+`detachCurrentEntry()` 也会停止 `onHotReloading`。需要热重载的目标 entry 不要调用它；它只适合确认不会安装
+hook 的非目标 entry。
+
 热重载：API 102 模块在 `META-INF/xposed/module.prop` 中设置 `autoHotReload=true` 后，
 Xposed 应用更新模块也会请求热重载。新模块默认只需把所有同步初始化放进
-`EzXposed.onTargetReady { ... }`，工具会自动聚合并分配稳定物理 ID；规则构建成功后原子替换新旧 hook，
-不会先全量 unhook 旧 handle：
+`EzXposed.onTargetReady { ... }`，工具会自动聚合并分配稳定物理 ID；规则构建成功后，相同 ID 的旧 hook
+会逐条无空窗替换，不会先全量 unhook 旧 handle：
 
 ```kotlin
 class MainHook : XposedModule() {
@@ -169,12 +183,41 @@ class MainHook : XposedModule() {
 }
 ```
 
-新增、删除或重排同一目标/优先级/异常模式组内的逻辑 hook 不会改变默认物理 ID。`reloadKey`、
-`HotReloadSession`、`HookReloadBatch` 与
-`handleHotReloaded(..., onOldHooks = ...)` 保留给需要自定义 identity 或旧 handle 迁移的场景。
-默认自动模式会要求物理 hook identity 集合不变；若新增或删除了目标 executable、优先级/异常模式组或显式
-hook ID，它会在发布任何新 hook 前拒绝本次热重载，要求重启目标进程。
-外部 listener / receiver / 线程、资源缓存或已 inflate 的 View 仍需模块自行恢复；必要时应重启目标进程。
+新增、删除或重排逻辑 hook、目标 executable、优先级/异常模式组和显式 hook ID 都受支持。一个功能包含多个
+hook 时，可以用同一个开关包住整组同步初始化；新 generation 重新读取持久设置即可：
+
+```kotlin
+private fun installHooks() {
+    val switches = readHookSwitches()
+    if (switches.loginReporter) {
+        loginMethod.createBeforeHook { /* ... */ }
+        reportMethod.createBeforeHook { /* ... */ }
+    }
+    if (switches.premium) {
+        premiumMethod.createReplaceHook { true }
+    }
+}
+```
+
+若开关需要立即生效而不是等模块热重载，保持 hook 固定安装，在 callback 内读取可更新状态；关闭时直接放行：
+
+```kotlin
+method.createInterceptHook { chain ->
+    if (isFeatureEnabled()) patchedResult() else chain.proceed()
+}
+```
+
+多个作用域按进程分别保存和恢复，互不共用一次热重载事务。在 `installHooks()` 内按
+`EzXposed.isSystemServer`、`packageName`、`processName` 分派即可；`onPackageReady` 建议只接收
+`isFirstPackage`，避免同一进程后续加载的其它 package 落到批次外。示例工程同时列出了两个 app scope。
+
+`reloadKey`、`HotReloadSession`、`HookReloadBatch` 与 `handleHotReloaded(..., onOldHooks = ...)` 保留给需要
+自定义 identity、跨代状态或旧 handle 迁移的场景。listener、receiver、线程、资源缓存或已 inflate 的 View
+不属于 hook handle，必须在旧 generation 明确停止，并在新 generation 重建。
+
+libxposed 只保证单个 handle 或相同 ID hook 的原子替换，没有“全部 hook 一次性回滚”的能力。若底层在替换
+多条旧 hook 的中途失败，或新增 hook 安装失败后无法完整撤销，工具会明确报错，此时应重启目标进程；不会把
+混合状态伪报为成功。
 完整约束、迁移条件和 Java 写法见 `doc/overview.md`。
 
 ### 模块说明

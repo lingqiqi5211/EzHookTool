@@ -13,10 +13,10 @@ object ExampleReporterHook : BaseHook() {
         val inner = "com.example.target.Reporter".findMethod { name("trackLogin") }
         // 两个 hook 都在 target-ready 同步阶段安装，避免把“首次调用时再挂 inner hook”
         // 这种延迟注册混进一次无法原子收尾的热重载。
-        outer.createBeforeHook("user-manager-login") {
+        outer.createBeforeHook {
             loginObserved = true
         }
-        inner.createBeforeHook("reporter-track-login") { innerParam ->
+        inner.createBeforeHook { innerParam ->
             if (loginObserved) {
                 innerParam.result = null
             }
