@@ -257,6 +257,8 @@ libxposed 只保证单个 handle 或相同 ID hook 的原子替换，没有“�
 
 ### 构建
 
+构建需要 JDK 25。
+
 ```bash
 ./gradlew build
 ./gradlew generateApiDocs
