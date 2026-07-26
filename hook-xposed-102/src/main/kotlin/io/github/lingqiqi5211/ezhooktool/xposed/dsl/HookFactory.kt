@@ -3,6 +3,7 @@ package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 import io.github.libxposed.api.XposedInterface
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
+import io.github.lingqiqi5211.ezhooktool.xposed.RequiresXposedApi
 import io.github.lingqiqi5211.ezhooktool.xposed.common.AfterChainStage
 import io.github.lingqiqi5211.ezhooktool.xposed.common.BeforeChainStage
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ChainStage
@@ -139,8 +140,12 @@ class HookFactory internal constructor(
      * 传 `null` 表示明确不分配 hook ID，并关闭本库的默认自动聚合 / ID；为热重载保持稳定的 hook ID 请优先
      * 使用 [reloadKey]，避免把一般内部 hook ID 和跨版本契约混为一谈。
      *
+     * hook ID 是 libxposed API 102 能力。运行在只实现 API 101 的 framework 上时，传非 `null` 值会在
+     * 安装该 hook 时抛出 [IllegalStateException]；传 `null` 与不调用本方法都能正常工作。
+     *
      * @param value hook ID，可为 `null`，非空时不得为空白字符串
      */
+    @RequiresXposedApi(102)
     fun id(value: String?) {
         require(value == null || value.isNotBlank()) { "hook ID must not be blank." }
         hookId = value
@@ -152,7 +157,9 @@ class HookFactory internal constructor(
      *
      * 同一目标方法（或构造器）在新旧代码中使用相同 reloadKey 时，libxposed 会原子替换旧 hook。
      * 与 [id] 的底层含义相同；这个名称专门用于声明「该 hook ID 是跨版本稳定契约」。
+     * 同样要求 framework 实现 libxposed API 102，见 [id]。
      */
+    @RequiresXposedApi(102)
     fun reloadKey(value: String) {
         require(value.isNotBlank()) { "reloadKey must not be blank." }
         hookId = value
@@ -170,11 +177,13 @@ class HookFactory internal constructor(
             automaticIdEnabled = automaticIdEnabled,
             hooker = hooker,
         ) { effectiveId, effectiveHooker ->
-            EzXposed.base.hook(target)
+            val builder = EzXposed.base.hook(target)
                 .setPriority(priority)
                 .setExceptionMode(exceptionMode)
-                .setId(effectiveId)
-                .intercept(effectiveHooker)
+            // API 101 的 HookBuilder 没有 setId。只有拿到 ID 时才走这一步——ID 为 null 说明
+            // framework 不支持 hook ID，或模块关掉了热重载。
+            val builderWithId = if (effectiveId != null) builder.setId(effectiveId) else builder
+            builderWithId.intercept(effectiveHooker)
         }
     }
 }

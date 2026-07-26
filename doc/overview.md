@@ -477,6 +477,74 @@ autoHotReload=true
 `onModuleLoaded`、`onPackageLoaded`、`onPackageReady` 或 `onSystemServerStarting`；新代码只会收到
 `onHotReloaded`。因此必须把当前目标进程的 classloader 等信息保存并恢复，并在该回调中重新注册规则。
 
+### 热重载是可选特性
+
+hook ID（`HookBuilder.setId` / `HookHandle.getId`）、`HookHandle.replaceHook`、
+`XposedInterfaceWrapper.detach` 和这一整套热重载回调都是 API 102 才新增的，API 101 没有。
+`hook-xposed-102` 按 102 编译，但把这些当作**可选特性**：运行时按实际提供的类型和方法探测，
+因此同一份产物也能跑在只实现 API 101 的 framework 上。
+
+特性通过 `XposedFeature` 查询，每一项都带最低版本：
+
+```kotlin
+XposedFeature.HOOK_ID.isSupported       // HookBuilder.setId / HookHandle.getId
+XposedFeature.REPLACE_HOOK.isSupported  // HookHandle.replaceHook
+XposedFeature.HOT_RELOAD.isSupported    // onHotReloading / onHotReloaded
+XposedFeature.DETACH_ENTRY.isSupported  // XposedInterfaceWrapper.detach
+
+XposedFeature.HOOK_ID.minApiVersion     // 102
+EzXposed.frameworkApiVersion            // framework 侧 API 版本，未初始化时为 0
+```
+
+依赖这些特性、且**无法降级**的公开 API 都标注了 `@RequiresXposedApi(102)`：版本不足时调用会抛出
+`IllegalStateException`，报错信息里带上要求的版本、特性名和当前 framework 版本。能优雅降级的
+API 不标注。完整对照：
+
+| | API 101 framework | API 102 framework |
+| --- | --- | --- |
+| hook / 反射 / 资源等全部其它能力 | 可用 | 可用 |
+| 自动分配 hook ID、调用 `setId` | 不执行 | 执行 |
+| `HookHandle.id`、`groupById()` | 恒为 `null` | 返回底层 ID |
+| `HookFactory.id(...)` / `reloadKey(...)` | 安装时抛异常 | 可用 |
+| `replaceWith` / `replaceIntercept` / `replaceAll` / `Hooks.replaceHook` | 抛异常 | 可用 |
+| `HotReloadSession` / `HookReloadBatch` | 构造即抛异常 | 可用 |
+| `handleHotReloaded` 系列 | 抛异常 | 可用 |
+| `handleHotReloading` | 记一条警告并返回 `false` | 正常保存 snapshot |
+| `detachCurrentEntry()` | 抛异常 | 可用 |
+
+### 主动关掉热重载
+
+即使 framework 支持，模块也可以用一个开关关掉整套机制——不再分配内部 hook ID、不再调用 `setId`、
+`onTargetReady` 的初始化不再进入默认聚合事务，`handleHotReloading` 直接返回 `false` 让 framework 放弃
+热重载（模块自己的显式声明，不打日志）。开关必须在 `initOnModuleLoaded` 之前设置，因为默认聚合事务
+在那里创建：
+
+```kotlin
+class MainHook : XposedModule() {
+    override fun onModuleLoaded(param: ModuleLoadedParam) {
+        EzXposed.hotReloadEnabled = false
+        EzXposed.initOnModuleLoaded(this, param)
+        EzXposed.onTargetReady { installHooks() }
+    }
+}
+
+EzXposed.hotReloadActive  // hotReloadEnabled && XposedFeature.HOT_RELOAD.isSupported
+```
+
+关掉后显式 `id(...)` / `reloadKey(...)` 仍然透传给 framework，`HookReloadBatch` 也照常工作；
+但 `HotReloadSession.prepare` 内部走 `handleHotReloading`，同样会返回 `false`——要用 session 就不要关
+这个开关。
+
+要让模块真的能被 101 framework 加载，`module.prop` 需要放开下限，并且不要声明 `autoHotReload`：
+
+```properties
+minApiVersion=101
+targetApiVersion=102
+```
+
+模块自身仍然按 102 编译。`onHotReloading` / `onHotReloaded` 这两个覆写方法的参数类型在 101 上不存在，
+但 framework 永远不会调用它们，方法体也就不会被执行到，因此保留覆写是安全的。
+
 ### 默认自动模式
 
 新模块不需要逐条写 `reloadKey` 或包一层批次。把全部**同步** hook 初始化放进

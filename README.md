@@ -156,6 +156,20 @@ override fun onPackageReady(param: PackageReadyParam) {
 `detachCurrentEntry()` 也会停止 `onHotReloading`。需要热重载的目标 entry 不要调用它；它只适合确认不会安装
 hook 的非目标 entry。
 
+热重载相关能力（hook ID、`replaceHook`、`detach`、`onHotReloaded` 一套回调）都是 API 102 才有的，
+`hook-xposed-102` 把它们当作可选特性在运行时探测：跑在只实现 API 101 的 framework 上时自动退化——
+不分配 hook ID、不调用 `setId`，hook 与其余能力照常工作。无法降级的公开 API 都标注了
+`@RequiresXposedApi(102)`，版本不足时会带着当前 framework 版本明确报错。
+
+```kotlin
+XposedFeature.HOT_RELOAD.isSupported  // framework 是否提供该特性
+XposedFeature.HOOK_ID.minApiVersion   // 102
+EzXposed.frameworkApiVersion          // framework 侧 API 版本
+
+EzXposed.hotReloadEnabled = false     // 模块主动关掉；须在 initOnModuleLoaded 之前设置
+EzXposed.hotReloadActive              // 支持且启用
+```
+
 热重载：API 102 模块在 `META-INF/xposed/module.prop` 中设置 `autoHotReload=true` 后，
 Xposed 应用更新模块也会请求热重载。新模块默认只需把所有同步初始化放进
 `EzXposed.onTargetReady { ... }`，工具会自动聚合并分配稳定物理 ID；规则构建成功后，相同 ID 的旧 hook

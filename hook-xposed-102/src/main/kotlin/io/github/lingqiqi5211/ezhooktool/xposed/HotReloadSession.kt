@@ -2,6 +2,7 @@ package io.github.lingqiqi5211.ezhooktool.xposed
 
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModuleInterface
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import java.lang.reflect.Executable
 import java.util.IdentityHashMap
 import java.util.LinkedHashMap
@@ -21,7 +22,13 @@ import java.util.function.Consumer
  * 中的全部旧 handle，不要与 raw libxposed hook、其它 session 或其它旧 handle 管理方式混用。
  * libxposed 只保证单个 handle / 相同 ID hook 的原子替换，不提供跨多个 hook 的整批回滚。
  */
+@RequiresXposedApi(102)
 class HotReloadSession {
+    init {
+        // reloadKey 就是 API 102 的 hook ID；101 framework 上没有可用的降级语义。
+        XposedApiCompat.requireFeature(XposedFeature.HOT_RELOAD, "HotReloadSession")
+    }
+
     /**
      * 跨代宿主状态与外部回调清理入口。
      *

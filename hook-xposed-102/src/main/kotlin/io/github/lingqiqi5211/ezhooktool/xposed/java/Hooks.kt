@@ -11,6 +11,9 @@ import io.github.lingqiqi5211.ezhooktool.xposed.dsl.buildHooker
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createHook
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createInterceptHook
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.HookClassLoader
+import io.github.lingqiqi5211.ezhooktool.xposed.RequiresXposedApi
+import io.github.lingqiqi5211.ezhooktool.xposed.XposedFeature
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 
@@ -434,10 +437,12 @@ object Hooks {
      * @param callback 新的 before / after 回调
      */
     @JvmStatic
+    @RequiresXposedApi(102)
     fun replaceHook(
         handle: XposedInterface.HookHandle,
         callback: IMethodHook,
     ): XposedInterface.HookHandle {
+        XposedApiCompat.requireFeature(XposedFeature.REPLACE_HOOK, "Hooks.replaceHook")
         val hooker = buildHooker(
             handle.executable,
             listOf(
@@ -458,10 +463,12 @@ object Hooks {
      * @param callback 新的 replace 回调，返回值会作为原调用结果
      */
     @JvmStatic
+    @RequiresXposedApi(102)
     fun replaceHook(
         handle: XposedInterface.HookHandle,
         callback: IReplaceHook,
     ): XposedInterface.HookHandle {
+        XposedApiCompat.requireFeature(XposedFeature.REPLACE_HOOK, "Hooks.replaceHook")
         val hooker = buildHooker(
             handle.executable,
             listOf(ReplaceChainStage { callback.replace(it) }),

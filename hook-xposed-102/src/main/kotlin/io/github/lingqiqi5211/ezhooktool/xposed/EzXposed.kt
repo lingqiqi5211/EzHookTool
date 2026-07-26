@@ -11,6 +11,7 @@ import io.github.libxposed.api.XposedModuleInterface
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ModuleResources
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.ApplicationLifecycle
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import java.lang.ref.WeakReference
 import java.lang.reflect.Executable
 import java.util.function.Consumer
@@ -44,6 +45,11 @@ import java.util.function.Consumer
  * 新 hook 先安装，未继续声明的旧 hook 最后才移除。
  * 需要跨大规模重排保持精确 identity 时使用 [HotReloadSession] 的显式 `reloadKey(...)`；
  * [HookReloadBatch] 和带 [handleHotReloaded] 的 `onOldHooks` 参数保留给自定义流程。
+ *
+ * 热重载是可选特性。hook ID、`replaceHook` 和热重载回调都是 libxposed API 102 才有的，运行在只实现
+ * API 101 的 framework 上时（[XposedFeature.HOT_RELOAD] 不可用），本库会自动退化：不再分配 hook ID、
+ * 不再调用 `setId`，hook 安装与其它所有能力照常工作；无法降级的入口都标注了 [RequiresXposedApi]，
+ * 会明确报错。在 102 framework 上想主动关掉这套机制，把 [hotReloadEnabled] 设为 `false`。
  */
 @SuppressLint("PrivateApi", "DiscouragedPrivateApi", "StaticFieldLeak")
 object EzXposed {
@@ -54,6 +60,10 @@ object EzXposed {
     lateinit var base: XposedInterface
         internal set
 
+    /** [base] 的安全读取入口；尚未 [initOnModuleLoaded] 时为 `null`。 */
+    internal val baseOrNull: XposedInterface?
+        get() = if (::base.isInitialized) base else null
+
     private var moduleEntry: XposedInterfaceWrapper? = null
 
     /** 目标进程 snapshot；进入 [initOnPackageReady] / [initOnSystemServerStarting] 后填充。 */
@@ -62,14 +72,19 @@ object EzXposed {
     /** [onTargetReady] 注册的回调列表。 */
     private val targetReadyCallbacks = mutableListOf<TargetReadyCallback>()
 
-    /** 当前 module generation 的事务外 helper hook 兜底 ID 分配器。 */
-    private var automaticHookIds = AutomaticHookIdAllocator("uninitialized")
+    /** 当前 module generation 的事务外 helper hook 兜底 ID 分配器；热重载未生效时为 `null`。 */
+    private var automaticHookIds: AutomaticHookIdAllocator? = null
 
     /** 默认 [onTargetReady] 初始化使用的聚合事务；不需要模块为每条 hook 写 reloadKey。 */
     private var automaticHookBatch: HookReloadBatch? = null
 
-    /** 同一 HotReloadedParam 可能被内部初始化入口重复传递，只在首次看到时重置 generation 状态。 */
-    private var currentHotReloadParam: WeakReference<XposedModuleInterface.HotReloadedParam>? = null
+    /**
+     * 同一 HotReloadedParam 可能被内部初始化入口重复传递，只在首次看到时重置 generation 状态。
+     *
+     * 声明成 `Any` 而不是 `HotReloadedParam`：这个字段在 101 framework 上也会被读写，不能引用
+     * 只有 102 才有的类型。
+     */
+    private var currentHotReloadParam: WeakReference<Any>? = null
 
     /**
      * 仅在 [HotReloadSession] 重建 hook 的同步窗口内设置。
@@ -87,6 +102,32 @@ object EzXposed {
      * 开启后，hook 回调异常会被捕获、记日志并回退到原始调用。
      */
     var safeMode: Boolean = true
+
+    @JvmStatic
+    /**
+     * 模块是否启用热重载。默认 `true`。
+     *
+     * 关掉之后，本库不再为 hook 分配自动 ID、不再调用 `HookBuilder.setId`，也不再把
+     * [onTargetReady] 的同步初始化包进默认聚合事务；[handleHotReloading] 会直接返回 `false`
+     * 让 framework 放弃热重载。适合明确不需要热重载、希望 hook 安装路径尽量薄的模块。
+     *
+     * 请在 [initOnModuleLoaded] 之前设置：默认聚合事务是在那里创建的。
+     *
+     * 这个开关只表达「模块要不要」；framework 支不支持见 [XposedFeature.HOT_RELOAD]，
+     * 两者都满足时 [hotReloadActive] 为 `true`。
+     */
+    @Volatile
+    var hotReloadEnabled: Boolean = true
+
+    @JvmStatic
+    /** 当前 framework 侧的 libxposed API 版本；[base] 尚未初始化时为 0。 */
+    val frameworkApiVersion: Int
+        get() = XposedApiCompat.apiVersion(baseOrNull)
+
+    @JvmStatic
+    /** framework 提供热重载（[XposedFeature.HOT_RELOAD]）且模块启用（[hotReloadEnabled]）时才为 `true`。 */
+    val hotReloadActive: Boolean
+        get() = hotReloadEnabled && XposedFeature.HOT_RELOAD.isSupported
 
     @JvmStatic
     /** 当前包名。 */
@@ -283,8 +324,8 @@ object EzXposed {
     fun initOnModuleLoaded(base: XposedInterface, param: XposedModuleInterface.ModuleLoadedParam) {
         // API 102 不会在热重载时自动重放 onModuleLoaded；模块应从 onHotReloaded 调用本方法。
         // HotReloadedParam 也标识一个明确的新 generation；即使 framework wrapper 被复用，也不能
-        // 让旧 callback 因旧 snapshot 提前执行。
-        val hotReloadParam = param as? XposedModuleInterface.HotReloadedParam
+        // 让旧 callback 因旧 snapshot 提前执行。101 framework 上这个判断恒为 false。
+        val hotReloadParam = param.takeIf(XposedApiCompat::isHotReloadedParam)
         val isNewGeneration = !::base.isInitialized ||
             this.base !== base ||
             (hotReloadParam != null && hotReloadParam !== currentHotReloadParam?.get())
@@ -298,8 +339,14 @@ object EzXposed {
         this.moduleEntry = base as? XposedInterfaceWrapper
         modulePath = base.moduleApplicationInfo.sourceDir
         if (isNewGeneration) {
-            automaticHookIds = AutomaticHookIdAllocator(base.moduleApplicationInfo.packageName)
-            automaticHookBatch = createAutomaticHookBatch(base, param)
+            // 不支持或未启用热重载时不建立 ID 分配器与聚合事务：hook 会走不带 ID 的直装路径。
+            val active = hotReloadActive
+            automaticHookIds = if (active) {
+                AutomaticHookIdAllocator(base.moduleApplicationInfo.packageName)
+            } else {
+                null
+            }
+            automaticHookBatch = if (active) createAutomaticHookBatch(base, param) else null
         }
         currentHotReloadParam = hotReloadParam?.let(::WeakReference)
         initModuleResources()
@@ -403,10 +450,21 @@ object EzXposed {
      */
     @JvmStatic
     @JvmOverloads
+    @RequiresXposedApi(102)
     fun handleHotReloading(
         param: XposedModuleInterface.HotReloadingParam,
         extra: Array<Any?> = emptyArray(),
     ): Boolean {
+        if (!XposedFeature.HOT_RELOAD.isSupported) {
+            EzReflect.logger.warn(
+                "EzXposed",
+                "Hot reload rejected: the current framework does not implement libxposed API " +
+                    "${XposedFeature.HOT_RELOAD.minApiVersion}."
+            )
+            return false
+        }
+        // hotReloadEnabled 是模块自己的显式声明，静默拒绝即可。
+        if (!hotReloadEnabled) return false
         val snapshot = targetSnapshot ?: return false
         automaticHookBatch?.hotReloadBlockReason?.let { reason ->
             EzReflect.logger.warn("EzXposed", "Hot reload rejected: $reason")
@@ -439,12 +497,14 @@ object EzXposed {
      */
     @JvmStatic
     @JvmOverloads
+    @RequiresXposedApi(102)
     fun handleHotReloaded(
         base: XposedInterface,
         param: XposedModuleInterface.HotReloadedParam,
         onOldHooks: Consumer<List<XposedInterface.HookHandle>>? = null,
         onExtra: Consumer<Array<Any?>>? = null,
     ) {
+        XposedApiCompat.requireFeature(XposedFeature.HOT_RELOAD, "EzXposed.handleHotReloaded")
         if (onOldHooks == null) {
             restoreHotReloadedAutomatically(base, param, onExtra)
         } else {
@@ -476,6 +536,7 @@ object EzXposed {
      */
     @JvmStatic
     @JvmOverloads
+    @RequiresXposedApi(102)
     fun handleHotReloadedWithTargetReady(
         base: XposedInterface,
         param: XposedModuleInterface.HotReloadedParam,
@@ -494,11 +555,16 @@ object EzXposed {
      */
     @JvmStatic
     @JvmOverloads
+    @RequiresXposedApi(102)
     fun restoreHotReloadedAutomatically(
         base: XposedInterface,
         param: XposedModuleInterface.HotReloadedParam,
         onExtra: Consumer<Array<Any?>>? = null,
     ): AutomaticHotReloadResult {
+        XposedApiCompat.requireFeature(XposedFeature.HOT_RELOAD, "EzXposed.restoreHotReloadedAutomatically")
+        check(hotReloadEnabled) {
+            "Automatic hot reload requires EzXposed.hotReloadEnabled to stay true."
+        }
         // 先初始化新 generation，确保默认 batch 在注册新 hook 前已持有旧 handle snapshot。
         initOnModuleLoaded(base, param)
         // 正常 framework 会为每一代创建新 entry；这里仍显式创建一次事务，兼容复用 wrapper 的实现，
@@ -566,6 +632,9 @@ object EzXposed {
      * session 优先要求每条 hook 使用显式 `reloadKey`；默认 [onTargetReady] 与手动 batch 会聚合未分配
      * hook ID 的 hook；事务外的 DSL/Java helper hook 才由 [AutomaticHookIdAllocator] 兜底分配内部 ID。
      * 调用 `HookFactory.id(null)` 可显式关闭自动分配，随后应使用自定义旧 handle 处置流程。
+     *
+     * framework 不支持 hook ID（API 101）时，这里直接安装不带 ID 的 hook；此时显式 `id` /
+     * `reloadKey` 无法实现，会明确报错而不是静默降级成语义不同的匿名 hook。
      */
     internal fun installHookWithHotReloadTracking(
         target: Executable,
@@ -576,6 +645,12 @@ object EzXposed {
         hooker: XposedInterface.Hooker,
         installer: (String?, XposedInterface.Hooker) -> XposedInterface.HookHandle,
     ): XposedInterface.HookHandle {
+        if (!XposedFeature.HOOK_ID.isSupported) {
+            if (id != null) {
+                XposedApiCompat.requireFeature(XposedFeature.HOOK_ID, "HookFactory.id / HookFactory.reloadKey")
+            }
+            return installer(null, hooker)
+        }
         val session = activeHotReloadSession.get()
         if (session != null) {
             return session.installHook(target, id, hooker, installer)
@@ -592,11 +667,10 @@ object EzXposed {
                 installer = installer,
             )
         }
-        val effectiveId = id ?: if (automaticIdEnabled) {
-            automaticHookIds.allocate(target, priority, exceptionMode)
-        } else {
-            null
-        }
+        // 关掉热重载后 automaticHookIds 为 null，不再兜底分配内部 ID：这些 ID 的唯一用途就是跨代
+        // 识别 hook。显式声明的 id / reloadKey 仍然透传，HotReloadSession 与 HookReloadBatch 也照常可用。
+        val effectiveId = id ?: automaticHookIds?.takeIf { automaticIdEnabled }
+            ?.allocate(target, priority, exceptionMode)
         return installer(effectiveId, hooker)
     }
 
@@ -635,11 +709,13 @@ object EzXposed {
      * 例如 `XposedModule`）。如果传入的 `base` 不是 wrapper 类型，这里会抛出 [IllegalStateException]。
      */
     @JvmStatic
+    @RequiresXposedApi(102)
     fun detachCurrentEntry() {
         val entry = moduleEntry ?: throw IllegalStateException(
             "detachCurrentEntry requires a XposedInterfaceWrapper (e.g. XposedModule) " +
                     "to be passed into EzXposed.initOnModuleLoaded."
         )
+        XposedApiCompat.requireFeature(XposedFeature.DETACH_ENTRY, "EzXposed.detachCurrentEntry")
         entry.detach()
     }
 

@@ -1,6 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.xposed
 
 import io.github.libxposed.api.XposedInterface
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import java.lang.reflect.Executable
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -30,12 +31,18 @@ import java.util.Collections
  *
  * 内部聚合 ID 以 `ezhooktool.batch.v1:` 开头，属于本库保留命名空间。
  */
+@RequiresXposedApi(102)
 class HookReloadBatch @JvmOverloads constructor(
     namespace: String,
     private val xposed: XposedInterface = EzXposed.base,
     /** 热重载时是否要求物理 hook identity 集合不变。默认允许新增和删除 hook。 */
     private val requireStableTopologyOnHotReload: Boolean = false,
 ) {
+    init {
+        // 整个批次都建立在 hook ID 之上；101 framework 上没有可用的降级语义。
+        XposedApiCompat.requireFeature(XposedFeature.HOOK_ID, "HookReloadBatch")
+    }
+
     private val namespace = namespace.also {
         require(it.isNotBlank()) { "HookReloadBatch namespace must not be blank." }
     }
