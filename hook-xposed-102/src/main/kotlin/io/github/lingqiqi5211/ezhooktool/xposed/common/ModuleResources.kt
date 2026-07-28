@@ -12,7 +12,6 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.DisplayMetrics
 import java.io.File
-import java.io.IOException
 
 internal object ModuleResources {
     /**
@@ -108,14 +107,13 @@ internal object ModuleResources {
 
         private fun createProvider(modulePath: String): ResourcesProvider {
             val moduleFile = File(modulePath)
-            require(moduleFile.exists()) { "Module apk does not exist: $modulePath" }
-
             return try {
                 ParcelFileDescriptor.open(moduleFile, ParcelFileDescriptor.MODE_READ_ONLY).use {
                     ResourcesProvider.loadFromApk(it)
                 }
-            } catch (e: IOException) {
-                throw IllegalStateException("Failed to load module resources from $modulePath", e)
+            } catch (e: Throwable) {
+                throw IllegalStateException("Failed to load module resources from $modulePath. " +
+                        "This might be due to lack of filesystem visibility in the current process.", e)
             }
         }
     }

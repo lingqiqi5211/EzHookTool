@@ -126,11 +126,10 @@ class HotReloadSession {
 
         val recovered = EzXposed.withHotReloadSession(this) {
             EzXposed.restoreHotReloaded(
-                base = base,
                 param = param,
                 // 保留到所有新 hook 都成功安装后再统一清理，避免默认全量 unhook 的空窗。
-                onOldHooks = Consumer { },
-                onExtra = Consumer { extra ->
+                onOldHooks = { },
+                onExtra = { extra ->
                     val payload = SavedState.restore(extra)
                     scope.restoreState(payload.scopeState)
                     onExtra?.accept(payload.extra)

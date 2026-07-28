@@ -13,6 +13,8 @@ import io.github.lingqiqi5211.ezhooktool.xposed.common.HookStageException
 import io.github.lingqiqi5211.ezhooktool.xposed.common.InterceptChainStage
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ReplaceChainStage
 import java.lang.reflect.Executable
+import java.lang.reflect.Method
+import java.lang.reflect.Modifier
 import java.util.function.Consumer
 import java.util.function.Function
 
@@ -168,6 +170,13 @@ class HookFactory internal constructor(
 
     internal fun create(): XposedInterface.HookHandle {
         require(stages.isNotEmpty()) { "No hook callback specified" }
+
+        // libxposed 102 严禁 Hook 抽象方法，尝试 Hook 会抛出 IllegalArgumentException
+        if (target is Method && Modifier.isAbstract(target.modifiers)) {
+            EzReflect.logger.warn("Hook", "Skipping hook for abstract method: $target. Abstract methods cannot be hooked in libxposed API 102.")
+            return NoopHookHandle(target, hookId)
+        }
+
         val hooker = buildHooker(target, stages.toList())
         return EzXposed.installHookWithHotReloadTracking(
             target = target,
@@ -186,6 +195,17 @@ class HookFactory internal constructor(
             builderWithId.intercept(effectiveHooker)
         }
     }
+}
+
+/** 空操作 Hook 句柄，用于跳过无法 Hook 的方法。 */
+private class NoopHookHandle(
+    private val target: Executable,
+    private val hookId: String?,
+) : XposedInterface.HookHandle {
+    override fun getExecutable(): Executable = target
+    override fun unhook() {}
+    override fun getId(): String? = hookId
+    override fun replaceHook(hooker: XposedInterface.Hooker): XposedInterface.HookHandle = this
 }
 
 /**

@@ -69,6 +69,9 @@ object EzXposed {
     /** 目标进程 snapshot；进入 [initOnPackageReady] / [initOnSystemServerStarting] 后填充。 */
     private var targetSnapshot: TargetSnapshot? = null
 
+    /** [onPackageLoaded] 注册的回调列表。 */
+    private val targetLoadedCallbacks = mutableListOf<TargetLoadedCallback>()
+
     /** [onTargetReady] 注册的回调列表。 */
     private val targetReadyCallbacks = mutableListOf<TargetReadyCallback>()
 
@@ -330,6 +333,7 @@ object EzXposed {
             this.base !== base ||
             (hotReloadParam != null && hotReloadParam !== currentHotReloadParam?.get())
         if (isNewGeneration) {
+            synchronized(targetLoadedCallbacks) { targetLoadedCallbacks.clear() }
             synchronized(targetReadyCallbacks) { targetReadyCallbacks.clear() }
             targetSnapshot = null
             appContextValue = null
@@ -349,15 +353,74 @@ object EzXposed {
             automaticHookBatch = if (active) createAutomaticHookBatch(base, param) else null
         }
         currentHotReloadParam = hotReloadParam?.let(::WeakReference)
-        initModuleResources()
+        // 资源加载可能会在沙盒进程中因权限问题失败，不应导致整个模块崩溃。
+        runCatching {
+            initModuleResources()
+        }.onFailure { t ->
+            EzReflect.logger.error("EzXposed", "Failed to initialize module resources. " +
+                    "Module R.xx strings and resources will be unavailable in this process.", t)
+        }
         processName = param.processName
         isSystemServer = param.isSystemServer
     }
 
     @JvmStatic
-    /** 在 `onPackageLoaded` 阶段记录当前包名。 */
+    /**
+     * 在 `onPackageLoaded` 阶段初始化基础包信息。
+     *
+     * 该阶段 ClassLoader 刚就绪但 AppComponentFactory 尚未实例化。
+     * 会触发已通过 [onPackageLoaded] 注册的回调。
+     */
     fun initOnPackageLoaded(param: XposedModuleInterface.PackageLoadedParam) {
-        packageName = param.packageName
+        if (isSystemServer) {
+            // 在 system_server 中，维持系统服务的 ClassLoader 权威性
+            if (hotReloadActive && automaticHookBatch?.canStartInstall == true) {
+                dispatchTargetLoadedWithBatch()
+            } else {
+                dispatchTargetLoaded()
+            }
+            return
+        }
+        // 为所有进程建立初始快照，无论是否被 Hook。
+        // 这确保了热重载请求在所有进程中都能找到合法的 savedInstanceState 载体。
+        if (targetSnapshot == null) {
+            packageName = param.packageName
+            @Suppress("NewApi")
+            targetSnapshot = TargetSnapshot(
+                packageName = param.packageName,
+                processName = processName,
+                classLoader = param.defaultClassLoader,
+                applicationInfo = param.applicationInfo,
+                isSystemServer = isSystemServer,
+            )
+            @Suppress("NewApi")
+            EzReflect.init(param.defaultClassLoader)
+            EzReflect.logger.debug("EzXposed", "Established initial snapshot for process $processName via package ${param.packageName}")
+        }
+
+        // 为了支持热重载，事务必须在最早的包加载阶段就开启
+        // 现在 canStartInstall 允许在 READY 状态下 continue 分发后续包的极早期 Hook
+        if (hotReloadActive && automaticHookBatch?.canStartInstall == true) {
+            dispatchTargetLoadedWithBatch()
+        } else {
+            dispatchTargetLoaded()
+        }
+    }
+
+    /**
+     * 注册「目标包刚被加载（极早期）」的回调。
+     *
+     * 对应 libxposed 的 `onPackageLoaded` 阶段。
+     * 注册顺序执行。如果调用时包已加载，回调会立即在当前线程执行一次。
+     */
+    @JvmStatic
+    fun onPackageLoaded(callback: TargetLoadedCallback) {
+        synchronized(targetLoadedCallbacks) {
+            targetLoadedCallbacks += callback
+        }
+        if (packageName.isNotEmpty()) {
+            runLoadedCallbackSafely(callback)
+        }
     }
 
     @JvmStatic
@@ -368,15 +431,21 @@ object EzXposed {
      * 同时会建立目标进程 snapshot，触发已通过 [onTargetReady] 注册的回调。
      */
     fun initOnPackageReady(param: XposedModuleInterface.PackageReadyParam) {
-        EzReflect.init(param.classLoader)
+        if (isSystemServer) {
+            // 在 system_server 中，不要被 "android" 包的回调覆盖掉系统服务的 ClassLoader
+            dispatchTargetReady()
+            return
+        }
         packageName = param.packageName
+        // 补全快照信息（使用真正的 ClassLoader）
         targetSnapshot = TargetSnapshot(
             packageName = param.packageName,
             processName = processName,
             classLoader = param.classLoader,
             applicationInfo = param.applicationInfo,
-            isSystemServer = false,
+            isSystemServer = isSystemServer,
         )
+        EzReflect.init(param.classLoader)
         dispatchTargetReady()
     }
 
@@ -388,6 +457,7 @@ object EzXposed {
      * 同时会建立 system_server snapshot，触发已通过 [onTargetReady] 注册的回调。
      */
     fun initOnSystemServerStarting(param: XposedModuleInterface.SystemServerStartingParam) {
+        packageName = "system" // 校准：与 HyperCeiler 统一使用 system
         EzReflect.init(param.classLoader)
         targetSnapshot = TargetSnapshot(
             packageName = packageName,
@@ -420,7 +490,7 @@ object EzXposed {
             targetReadyCallbacks += callback
         }
         if (targetSnapshot != null) {
-            runCallbackSafely(callback)
+            runReadyCallbackSafely(callback)
         }
     }
 
@@ -456,21 +526,35 @@ object EzXposed {
         extra: Array<Any?> = emptyArray(),
     ): Boolean {
         if (!XposedFeature.HOT_RELOAD.isSupported) {
+            val currentApi = XposedApiCompat.apiVersion(baseOrNull)
             EzReflect.logger.warn(
-                "EzXposed",
-                "Hot reload rejected: the current framework does not implement libxposed API " +
-                    "${XposedFeature.HOT_RELOAD.minApiVersion}."
+                "HC-Reload",
+                "Hot reload rejected: the current framework (API $currentApi) does not implement libxposed API " +
+                    "${XposedFeature.HOT_RELOAD.minApiVersion} or some required methods are missing."
             )
             return false
         }
-        // hotReloadEnabled 是模块自己的显式声明，静默拒绝即可。
-        if (!hotReloadEnabled) return false
-        val snapshot = targetSnapshot ?: return false
-        automaticHookBatch?.hotReloadBlockReason?.let { reason ->
-            EzReflect.logger.warn("EzXposed", "Hot reload rejected: $reason")
+        if (!hotReloadEnabled) {
+            EzReflect.logger.debug("HC-Reload", "Hot reload rejected for $processName: module explicitly disabled hot reload.")
             return false
         }
+        
+        val snapshot = targetSnapshot
+        if (snapshot == null) {
+            EzReflect.logger.warn("HC-Reload", "Hot reload rejected for $processName: targetSnapshot is null. " +
+                    "This usually means the module hasn't initialized any package in this process yet.")
+            return false
+        }
+
+        val batch = automaticHookBatch
+        val blockReason = batch?.hotReloadBlockReason
+        if (blockReason != null) {
+            EzReflect.logger.warn("HC-Reload", "Hot reload rejected for $processName: $blockReason")
+            return false
+        }
+        
         param.setSavedInstanceState(snapshot.toCrossGenArray(extra))
+        EzReflect.logger.debug("HC-Reload", "Hot reload snapshot saved successfully for process $processName.")
         return true
     }
 
@@ -509,7 +593,6 @@ object EzXposed {
             restoreHotReloadedAutomatically(base, param, onExtra)
         } else {
             val restored = restoreHotReloaded(
-                base = base,
                 param = param,
                 onOldHooks = onOldHooks,
                 onExtra = onExtra,
@@ -579,10 +662,9 @@ object EzXposed {
             "Automatic hot reload requires at least one EzXposed.onTargetReady callback in the new generation."
         }
         val restored = restoreHotReloaded(
-            base = base,
             param = param,
             // 默认流程禁止旧入口的提前 unhook；收尾统一放到新 hook 成功安装之后。
-            onOldHooks = Consumer { },
+            onOldHooks = { },
             onExtra = onExtra,
             propagateTargetReadyFailure = true,
         )
@@ -607,14 +689,12 @@ object EzXposed {
      * @return 是否恢复到了由 [handleHotReloading] 保存的 EzHookTool snapshot
      */
     internal fun restoreHotReloaded(
-        base: XposedInterface,
         param: XposedModuleInterface.HotReloadedParam,
         onOldHooks: Consumer<List<XposedInterface.HookHandle>>?,
         onExtra: Consumer<Array<Any?>>?,
         propagateTargetReadyFailure: Boolean,
     ): Boolean {
         val snapshot = TargetSnapshot.tryRestore(param.savedInstanceState) ?: return false
-        initOnModuleLoaded(base, param)
         EzReflect.init(snapshot.classLoader)
         packageName = snapshot.packageName
         processName = snapshot.processName
@@ -622,7 +702,26 @@ object EzXposed {
         targetSnapshot = snapshot
         onExtra?.accept(TargetSnapshot.restoreExtra(param.savedInstanceState))
         onOldHooks?.accept(param.oldHookHandles)
-        dispatchTargetReady(propagateTargetReadyFailure)
+
+        // 热重载时，由于不再触发 initOnPackageLoaded 和 initOnPackageReady，
+        // 我们必须在此手动在一个事务内完成全阶段分发。
+        val batch = automaticHookBatch
+        if (batch != null && batch.canStartInstall) {
+            try {
+                batch.install(Runnable {
+                    val loaded = synchronized(targetLoadedCallbacks) { targetLoadedCallbacks.toList() }
+                    val ready = synchronized(targetReadyCallbacks) { targetReadyCallbacks.toList() }
+                    for (callback in loaded) callback.run()
+                    for (callback in ready) callback.run()
+                })
+            } catch (t: Throwable) {
+                if (propagateTargetReadyFailure) throw t
+                EzReflect.logger.error("EzXposed", "Hot reload dispatch failed", t)
+            }
+        } else {
+            dispatchTargetLoaded()
+            dispatchTargetReady(propagateTargetReadyFailure)
+        }
         return true
     }
 
@@ -755,15 +854,42 @@ object EzXposed {
         }
     }
 
+    /** 带有事务保护的早期分发。 */
+    private fun dispatchTargetLoadedWithBatch() {
+        val batch = automaticHookBatch ?: return
+        val snapshot = synchronized(targetLoadedCallbacks) { targetLoadedCallbacks.toList() }
+        try {
+            // 早期 Hook 必须立即 commit 才能赢得与系统渲染的竞争。
+            // 由于 HookReloadBatch 现已支持 READY 状态下的增量 install，我们可以放心地在此提交。
+            batch.install(Runnable {
+                for (callback in snapshot) {
+                    callback.run()
+                }
+            })
+        } catch (t: Throwable) {
+            EzReflect.logger.error("EzXposed", "onPackageLoaded hook batch failed", t)
+        }
+    }
+
+    /** 触发当前已注册的 [onPackageLoaded] 回调。 */
+    private fun dispatchTargetLoaded() {
+        val snapshot = synchronized(targetLoadedCallbacks) { targetLoadedCallbacks.toList() }
+        for (callback in snapshot) {
+            runLoadedCallbackSafely(callback)
+        }
+    }
+
     /** 触发当前已注册的 [onTargetReady] 回调。 */
     private fun dispatchTargetReady(propagateFailure: Boolean = false) {
-        val snapshot = synchronized(targetReadyCallbacks) { targetReadyCallbacks.toList() }
+        val readySnapshot = synchronized(targetReadyCallbacks) { targetReadyCallbacks.toList() }
         val batch = automaticHookBatch?.takeIf { it.canStartInstall }
         if (batch != null) {
             try {
                 batch.install(Runnable {
-                    for (callback in snapshot) {
-                        // helper hook 仍处于延后发布阶段；任一 callback 失败都必须放弃整个 batch。
+                    // 如果是在 onTargetReady 才开启事务（例如没有早期 hook 的普通应用），
+                    // 我们依然需要按顺序分发，但要确保早期 hook 不会被重复执行。
+                    // 这里我们只分发 ready 阶段，loaded 阶段由 initOnPackageLoaded 负责。
+                    for (callback in readySnapshot) {
                         callback.run()
                     }
                 })
@@ -773,16 +899,24 @@ object EzXposed {
             }
             return
         }
-        for (callback in snapshot) {
+        for (callback in readySnapshot) {
             if (propagateFailure) {
                 callback.run()
             } else {
-                runCallbackSafely(callback)
+                runReadyCallbackSafely(callback)
             }
         }
     }
 
-    private fun runCallbackSafely(callback: TargetReadyCallback) {
+    private fun runLoadedCallbackSafely(callback: TargetLoadedCallback) {
+        try {
+            callback.run()
+        } catch (t: Throwable) {
+            EzReflect.logger.error("EzXposed", "onPackageLoaded callback failed", t)
+        }
+    }
+
+    private fun runReadyCallbackSafely(callback: TargetReadyCallback) {
         try {
             callback.run()
         } catch (t: Throwable) {
@@ -800,6 +934,13 @@ data class AutomaticHotReloadResult(
     /** 新代码未继续声明、在新 generation 安装成功后才 unhook 的旧 hook 数量。 */
     val removedOldHookCount: Int,
 )
+
+/**
+ * [EzXposed.onPackageLoaded] 注册的回调。
+ */
+fun interface TargetLoadedCallback {
+    fun run()
+}
 
 /**
  * [EzXposed.onTargetReady] 注册的回调。

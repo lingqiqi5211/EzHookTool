@@ -1,6 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.xposed
 
 import io.github.libxposed.api.XposedInterface
+import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import java.lang.reflect.Executable
 import java.nio.charset.StandardCharsets
@@ -64,8 +65,26 @@ class HookReloadBatch @JvmOverloads constructor(
      */
     fun install(block: Runnable) {
         synchronized(lock) {
-            check(state == State.NEW) {
-                "HookReloadBatch.install can only be called once per module entry."
+            check(state != State.FAILED) {
+                "HookReloadBatch cannot be used after failure."
+            }
+            EzReflect.logger.debug("HookBatch", "[$namespace] install start. Current state: $state")
+            if (state == State.READY) {
+                // 增量提交逻辑。
+                // 必须将状态重新设为 INSTALLING，否则内部注册钩子时会因状态校验失败而报错。
+                withActive(this) {
+                    try {
+                        state = State.INSTALLING
+                        block.run()
+                        commit()
+                        EzReflect.logger.debug("HookBatch", "[$namespace] Incremental install success. State: $state")
+                    } catch (t: Throwable) {
+                        EzReflect.logger.error("HookBatch", "[$namespace] Incremental install failed", t)
+                        state = State.FAILED
+                        throw t
+                    }
+                }
+                return
             }
             state = State.INSTALLING
         }
@@ -74,7 +93,41 @@ class HookReloadBatch @JvmOverloads constructor(
             try {
                 block.run()
                 commit()
+                EzReflect.logger.debug("HookBatch", "[$namespace] install success. State: $state")
             } catch (t: Throwable) {
+                EzReflect.logger.error("HookBatch", "[$namespace] install failed", t)
+                synchronized(lock) {
+                    state = State.FAILED
+                    oldHooks = null
+                }
+                throw t
+            }
+        }
+    }
+
+    /**
+     * 执行同步 hook 注册，但不提交事务。
+     * 适用于多阶段初始化场景，允许在后续阶段继续注册更多钩子后再统一提交。
+     */
+    fun registerWithoutCommit(block: Runnable) {
+        synchronized(lock) {
+            check(state != State.FAILED) {
+                "HookReloadBatch cannot be used after failure."
+            }
+            EzReflect.logger.debug("HookBatch", "[$namespace] registerWithoutCommit start. State: $state")
+            if (state == State.READY) {
+                install(block)
+                return
+            }
+            state = State.INSTALLING
+        }
+
+        withActive(this) {
+            try {
+                block.run()
+                EzReflect.logger.debug("HookBatch", "[$namespace] registerWithoutCommit pending. State: $state")
+            } catch (t: Throwable) {
+                EzReflect.logger.error("HookBatch", "[$namespace] registerWithoutCommit failed", t)
                 synchronized(lock) {
                     state = State.FAILED
                     oldHooks = null
@@ -192,16 +245,15 @@ class HookReloadBatch @JvmOverloads constructor(
     val hotReloadBlockReason: String?
         get() = synchronized(lock) {
             when (state) {
-                State.NEW -> "HookReloadBatch has not committed target-process hook initialization."
+                State.NEW, State.READY -> null
                 State.INSTALLING -> "HookReloadBatch is still registering hooks."
                 State.FAILED -> "HookReloadBatch hook initialization failed."
-                State.READY -> null
             }
         }
 
-    /** 默认自动流程仅在首次目标初始化时进入 batch。 */
+    /** 默认自动流程在初始化阶段可进入 batch。 */
     internal val canStartInstall: Boolean
-        get() = synchronized(lock) { state == State.NEW }
+        get() = synchronized(lock) { state != State.FAILED }
 
     /** 仅供 [EzXposed] 的 hook 安装路径调用。 */
     internal fun installHook(
@@ -356,7 +408,8 @@ class HookReloadBatch @JvmOverloads constructor(
 
     private fun pendingPhysicalHooks(): List<PendingPhysicalHook> = buildList {
         for (group in groups.values) {
-            if (group.logicalHooks.isEmpty()) continue
+            // 增量提交。如果该组已经安装过 physicalHandle，则不再重复安装
+            if (group.logicalHooks.isEmpty() || group.physicalHandle != null) continue
             add(
                 PendingPhysicalHook(
                     identity = HookIdentity(group.key.executable, group.groupId),
@@ -366,6 +419,8 @@ class HookReloadBatch @JvmOverloads constructor(
             )
         }
         for (hook in explicitHooks.values) {
+            // 同理，显式 ID 的 hook 如果已经有物理句柄，也跳过重复安装
+            if (hook.physicalHandle != null) continue
             add(
                 PendingPhysicalHook(
                     identity = hook.identity,

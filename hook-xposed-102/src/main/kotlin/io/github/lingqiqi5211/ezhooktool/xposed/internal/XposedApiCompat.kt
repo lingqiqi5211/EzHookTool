@@ -2,6 +2,7 @@ package io.github.lingqiqi5211.ezhooktool.xposed.internal
 
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterfaceWrapper
+import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 import io.github.lingqiqi5211.ezhooktool.xposed.XposedFeature
 
@@ -17,42 +18,45 @@ import io.github.lingqiqi5211.ezhooktool.xposed.XposedFeature
  * 或 `NoSuchMethodError`。结果按特性缓存，热路径上只是一次 map 读取。
  */
 internal object XposedApiCompat {
+    private const val TAG = "HC-Reload"
     private val probeResults = HashMap<XposedFeature, Boolean>(XposedFeature.entries.size)
 
     /** 当前 framework 是否提供 [feature]。 */
     fun isSupported(feature: XposedFeature): Boolean = synchronized(probeResults) {
-        probeResults.getOrPut(feature) { probe(feature) }
+        probeResults.getOrPut(feature) { 
+            val result = probe(feature)
+            EzReflect.logger.debug(TAG, "Feature ${feature.name} supported: $result")
+            result
+        }
     }
 
     /**
      * 判断 `ModuleLoadedParam` 是否其实是热重载的 `HotReloadedParam`。
-     *
-     * 用反射而不是 `is` / `as?`：这个判断位于 [EzXposed.initOnModuleLoaded] 这类必经路径上，
-     * 直接引用 102 才有的类型会让 101 framework 上的初始化直接崩掉。
      */
-    fun isHotReloadedParam(param: Any?): Boolean =
-        param != null && hotReloadedParamClass?.isInstance(param) == true
+    fun isHotReloadedParam(param: Any?): Boolean {
+        val clazz = hotReloadedParamClass
+        val isInstance = param != null && clazz?.isInstance(param) == true
+        if (param != null && clazz == null) {
+            EzReflect.logger.warn(TAG, "hotReloadedParamClass is null, cannot detect if param is HotReloadedParam")
+        }
+        return isInstance
+    }
 
     /**
      * 安全读取 hook ID；[XposedFeature.HOOK_ID] 不可用时返回 `null`。
-     *
-     * 库内部读取 hook ID 一律走这里。Kotlin 里 `handle.id` 会优先解析成 Java 合成属性（即直接调用
-     * `getId()`），而不是本库带兜底的扩展属性，写成 `handle.id` 会在 101 framework 上抛
-     * `NoSuchMethodError`。
      */
     fun hookId(handle: XposedInterface.HookHandle): String? =
         if (isSupported(XposedFeature.HOOK_ID)) handle.getId() else null
 
     /**
      * 标注了 [io.github.lingqiqi5211.ezhooktool.xposed.RequiresXposedApi] 的入口统一在这里做前置检查。
-     *
-     * @param api 报错信息里显示的 API 名称
      */
     fun requireFeature(feature: XposedFeature, api: String) {
-        check(isSupported(feature)) {
+        if (!isSupported(feature)) {
             val current = EzXposed.frameworkApiVersion.takeIf { it > 0 }?.toString() ?: "unknown"
-            "$api requires libxposed API ${feature.minApiVersion} (${feature.name}); " +
-                "the current framework reports API $current."
+            val msg = "$api requires libxposed API ${feature.minApiVersion} (${feature.name}); the current framework reports API $current."
+            EzReflect.logger.error(TAG, msg)
+            throw IllegalStateException(msg)
         }
     }
 
@@ -61,9 +65,14 @@ internal object XposedApiCompat {
         base?.let { runCatching { it.apiVersion }.getOrDefault(0) } ?: 0
 
     private fun probe(feature: XposedFeature): Boolean = when (feature) {
-        XposedFeature.HOOK_ID ->
-            hasMethod(XposedInterface.HookBuilder::class.java, "setId", String::class.java) &&
-                hasMethod(XposedInterface.HookHandle::class.java, "getId")
+        XposedFeature.HOOK_ID -> {
+            val hasSetId = hasMethod(XposedInterface.HookBuilder::class.java, "setId", String::class.java)
+            val hasGetId = hasMethod(XposedInterface.HookHandle::class.java, "getId")
+            if (!hasSetId || !hasGetId) {
+                EzReflect.logger.warn(TAG, "HOOK_ID check failed: setId=$hasSetId, getId=$hasGetId")
+            }
+            hasSetId && hasGetId
+        }
 
         XposedFeature.REPLACE_HOOK ->
             hasMethod(
@@ -72,24 +81,54 @@ internal object XposedApiCompat {
                 XposedInterface.Hooker::class.java,
             )
 
-        // 直接复用 probe 而不是 isSupported：避免在缓存写入过程中重入同一张表。
-        XposedFeature.HOT_RELOAD ->
-            probe(XposedFeature.HOOK_ID) && hotReloadedParamClass != null
+        XposedFeature.HOT_RELOAD -> {
+            val hookIdSupported = probe(XposedFeature.HOOK_ID)
+            val paramClassExists = hotReloadedParamClass != null
+            if (!hookIdSupported || !paramClassExists) {
+                EzReflect.logger.warn(TAG, "HOT_RELOAD check failed: hookIdSupported=$hookIdSupported, hotReloadedParamClassExists=$paramClassExists")
+            }
+            hookIdSupported && paramClassExists
+        }
 
         XposedFeature.DETACH_ENTRY ->
             hasMethod(XposedInterfaceWrapper::class.java, "detach")
     }
 
     private val hotReloadedParamClass: Class<*>? by lazy {
-        runCatching {
-            Class.forName(
-                "io.github.libxposed.api.XposedModuleInterface\$HotReloadedParam",
-                false,
+        val parentClass = io.github.libxposed.api.XposedModuleInterface::class.java
+        
+        // 在部分环境下 declaredClasses 可能为空。
+        // 我们改用“参数溯源法”：从 XposedModuleInterface 定义的生命周期方法签名中直接提取类型。
+        var found = parentClass.methods.find { it.name == "onHotReloaded" }?.parameterTypes?.firstOrNull()
+        
+        if (found == null) {
+            // 尝试从本地加载器补丁
+            val className = "io.github.libxposed.api.XposedModuleInterface\$HotReloadedParam"
+            val loaders = listOfNotNull(
+                EzXposed::class.java.classLoader,
                 XposedInterface::class.java.classLoader,
+                Thread.currentThread().contextClassLoader
             )
-        }.getOrNull()
+            for (loader in loaders) {
+                runCatching {
+                    found = Class.forName(className, false, loader)
+                }
+                if (found != null) break
+            }
+        }
+        
+        if (found != null) {
+            val name = found!!.name
+            EzReflect.logger.debug(TAG, "Successfully identified HotReloadedParam class: $name")
+        } else {
+            EzReflect.logger.error(TAG, "CRITICAL: Failed to identify HotReloadedParam class via method signature or forName. " +
+                    "Methods available: ${parentClass.methods.joinToString { it.name }}")
+        }
+        found
     }
 
     private fun hasMethod(owner: Class<*>, name: String, vararg parameterTypes: Class<*>): Boolean =
-        runCatching { owner.getMethod(name, *parameterTypes) }.isSuccess
+        runCatching { owner.getMethod(name, *parameterTypes) }.onFailure {
+            EzReflect.logger.warn(TAG, "Method $name not found in ${owner.name}")
+        }.isSuccess
 }
