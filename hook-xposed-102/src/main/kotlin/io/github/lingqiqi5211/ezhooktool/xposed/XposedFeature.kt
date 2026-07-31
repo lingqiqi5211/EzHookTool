@@ -5,8 +5,9 @@ import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 /**
  * libxposed 的可选特性。
  *
- * 每个特性对应一组高版本 API 才提供的能力。[isSupported] 按当前 framework 实际提供的类型和方法判定，
- * 而不是只看版本号，因此可以直接用来决定要不要走某条代码路径：
+ * 每个特性对应一组高版本 API 才提供的能力。[isSupported] 按当前 framework 通过
+ * `XposedInterface.getApiVersion()` 报告的运行时版本判定，因此可以直接用来决定要不要走某条代码路径，
+ * 也不会受 `PROP_RT_API_PROTECTION` 禁止反射 Xposed API 的影响：
  *
  * ```kotlin
  * if (XposedFeature.HOT_RELOAD.isSupported) {

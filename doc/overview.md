@@ -481,8 +481,9 @@ autoHotReload=true
 
 hook ID（`HookBuilder.setId` / `HookHandle.getId`）、`HookHandle.replaceHook`、
 `XposedInterfaceWrapper.detach` 和这一整套热重载回调都是 API 102 才新增的，API 101 没有。
-`hook-xposed-102` 按 102 编译，但把这些当作**可选特性**：运行时按实际提供的类型和方法探测，
-因此同一份产物也能跑在只实现 API 101 的 framework 上。
+`hook-xposed-102` 按 102 编译，但把这些当作**可选特性**：运行时根据 framework 通过
+`XposedInterface.getApiVersion()` 报告的 API 版本按需启用，因此同一份产物也能跑在只实现 API 101
+的 framework 上。能力判断不反射 Xposed API，framework 启用 `PROP_RT_API_PROTECTION` 时也不会误判。
 
 特性通过 `XposedFeature` 查询，每一项都带最低版本：
 
@@ -495,6 +496,10 @@ XposedFeature.DETACH_ENTRY.isSupported  // XposedInterfaceWrapper.detach
 XposedFeature.HOOK_ID.minApiVersion     // 102
 EzXposed.frameworkApiVersion            // framework 侧 API 版本，未初始化时为 0
 ```
+
+`isSupported` 只表示 framework 是否提供能力，不会主动调用对应功能；应在 `initOnModuleLoaded` 之后查询。
+初始化前所有特性都返回 `false`，该结果不会缓存。热重载仍由 `hotReloadEnabled` 手动开关，其它特性只在
+调用对应 API 时使用。
 
 依赖这些特性、且**无法降级**的公开 API 都标注了 `@RequiresXposedApi(102)`：版本不足时调用会抛出
 `IllegalStateException`，报错信息里带上要求的版本、特性名和当前 framework 版本。能优雅降级的
@@ -578,6 +583,13 @@ class MainHook : XposedModule() {
     }
 }
 ```
+
+如果 Hook 必须在 `AppComponentFactory` 创建前生效，可手动把
+`initOnPackageLoaded(param)` 换成 `initOnPackageLoadedAsTargetReady(param)`。
+这会在 `onPackageLoaded` 立即执行 `onTargetReady`；后续
+`initOnPackageReady(param)` 会被安全忽略，初次加载和热重载都继续使用
+`defaultClassLoader`，不会重复安装同一批 Hook。默认行为仍保持在
+`onPackageReady` 安装。
 
 默认事务会先完整收集 `onTargetReady` 内的逻辑 hook，再按
 `executable + priority + exceptionMode` 提交稳定物理 ID。回调抛异常时不会发布这些默认物理 hook，旧 generation

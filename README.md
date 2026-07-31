@@ -113,6 +113,12 @@ class MainHook : XposedModule() {
 }
 ```
 
+需要在 `AppComponentFactory` 创建前安装全部 Hook 时，把 `onPackageLoaded` 中的
+`initOnPackageLoaded(param)` 改为 `initOnPackageLoadedAsTargetReady(param)`。
+后续 `initOnPackageReady(param)` 会被安全忽略，保证初次加载和热重载始终使用
+`defaultClassLoader`，也不会重复执行 `onTargetReady`。标准模块继续使用默认的
+`onPackageReady` 时机。
+
 `reflection-only`
 
 ```kotlin
@@ -157,8 +163,9 @@ override fun onPackageReady(param: PackageReadyParam) {
 hook 的非目标 entry。
 
 热重载相关能力（hook ID、`replaceHook`、`detach`、`onHotReloaded` 一套回调）都是 API 102 才有的，
-`hook-xposed-102` 把它们当作可选特性在运行时探测：跑在只实现 API 101 的 framework 上时自动退化——
-不分配 hook ID、不调用 `setId`，hook 与其余能力照常工作。无法降级的公开 API 都标注了
+`hook-xposed-102` 根据 framework 报告的运行时 API 版本按需启用：跑在只实现 API 101 的 framework
+上时自动退化——不分配 hook ID、不调用 `setId`，hook 与其余能力照常工作。该判断不反射 Xposed API，
+因此兼容 `PROP_RT_API_PROTECTION`。无法降级的公开 API 都标注了
 `@RequiresXposedApi(102)`，版本不足时会带着当前 framework 版本明确报错。
 
 ```kotlin
@@ -169,6 +176,10 @@ EzXposed.frameworkApiVersion          // framework 侧 API 版本
 EzXposed.hotReloadEnabled = false     // 模块主动关掉；须在 initOnModuleLoaded 之前设置
 EzXposed.hotReloadActive              // 支持且启用
 ```
+
+`isSupported` 表示 framework 是否提供能力，不会强制调用该能力；应在 `initOnModuleLoaded` 之后查询，
+初始化前统一返回 `false` 且不会缓存。热重载仍由 `hotReloadEnabled` 手动开关，其它特性只在调用对应 API
+时使用。
 
 热重载：API 102 模块在 `META-INF/xposed/module.prop` 中设置 `autoHotReload=true` 后，
 Xposed 应用更新模块也会请求热重载。新模块默认只需把所有同步初始化放进

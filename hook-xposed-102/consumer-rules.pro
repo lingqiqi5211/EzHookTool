@@ -10,6 +10,9 @@
 -keepclassmembers class io.github.lingqiqi5211.ezhooktool.xposed.EzXposed { public static *; }
 -keepclassmembers class io.github.lingqiqi5211.ezhooktool.xposed.EzXposedKt { public static *; }
 
+# 102-only 类型判断必须留在独立类中，不能被内联到 API 101 必经路径
+-keep class io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat$Api102 { *; }
+
 # core 公开入口
 -keepclassmembers class io.github.lingqiqi5211.ezhooktool.core.EzReflect { public static *; }
 

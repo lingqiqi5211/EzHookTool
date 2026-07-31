@@ -23,7 +23,8 @@ import java.util.function.Consumer
  *
  * 1. 在 `XposedModule.onModuleLoaded` 里调用 [initOnModuleLoaded]
  * 2. 在 `XposedModule.onPackageLoaded` 里调用 [initOnPackageLoaded]
- * 3. 在 `XposedModule.onPackageReady` 里调用 [initOnPackageReady]
+ * 3. 在 `XposedModule.onPackageReady` 里调用 [initOnPackageReady]；需要在
+ *    `AppComponentFactory` 创建前安装 hook 时，改用 [initOnPackageLoadedAsTargetReady]
  *    或 `onSystemServerStarting` 里调用 [initOnSystemServerStarting]
  * 4. 通过 [onTargetReady] 注册「目标进程准备好后跑什么」
  *
@@ -34,7 +35,8 @@ import java.util.function.Consumer
  * 行为约定：
  *
  * - [base] 在 [initOnModuleLoaded] 后可用
- * - [classLoader] 在 [initOnPackageReady] 或 [initOnSystemServerStarting] 后代表当前进程反射环境
+ * - [classLoader] 在 [initOnPackageReady]、[initOnPackageLoadedAsTargetReady]
+ *   或 [initOnSystemServerStarting] 后代表当前进程反射环境
  * - [appContext] 采用懒解析，期望指向目标进程 application；如果应用尚未创建，请改用 [appContextOrNull] 或稍后访问
  * - [modulePath] / [moduleRes] 在 [initOnModuleLoaded] 后可用
  *
@@ -66,11 +68,14 @@ object EzXposed {
 
     private var moduleEntry: XposedInterfaceWrapper? = null
 
-    /** 目标进程 snapshot；进入 [initOnPackageReady] / [initOnSystemServerStarting] 后填充。 */
+    /** 目标进程 snapshot；进入目标就绪初始化方法后填充。 */
     private var targetSnapshot: TargetSnapshot? = null
 
     /** [onTargetReady] 注册的回调列表。 */
     private val targetReadyCallbacks = mutableListOf<TargetReadyCallback>()
+
+    /** 防止早期与标准 package 生命周期连续回调时重复安装同一批 hook。 */
+    private var targetReadyDispatched = false
 
     /** 当前 module generation 的事务外 helper hook 兜底 ID 分配器；热重载未生效时为 `null`。 */
     private var automaticHookIds: AutomaticHookIdAllocator? = null
@@ -325,12 +330,15 @@ object EzXposed {
         // API 102 不会在热重载时自动重放 onModuleLoaded；模块应从 onHotReloaded 调用本方法。
         // HotReloadedParam 也标识一个明确的新 generation；即使 framework wrapper 被复用，也不能
         // 让旧 callback 因旧 snapshot 提前执行。101 framework 上这个判断恒为 false。
-        val hotReloadParam = param.takeIf(XposedApiCompat::isHotReloadedParam)
+        val hotReloadParam = param.takeIf { XposedApiCompat.isHotReloadedParam(base, it) }
         val isNewGeneration = !::base.isInitialized ||
             this.base !== base ||
             (hotReloadParam != null && hotReloadParam !== currentHotReloadParam?.get())
         if (isNewGeneration) {
-            synchronized(targetReadyCallbacks) { targetReadyCallbacks.clear() }
+            synchronized(targetReadyCallbacks) {
+                targetReadyCallbacks.clear()
+                targetReadyDispatched = false
+            }
             targetSnapshot = null
             appContextValue = null
             packageName = ""
@@ -362,22 +370,34 @@ object EzXposed {
 
     @JvmStatic
     /**
+     * 在 `onPackageLoaded` 阶段把目标标记为就绪，并立即触发 [onTargetReady]。
+     *
+     * 适合必须早于 `AppComponentFactory` 创建安装的 hook。此阶段只能使用
+     * [XposedModuleInterface.PackageLoadedParam.getDefaultClassLoader]；为保持初次加载与热重载
+     * 使用同一个 ClassLoader，随后调用 [initOnPackageReady] 会被忽略。
+     */
+    fun initOnPackageLoadedAsTargetReady(param: XposedModuleInterface.PackageLoadedParam) {
+        initializePackageTargetAndDispatch(
+            param.packageName,
+            param.defaultClassLoader,
+            param.applicationInfo,
+        )
+    }
+
+    @JvmStatic
+    /**
      * 在 `onPackageReady` 阶段初始化可直接用于反射的 [classLoader]。
      *
      * 从这个阶段开始，`findClass` / `findMethod` 一类 API 才应默认面向目标应用类使用。
      * 同时会建立目标进程 snapshot，触发已通过 [onTargetReady] 注册的回调。
+     * 如果已通过 [initOnPackageLoadedAsTargetReady] 选择早期时机，本次调用不会改变其状态。
      */
     fun initOnPackageReady(param: XposedModuleInterface.PackageReadyParam) {
-        EzReflect.init(param.classLoader)
-        packageName = param.packageName
-        targetSnapshot = TargetSnapshot(
-            packageName = param.packageName,
-            processName = processName,
-            classLoader = param.classLoader,
-            applicationInfo = param.applicationInfo,
-            isSystemServer = false,
+        initializePackageTargetAndDispatch(
+            param.packageName,
+            param.classLoader,
+            param.applicationInfo,
         )
-        dispatchTargetReady()
     }
 
     @JvmStatic
@@ -402,11 +422,12 @@ object EzXposed {
     /**
      * 注册「目标进程准备好后跑什么」的回调。
      *
-     * 初次加载：在 [initOnPackageReady] / [initOnSystemServerStarting] 末尾触发。
+     * 初次加载：在 [initOnPackageLoadedAsTargetReady]、[initOnPackageReady]
+     * 或 [initOnSystemServerStarting] 末尾触发。
      * 热重载：[handleHotReloaded] 或 [HotReloadSession.restore] 还原 snapshot 后触发。
      *
-     * 允许多次注册；按注册顺序执行。如果调用 [onTargetReady] 时目标进程已经就绪
-     * （即 snapshot 已存在），新注册的回调会立即在当前线程执行一次，避免错过当前进程。
+     * 允许多次注册；按注册顺序执行。如果调用 [onTargetReady] 时目标进程已经完成就绪分发，
+     * 新注册的回调会立即在当前线程执行一次，避免错过当前进程。
      *
      * 默认自动热重载的聚合事务只覆盖首次 target-ready 分发前已注册的同步回调。目标已就绪后才注册的
      * 回调会立即执行，但其后续 hook 不属于该批次；需要可靠跨代替换时使用显式 `reloadKey(...)` 或
@@ -416,10 +437,11 @@ object EzXposed {
      */
     @JvmStatic
     fun onTargetReady(callback: TargetReadyCallback) {
-        synchronized(targetReadyCallbacks) {
+        val runImmediately = synchronized(targetReadyCallbacks) {
             targetReadyCallbacks += callback
+            targetReadyDispatched
         }
-        if (targetSnapshot != null) {
+        if (runImmediately) {
             runCallbackSafely(callback)
         }
     }
@@ -428,8 +450,9 @@ object EzXposed {
      * 在覆写的 `onHotReloading` 里直接调用。
      *
      * 把当前 [TargetSnapshot] 拍平成 `Array<Any?>` 透传给 `HotReloadingParam.setSavedInstanceState`，
-     * 并返回 `true` 允许重载继续。如果当前还没进入 `onPackageReady` / `onSystemServerStarting`，
-     * 会返回 `false`——此时没有可恢复的状态，重载没有意义。
+     * 并返回 `true` 允许重载继续。如果当前还没通过 [initOnPackageLoadedAsTargetReady]、[initOnPackageReady] 或
+     * [initOnSystemServerStarting] 建立目标 snapshot，会返回 `false`——此时没有可恢复的状态，
+     * 热重载没有意义。
      *
      * snapshot 数组的内容（`String`、`ClassLoader`、`ApplicationInfo`、`Boolean`、`Integer`）
      * 全部由 boot / system / app classloader 加载，符合 libxposed 102「setSavedInstanceState 不接受
@@ -458,8 +481,8 @@ object EzXposed {
         if (!XposedFeature.HOT_RELOAD.isSupported) {
             EzReflect.logger.warn(
                 "EzXposed",
-                "Hot reload rejected: the current framework does not implement libxposed API " +
-                    "${XposedFeature.HOT_RELOAD.minApiVersion}."
+                "Hot reload rejected: the current framework reports libxposed API " +
+                    "$frameworkApiVersion; API ${XposedFeature.HOT_RELOAD.minApiVersion} is required."
             )
             return false
         }
@@ -749,6 +772,36 @@ object EzXposed {
         requireStableTopologyOnHotReload = false,
     )
 
+    private fun initializePackageTarget(
+        targetPackageName: String,
+        targetClassLoader: ClassLoader,
+        applicationInfo: ApplicationInfo,
+    ) {
+        EzReflect.init(targetClassLoader)
+        packageName = targetPackageName
+        targetSnapshot = TargetSnapshot(
+            packageName = targetPackageName,
+            processName = processName,
+            classLoader = targetClassLoader,
+            applicationInfo = applicationInfo,
+            isSystemServer = false,
+        )
+    }
+
+    private fun initializePackageTargetAndDispatch(
+        targetPackageName: String,
+        targetClassLoader: ClassLoader,
+        applicationInfo: ApplicationInfo,
+    ) {
+        val callbacks = synchronized(targetReadyCallbacks) {
+            if (targetReadyDispatched) return
+            initializePackageTarget(targetPackageName, targetClassLoader, applicationInfo)
+            targetReadyDispatched = true
+            targetReadyCallbacks.toList()
+        }
+        runTargetReadyCallbacks(callbacks)
+    }
+
     private val addAssetPathMethod by lazy {
         AssetManager::class.java.getDeclaredMethod("addAssetPath", String::class.java).apply {
             isAccessible = true
@@ -757,12 +810,23 @@ object EzXposed {
 
     /** 触发当前已注册的 [onTargetReady] 回调。 */
     private fun dispatchTargetReady(propagateFailure: Boolean = false) {
-        val snapshot = synchronized(targetReadyCallbacks) { targetReadyCallbacks.toList() }
+        val callbacks = synchronized(targetReadyCallbacks) {
+            if (targetReadyDispatched) return
+            targetReadyDispatched = true
+            targetReadyCallbacks.toList()
+        }
+        runTargetReadyCallbacks(callbacks, propagateFailure)
+    }
+
+    private fun runTargetReadyCallbacks(
+        callbacks: List<TargetReadyCallback>,
+        propagateFailure: Boolean = false,
+    ) {
         val batch = automaticHookBatch?.takeIf { it.canStartInstall }
         if (batch != null) {
             try {
                 batch.install(Runnable {
-                    for (callback in snapshot) {
+                    for (callback in callbacks) {
                         // helper hook 仍处于延后发布阶段；任一 callback 失败都必须放弃整个 batch。
                         callback.run()
                     }
@@ -773,7 +837,7 @@ object EzXposed {
             }
             return
         }
-        for (callback in snapshot) {
+        for (callback in callbacks) {
             if (propagateFailure) {
                 callback.run()
             } else {

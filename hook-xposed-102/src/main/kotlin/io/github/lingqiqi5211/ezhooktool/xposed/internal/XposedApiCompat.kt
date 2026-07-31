@@ -1,37 +1,37 @@
 package io.github.lingqiqi5211.ezhooktool.xposed.internal
 
 import io.github.libxposed.api.XposedInterface
-import io.github.libxposed.api.XposedInterfaceWrapper
+import io.github.libxposed.api.XposedModuleInterface
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 import io.github.lingqiqi5211.ezhooktool.xposed.XposedFeature
 
 /**
- * [XposedFeature] 的运行时探测与统一前置检查。
+ * [XposedFeature] 的运行时版本协商与统一前置检查。
  *
- * 本模块按 API 102 编译，但 102 相对 101 只新增了几处能力：`HookBuilder.setId`、`HookHandle.getId` /
- * `replaceHook`、`XposedInterfaceWrapper.detach`，以及 `onHotReloading` / `onHotReloaded` 那套热重载回调
- * 与参数类型。这些类型和方法在 101 framework 上不存在，所有会走到它们的代码路径都必须先经过这里的探测，
- * 绝不能出现在无条件执行的路径上。
+ * 本模块按 API 102 编译，但高版本能力只能在当前 framework 报告的 API 版本达到
+ * [XposedFeature.minApiVersion] 后调用。版本由 libxposed 规定的 [XposedInterface.getApiVersion]
+ * 提供，不反射 Xposed API；framework 启用 `PROP_RT_API_PROTECTION` 时，反射会被禁止，但静态 API 调用
+ * 与版本协商仍然可用。
  *
- * 探测一律走反射：反射失败只会拿到 `false`，而直接引用缺失的类型 / 方法会抛 `NoClassDefFoundError`
- * 或 `NoSuchMethodError`。结果按特性缓存，热路径上只是一次 map 读取。
+ * 未初始化时版本为 0，且不会缓存该结果；[EzXposed.initOnModuleLoaded] 保存 framework 实例后会立即得到
+ * 当前 generation 的真实版本。
  */
 internal object XposedApiCompat {
-    private val probeResults = HashMap<XposedFeature, Boolean>(XposedFeature.entries.size)
-
     /** 当前 framework 是否提供 [feature]。 */
-    fun isSupported(feature: XposedFeature): Boolean = synchronized(probeResults) {
-        probeResults.getOrPut(feature) { probe(feature) }
-    }
+    fun isSupported(feature: XposedFeature): Boolean =
+        apiVersion(EzXposed.baseOrNull) >= feature.minApiVersion
 
     /**
      * 判断 `ModuleLoadedParam` 是否其实是热重载的 `HotReloadedParam`。
      *
-     * 用反射而不是 `is` / `as?`：这个判断位于 [EzXposed.initOnModuleLoaded] 这类必经路径上，
-     * 直接引用 102 才有的类型会让 101 framework 上的初始化直接崩掉。
+     * 外层先用 API 101 已提供的版本接口短路；102 才存在的类型判断隔离在 [Api102]，
+     * API 101 framework 不会加载该路径。
      */
-    fun isHotReloadedParam(param: Any?): Boolean =
-        param != null && hotReloadedParamClass?.isInstance(param) == true
+    fun isHotReloadedParam(
+        base: XposedInterface,
+        param: XposedModuleInterface.ModuleLoadedParam,
+    ): Boolean =
+        apiVersion(base) >= XposedInterface.API_102 && Api102.isHotReloadedParam(param)
 
     /**
      * 安全读取 hook ID；[XposedFeature.HOOK_ID] 不可用时返回 `null`。
@@ -60,36 +60,11 @@ internal object XposedApiCompat {
     fun apiVersion(base: XposedInterface?): Int =
         base?.let { runCatching { it.apiVersion }.getOrDefault(0) } ?: 0
 
-    private fun probe(feature: XposedFeature): Boolean = when (feature) {
-        XposedFeature.HOOK_ID ->
-            hasMethod(XposedInterface.HookBuilder::class.java, "setId", String::class.java) &&
-                hasMethod(XposedInterface.HookHandle::class.java, "getId")
-
-        XposedFeature.REPLACE_HOOK ->
-            hasMethod(
-                XposedInterface.HookHandle::class.java,
-                "replaceHook",
-                XposedInterface.Hooker::class.java,
-            )
-
-        // 直接复用 probe 而不是 isSupported：避免在缓存写入过程中重入同一张表。
-        XposedFeature.HOT_RELOAD ->
-            probe(XposedFeature.HOOK_ID) && hotReloadedParamClass != null
-
-        XposedFeature.DETACH_ENTRY ->
-            hasMethod(XposedInterfaceWrapper::class.java, "detach")
+    /**
+     * 隔离 102 才存在的类型引用。API 101 路径先在外层按版本返回，不会加载这个类。
+     */
+    private object Api102 {
+        fun isHotReloadedParam(param: XposedModuleInterface.ModuleLoadedParam): Boolean =
+            param is XposedModuleInterface.HotReloadedParam
     }
-
-    private val hotReloadedParamClass: Class<*>? by lazy {
-        runCatching {
-            Class.forName(
-                "io.github.libxposed.api.XposedModuleInterface\$HotReloadedParam",
-                false,
-                XposedInterface::class.java.classLoader,
-            )
-        }.getOrNull()
-    }
-
-    private fun hasMethod(owner: Class<*>, name: String, vararg parameterTypes: Class<*>): Boolean =
-        runCatching { owner.getMethod(name, *parameterTypes) }.isSuccess
 }
