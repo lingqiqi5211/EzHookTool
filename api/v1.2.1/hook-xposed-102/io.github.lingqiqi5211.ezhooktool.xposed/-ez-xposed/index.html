@@ -1,0 +1,580 @@
+<!doctype html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>EzXposed</title>
+<link href="../../../images/logo-icon.svg" rel="icon" type="image/svg"><script>var pathToRoot = "../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../scripts/sourceset_dependencies.js" async></script>
+<link href="../../../styles/style.css" rel="Stylesheet">
+<link href="../../../styles/main.css" rel="Stylesheet">
+<link href="../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../scripts/navigation-loader.js" async></script>
+<script type="text/javascript" src="../../../scripts/platform-content-handler.js" async></script>
+<script type="text/javascript" src="../../../scripts/main.js" defer></script>
+<script type="text/javascript" src="../../../scripts/prism.js" async></script>
+<script type="text/javascript" src="../../../ui-kit/ui-kit.min.js" defer></script></head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+<a class="library-name--link" href="../../../index.html" tabindex="1">
+                    EzHookTool
+            </a>        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle" type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true" data-filter=":hook-xposed-102/release">release</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox" data-role="dropdown-toggle" aria-controls="platform-tags-listbox" aria-haspopup="listbox" aria-expanded="false" aria-label="Toggle source sets"></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option jvm-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":hook-xposed-102/release" data-filter=":hook-xposed-102/release">
+                                <span class="checkbox--icon"></span>
+                                release
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button" type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config="{&quot;defaultSize&quot;: 280, &quot;minSize&quot;: 200, &quot;maxSize&quot;: 400}">
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list" data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    EzHookTool
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageids="hook-xposed-102::io.github.lingqiqi5211.ezhooktool.xposed/EzXposed///PointingToDeclaration//619576607">
+  <div class="breadcrumbs"><a href="../../index.html">hook-xposed-102</a><span class="delimiter">/</span><a href="../index.html">io.github.lingqiqi5211.ezhooktool.xposed</a><span class="delimiter">/</span><span class="current">EzXposed</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span>Ez</span><wbr><span><span>Xposed</span></span></h1>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><span class="token keyword">object </span><a href="index.html">EzXposed</a></div><p class="paragraph">libxposed API 102 的运行时入口。</p><p class="paragraph">推荐初始化顺序：</p><ol><li><p class="paragraph">在 <code class="lang-kotlin">XposedModule.onModuleLoaded</code> 里调用 <a href="init-on-module-loaded.html">initOnModuleLoaded</a></p></li><li><p class="paragraph">在 <code class="lang-kotlin">XposedModule.onPackageLoaded</code> 里调用 <a href="init-on-package-loaded.html">initOnPackageLoaded</a></p></li><li><p class="paragraph">在 <code class="lang-kotlin">XposedModule.onPackageReady</code> 里调用 <a href="init-on-package-ready.html">initOnPackageReady</a>；需要在     <code class="lang-kotlin">AppComponentFactory</code> 创建前安装 hook 时，改用 <a href="init-on-package-loaded-as-target-ready.html">initOnPackageLoadedAsTargetReady</a>     或 <code class="lang-kotlin">onSystemServerStarting</code> 里调用 <a href="init-on-system-server-starting.html">initOnSystemServerStarting</a></p></li><li><p class="paragraph">通过 <a href="on-target-ready.html">onTargetReady</a> 注册「目标进程准备好后跑什么」</p></li></ol><p class="paragraph">API 102 热重载不会自动重放 <code class="lang-kotlin">onModuleLoaded</code> 或 package 生命周期回调。模块应在 <code class="lang-kotlin">onHotReloaded</code> 中重新执行自己的运行时初始化（包括 <a href="init-on-module-loaded.html">initOnModuleLoaded</a> 与 <a href="on-target-ready.html">onTargetReady</a> 注册）， 再调用 <a href="handle-hot-reloaded.html">handleHotReloaded</a> 或 <a href="restore-hot-reloaded-automatically.html">restoreHotReloadedAutomatically</a> 恢复目标 snapshot。</p><p class="paragraph">行为约定：</p><ul><li><p class="paragraph"><a href="base.html">base</a> 在 <a href="init-on-module-loaded.html">initOnModuleLoaded</a> 后可用</p></li><li><p class="paragraph"><a href="class-loader.html">classLoader</a> 在 <a href="init-on-package-ready.html">initOnPackageReady</a>、<a href="init-on-package-loaded-as-target-ready.html">initOnPackageLoadedAsTargetReady</a> 或 <a href="init-on-system-server-starting.html">initOnSystemServerStarting</a> 后代表当前进程反射环境</p></li><li><p class="paragraph"><a href="app-context.html">appContext</a> 采用懒解析，期望指向目标进程 application；如果应用尚未创建，请改用 <a href="app-context-or-null.html">appContextOrNull</a> 或稍后访问</p></li><li><p class="paragraph"><a href="module-path.html">modulePath</a> / <a href="module-res.html">moduleRes</a> 在 <a href="init-on-module-loaded.html">initOnModuleLoaded</a> 后可用</p></li></ul><p class="paragraph">默认热重载会把同步初始化中的 DSL/Java helper hook 按 executable、priority、exceptionMode 自动 聚合，并为物理 hook 分配稳定内部 ID；在 <a href="handle-hot-reloaded.html">handleHotReloaded</a> 成功重建后才清理遗留旧 handle， 通常无需逐条写 <code class="lang-kotlin">reloadKey(...)</code>。同一组内的逻辑 hook 可增删重排，也允许新增或删除目标、 priority/exceptionMode 组及显式 hook ID。相同 executable + ID 的旧 hook 由 framework 单条原子替换， 新 hook 先安装，未继续声明的旧 hook 最后才移除。 需要跨大规模重排保持精确 identity 时使用 <a href="../-hot-reload-session/index.html">HotReloadSession</a> 的显式 <code class="lang-kotlin">reloadKey(...)</code>； <a href="../-hook-reload-batch/index.html">HookReloadBatch</a> 和带 <a href="handle-hot-reloaded.html">handleHotReloaded</a> 的 <code class="lang-kotlin">onOldHooks</code> 参数保留给自定义流程。</p><p class="paragraph">热重载是可选特性。hook ID、<code class="lang-kotlin">replaceHook</code> 和热重载回调都是 libxposed API 102 才有的，运行在只实现 API 101 的 framework 上时（<a href="../-xposed-feature/-h-o-t_-r-e-l-o-a-d/index.html">XposedFeature.HOT_RELOAD</a> 不可用），本库会自动退化：不再分配 hook ID、 不再调用 <code class="lang-kotlin">setId</code>，hook 安装与其它所有能力照常工作；无法降级的入口都标注了 <a href="../-requires-xposed-api/index.html">RequiresXposedApi</a>， 会明确报错。在 102 framework 上想主动关掉这套机制，把 <a href="hot-reload-enabled.html">hotReloadEnabled</a> 设为 <code class="lang-kotlin">false</code>。</p></div></div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="1572310862%2FProperties%2F619576607" anchor-label="appContext" id="1572310862%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="app-context.html"><span>app</span><wbr><span><span>Context</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1572310862%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@get:</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-synchronized/index.html"><span class="token annotation builtin">Synchronized</span></a></div></div><span class="token keyword">val </span><a href="app-context.html">appContext</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/android/content/Context.html">Context</a></div><div class="brief "><p class="paragraph">当前进程的 application context；过早访问时会抛异常。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1707030436%2FProperties%2F619576607" anchor-label="appContextOrNull" id="1707030436%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="app-context-or-null.html"><span>app</span><wbr><span>Context</span><wbr><span>Or</span><wbr><span><span>Null</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1707030436%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@get:</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-synchronized/index.html"><span class="token annotation builtin">Synchronized</span></a></div></div><span class="token keyword">val </span><a href="app-context-or-null.html">appContextOrNull</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/android/content/Context.html">Context</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">当前进程的 application context；尚未可用时返回 <code class="lang-kotlin">null</code>。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1622110571%2FProperties%2F619576607" anchor-label="base" id="1622110571%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="base.html"><span><span>base</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1622110571%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">lateinit </span><span class="token keyword">var </span><a href="base.html">base</a><span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedInterface///PointingToDeclaration/">XposedInterface</span></div><div class="brief "><p class="paragraph">libxposed 基础接口实例。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1970188749%2FProperties%2F619576607" anchor-label="classLoader" id="-1970188749%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="class-loader.html"><span>class</span><wbr><span><span>Loader</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1970188749%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">val </span><a href="class-loader.html">classLoader</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/lang/ClassLoader.html">ClassLoader</a></div><div class="brief "><p class="paragraph">当前默认 <code class="lang-kotlin">ClassLoader</code>。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1453286402%2FProperties%2F619576607" anchor-label="frameworkApiVersion" id="1453286402%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="framework-api-version.html"><span>framework</span><wbr><span>Api</span><wbr><span><span>Version</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1453286402%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">val </span><a href="framework-api-version.html">frameworkApiVersion</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div><div class="brief "><p class="paragraph">当前 framework 侧的 libxposed API 版本；<a href="base.html">base</a> 尚未初始化时为 0。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-803808878%2FProperties%2F619576607" anchor-label="hotReloadActive" id="-803808878%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="hot-reload-active.html"><span>hot</span><wbr><span>Reload</span><wbr><span><span>Active</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-803808878%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">val </span><a href="hot-reload-active.html">hotReloadActive</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">framework 提供热重载（<a href="../-xposed-feature/-h-o-t_-r-e-l-o-a-d/index.html">XposedFeature.HOT_RELOAD</a>）且模块启用（<a href="hot-reload-enabled.html">hotReloadEnabled</a>）时才为 <code class="lang-kotlin">true</code>。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-453315359%2FProperties%2F619576607" anchor-label="hotReloadEnabled" id="-453315359%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="hot-reload-enabled.html"><span>hot</span><wbr><span>Reload</span><wbr><span><span>Enabled</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-453315359%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-volatile/index.html"><span class="token annotation builtin">Volatile</span></a></div></div><span class="token keyword">var </span><a href="hot-reload-enabled.html">hotReloadEnabled</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">模块是否启用热重载。默认 <code class="lang-kotlin">true</code>。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1224460480%2FProperties%2F619576607" anchor-label="isSystemServer" id="-1224460480%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="is-system-server.html"><span>is</span><wbr><span>System</span><wbr><span><span>Server</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1224460480%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">var </span><a href="is-system-server.html">isSystemServer</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">当前是否运行在 <code class="lang-kotlin">system_server</code>。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-749754293%2FProperties%2F619576607" anchor-label="modulePath" id="-749754293%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="module-path.html"><span>module</span><wbr><span><span>Path</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-749754293%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">lateinit </span><span class="token keyword">var </span><a href="module-path.html">modulePath</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div><div class="brief "><p class="paragraph">当前模块 apk 路径；调用 <a href="init-on-module-loaded.html">initOnModuleLoaded</a> 后可用。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="194218922%2FProperties%2F619576607" anchor-label="moduleRes" id="194218922%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="module-res.html"><span>module</span><wbr><span><span>Res</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="194218922%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">lateinit </span><span class="token keyword">var </span><a href="module-res.html">moduleRes</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/android/content/res/Resources.html">Resources</a></div><div class="brief "><p class="paragraph">当前模块资源；调用 <a href="init-on-module-loaded.html">initOnModuleLoaded</a> 后可用。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-75447123%2FProperties%2F619576607" anchor-label="packageName" id="-75447123%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="package-name.html"><span>package</span><wbr><span><span>Name</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-75447123%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">var </span><a href="package-name.html">packageName</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div><div class="brief "><p class="paragraph">当前包名。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-473917660%2FProperties%2F619576607" anchor-label="processName" id="-473917660%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="process-name.html"><span>process</span><wbr><span><span>Name</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-473917660%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">var </span><a href="process-name.html">processName</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div><div class="brief "><p class="paragraph">当前进程名。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="836515552%2FProperties%2F619576607" anchor-label="safeClassLoader" id="836515552%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="safe-class-loader.html"><span>safe</span><wbr><span>Class</span><wbr><span><span>Loader</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="836515552%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">val </span><a href="safe-class-loader.html">safeClassLoader</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/lang/ClassLoader.html">ClassLoader</a></div><div class="brief "><p class="paragraph">始终可用的 <code class="lang-kotlin">ClassLoader</code>；未初始化时回退到 <code class="lang-kotlin">SystemClassLoader</code>。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1322746164%2FProperties%2F619576607" anchor-label="safeMode" id="-1322746164%2FProperties%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="safe-mode.html"><span>safe</span><wbr><span><span>Mode</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1322746164%2FProperties%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-volatile/index.html"><span class="token annotation builtin">Volatile</span></a></div></div><span class="token keyword">var </span><a href="safe-mode.html">safeMode</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">是否启用安全模式。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="FUNCTION">
+        <h2 class="tableheader">Functions</h2>
+        <div class="table"><a data-name="-1779244046%2FFunctions%2F619576607" anchor-label="addModuleAssetPath" id="-1779244046%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="add-module-asset-path.html"><span>add</span><wbr><span>Module</span><wbr><span>Asset</span><wbr><span><span>Path</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1779244046%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">fun </span><a href="add-module-asset-path.html"><span class="token function">addModuleAssetPath</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">context<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/android/content/Context.html">Context</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">添加模块路径到目标 <code class="lang-kotlin">Context.resources</code>。允许通过“R.xx.xxx”直接使用模块资源。</p></div><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">fun </span><a href="add-module-asset-path.html"><span class="token function">addModuleAssetPath</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">resources<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/android/content/res/Resources.html">Resources</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">将模块资源路径注入到指定 <a href="add-module-asset-path.html">resources</a>。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="427126895%2FFunctions%2F619576607" anchor-label="deoptimize" id="427126895%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="deoptimize.html"><span><span>deoptimize</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="427126895%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">fun </span><a href="deoptimize.html"><span class="token function">deoptimize</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">executable<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/lang/reflect/Executable.html">Executable</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">对方法或构造器做去优化。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1559429968%2FFunctions%2F619576607" anchor-label="detachCurrentEntry" id="-1559429968%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="detach-current-entry.html"><span>detach</span><wbr><span>Current</span><wbr><span><span>Entry</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1559429968%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="../-requires-xposed-api/index.html"><span class="token annotation builtin">RequiresXposedApi</span></a><span class="token punctuation">(</span><span>value<span class="token operator"> = </span><span class="breakable-word"><span class="token constant">102</span></span></span><wbr><span class="token punctuation">)</span></div></div><span class="token keyword">fun </span><a href="detach-current-entry.html"><span class="token function">detachCurrentEntry</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">停止当前 module entry 的后续生命周期回调。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1514490308%2FFunctions%2F619576607" anchor-label="handleHotReloaded" id="-1514490308%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="handle-hot-reloaded.html"><span>handle</span><wbr><span>Hot</span><wbr><span><span>Reloaded</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1514490308%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="../-requires-xposed-api/index.html"><span class="token annotation builtin">RequiresXposedApi</span></a><span class="token punctuation">(</span><span>value<span class="token operator"> = </span><span class="breakable-word"><span class="token constant">102</span></span></span><wbr><span class="token punctuation">)</span></div></div><span class="token keyword">fun </span><a href="handle-hot-reloaded.html"><span class="token function">handleHotReloaded</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">base<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedInterface///PointingToDeclaration/">XposedInterface</span><span class="token punctuation">, </span></span><span class="parameter ">param<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedModuleInterface.HotReloadedParam///PointingToDeclaration/">XposedModuleInterface.HotReloadedParam</span><span class="token punctuation">, </span></span><span class="parameter ">onOldHooks<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/util/function/Consumer.html">Consumer</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><span data-unresolved-link="io.github.libxposed.api/XposedInterface.HookHandle///PointingToDeclaration/">XposedInterface.HookHandle</span><span class="token operator">&gt;</span><span class="token operator">&gt;</span><span class="token operator">?</span><span class="token operator"> = </span>null<span class="token punctuation">, </span></span><span class="parameter ">onExtra<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/util/function/Consumer.html">Consumer</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-array/index.html">Array</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span><span class="token operator">&gt;</span><span class="token operator">&gt;</span><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">在覆写的 <code class="lang-kotlin">onHotReloaded</code> 里直接调用。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="695932655%2FFunctions%2F619576607" anchor-label="handleHotReloadedWithTargetReady" id="695932655%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="handle-hot-reloaded-with-target-ready.html"><span>handle</span><wbr><span>Hot</span><wbr><span>Reloaded</span><wbr><span>With</span><wbr><span>Target</span><wbr><span><span>Ready</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="695932655%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="../-requires-xposed-api/index.html"><span class="token annotation builtin">RequiresXposedApi</span></a><span class="token punctuation">(</span><span>value<span class="token operator"> = </span><span class="breakable-word"><span class="token constant">102</span></span></span><wbr><span class="token punctuation">)</span></div></div><span class="token keyword">fun </span><a href="handle-hot-reloaded-with-target-ready.html"><span class="token function">handleHotReloadedWithTargetReady</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">base<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedInterface///PointingToDeclaration/">XposedInterface</span><span class="token punctuation">, </span></span><span class="parameter ">param<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedModuleInterface.HotReloadedParam///PointingToDeclaration/">XposedModuleInterface.HotReloadedParam</span><span class="token punctuation">, </span></span><span class="parameter ">targetReady<span class="token operator">: </span><a href="../-target-ready-callback/index.html">TargetReadyCallback</a><span class="token punctuation">, </span></span><span class="parameter ">onExtra<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/util/function/Consumer.html">Consumer</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-array/index.html">Array</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span><span class="token operator">&gt;</span><span class="token operator">&gt;</span><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../-automatic-hot-reload-result/index.html">AutomaticHotReloadResult</a></div><div class="brief "><p class="paragraph">默认自动热重载的精简入口。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1061108209%2FFunctions%2F619576607" anchor-label="handleHotReloading" id="1061108209%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="handle-hot-reloading.html"><span>handle</span><wbr><span>Hot</span><wbr><span><span>Reloading</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1061108209%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="../-requires-xposed-api/index.html"><span class="token annotation builtin">RequiresXposedApi</span></a><span class="token punctuation">(</span><span>value<span class="token operator"> = </span><span class="breakable-word"><span class="token constant">102</span></span></span><wbr><span class="token punctuation">)</span></div></div><span class="token keyword">fun </span><a href="handle-hot-reloading.html"><span class="token function">handleHotReloading</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">param<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedModuleInterface.HotReloadingParam///PointingToDeclaration/">XposedModuleInterface.HotReloadingParam</span><span class="token punctuation">, </span></span><span class="parameter ">extra<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-array/index.html">Array</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span><span class="token operator">&gt;</span><span class="token operator"> = </span>emptyArray()</span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">在覆写的 <code class="lang-kotlin">onHotReloading</code> 里直接调用。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="172367642%2FFunctions%2F619576607" anchor-label="initAppContext" id="172367642%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="init-app-context.html"><span>init</span><wbr><span>App</span><wbr><span><span>Context</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="172367642%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a></div></div><span class="token keyword">fun </span><a href="init-app-context.html"><span class="token function">initAppContext</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">context<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/android/content/Context.html">Context</a><span class="token operator">?</span><span class="token operator"> = </span>getCurrentApplicationContext()<span class="token punctuation">, </span></span><span class="parameter ">injectModuleAssetPath<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span><span class="token punctuation">, </span></span><span class="parameter ">force<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">手动缓存当前进程的 application context。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1080858443%2FFunctions%2F619576607" anchor-label="initModuleResources" id="-1080858443%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="init-module-resources.html"><span>init</span><wbr><span>Module</span><wbr><span><span>Resources</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1080858443%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">fun </span><a href="init-module-resources.html"><span class="token function">initModuleResources</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">初始化模块资源。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1637832501%2FFunctions%2F619576607" anchor-label="initOnModuleLoaded" id="1637832501%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="init-on-module-loaded.html"><span>init</span><wbr><span>On</span><wbr><span>Module</span><wbr><span><span>Loaded</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1637832501%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">fun </span><a href="init-on-module-loaded.html"><span class="token function">initOnModuleLoaded</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">base<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedInterface///PointingToDeclaration/">XposedInterface</span><span class="token punctuation">, </span></span><span class="parameter ">param<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedModuleInterface.ModuleLoadedParam///PointingToDeclaration/">XposedModuleInterface.ModuleLoadedParam</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">在 <code class="lang-kotlin">onModuleLoaded</code> 阶段初始化运行时基础信息。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="984894399%2FFunctions%2F619576607" anchor-label="initOnPackageLoaded" id="984894399%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="init-on-package-loaded.html"><span>init</span><wbr><span>On</span><wbr><span>Package</span><wbr><span><span>Loaded</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="984894399%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">fun </span><a href="init-on-package-loaded.html"><span class="token function">initOnPackageLoaded</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">param<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedModuleInterface.PackageLoadedParam///PointingToDeclaration/">XposedModuleInterface.PackageLoadedParam</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">在 <code class="lang-kotlin">onPackageLoaded</code> 阶段记录当前包名。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-2101510475%2FFunctions%2F619576607" anchor-label="initOnPackageLoadedAsTargetReady" id="-2101510475%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="init-on-package-loaded-as-target-ready.html"><span>init</span><wbr><span>On</span><wbr><span>Package</span><wbr><span>Loaded</span><wbr><span>As</span><wbr><span>Target</span><wbr><span><span>Ready</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2101510475%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="https://developer.android.com/reference/kotlin/androidx/annotation/RequiresApi.html"><span class="token annotation builtin">RequiresApi</span></a><span class="token punctuation">(</span><span>value<span class="token operator"> = </span><span class="breakable-word"><span class="token constant">29</span></span></span><wbr><span class="token punctuation">)</span></div></div><span class="token keyword">fun </span><a href="init-on-package-loaded-as-target-ready.html"><span class="token function">initOnPackageLoadedAsTargetReady</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">param<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedModuleInterface.PackageLoadedParam///PointingToDeclaration/">XposedModuleInterface.PackageLoadedParam</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">在 <code class="lang-kotlin">onPackageLoaded</code> 阶段把目标标记为就绪，并立即触发 <a href="on-target-ready.html">onTargetReady</a>。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1236929443%2FFunctions%2F619576607" anchor-label="initOnPackageReady" id="1236929443%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="init-on-package-ready.html"><span>init</span><wbr><span>On</span><wbr><span>Package</span><wbr><span><span>Ready</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1236929443%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">fun </span><a href="init-on-package-ready.html"><span class="token function">initOnPackageReady</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">param<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedModuleInterface.PackageReadyParam///PointingToDeclaration/">XposedModuleInterface.PackageReadyParam</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">在 <code class="lang-kotlin">onPackageReady</code> 阶段初始化可直接用于反射的 <a href="class-loader.html">classLoader</a>。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1898744717%2FFunctions%2F619576607" anchor-label="initOnSystemServerStarting" id="1898744717%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="init-on-system-server-starting.html"><span>init</span><wbr><span>On</span><wbr><span>System</span><wbr><span>Server</span><wbr><span><span>Starting</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1898744717%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">fun </span><a href="init-on-system-server-starting.html"><span class="token function">initOnSystemServerStarting</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">param<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedModuleInterface.SystemServerStartingParam///PointingToDeclaration/">XposedModuleInterface.SystemServerStartingParam</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">在 <code class="lang-kotlin">onSystemServerStarting</code> 阶段初始化 <code class="lang-kotlin">system_server</code> 的反射环境。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1646661489%2FFunctions%2F619576607" anchor-label="onTargetReady" id="1646661489%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="on-target-ready.html"><span>on</span><wbr><span>Target</span><wbr><span><span>Ready</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1646661489%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">fun </span><a href="on-target-ready.html"><span class="token function">onTargetReady</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">callback<span class="token operator">: </span><a href="../-target-ready-callback/index.html">TargetReadyCallback</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">注册「目标进程准备好后跑什么」的回调。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1826285123%2FFunctions%2F619576607" anchor-label="restoreHotReloadedAutomatically" id="1826285123%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="restore-hot-reloaded-automatically.html"><span>restore</span><wbr><span>Hot</span><wbr><span>Reloaded</span><wbr><span><span>Automatically</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1826285123%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a></div><div class="block"><span class="token annotation builtin">@</span><a href="../-requires-xposed-api/index.html"><span class="token annotation builtin">RequiresXposedApi</span></a><span class="token punctuation">(</span><span>value<span class="token operator"> = </span><span class="breakable-word"><span class="token constant">102</span></span></span><wbr><span class="token punctuation">)</span></div></div><span class="token keyword">fun </span><a href="restore-hot-reloaded-automatically.html"><span class="token function">restoreHotReloadedAutomatically</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">base<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedInterface///PointingToDeclaration/">XposedInterface</span><span class="token punctuation">, </span></span><span class="parameter ">param<span class="token operator">: </span><span data-unresolved-link="io.github.libxposed.api/XposedModuleInterface.HotReloadedParam///PointingToDeclaration/">XposedModuleInterface.HotReloadedParam</span><span class="token punctuation">, </span></span><span class="parameter ">onExtra<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/util/function/Consumer.html">Consumer</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-array/index.html">Array</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span><span class="token operator">&gt;</span><span class="token operator">&gt;</span><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../-automatic-hot-reload-result/index.html">AutomaticHotReloadResult</a></div><div class="brief "><p class="paragraph">执行默认自动热重载流程，并返回实际替换与清理数量。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-862818188%2FFunctions%2F619576607" anchor-label="runOnApplicationAttach" id="-862818188%2FFunctions%2F619576607" data-filterable-set=":hook-xposed-102/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":hook-xposed-102/release" data-filterable-set=":hook-xposed-102/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="run-on-application-attach.html"><span>run</span><wbr><span>On</span><wbr><span>Application</span><wbr><span><span>Attach</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-862818188%2FFunctions%2F619576607"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":hook-xposed-102/release"><div class="symbol monospace"><div class="block"><div class="block"><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-static/index.html"><span class="token annotation builtin">JvmStatic</span></a></div></div><span class="token keyword">fun </span><a href="run-on-application-attach.html"><span class="token function">runOnApplicationAttach</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">callback<span class="token operator">: </span><a href="../-application-attach-callback/index.html">ApplicationAttachCallback</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">注册「<code class="lang-kotlin">Application.attach(Context)</code> 之后跑什么」的回调。</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>© 2026 Copyright</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
