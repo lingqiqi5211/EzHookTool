@@ -61,7 +61,7 @@ EzHookTool 是 Kotlin 反射工具库，同时提供 Android / Xposed / libxpose
 - 缺 `initZygote(...)` 时 `initModuleResources(...)` / `addModuleAssetPath(...)` 必须给出明确错误。
 - 不要把 `XposedInterface` 的假设带到 82。
 
-### 资源替换（`EzResources`，102）
+### 资源替换（`EzResources`）
 
 - hook 是进程级、按需装的：注册过某类替换才 hook 对应 getter；一条没注册时零开销。
 - `resIdCache` 按 `Resources` 弱引用分区、每区 4096 封顶、查找不分配；注入失败只记一次，不在 getter

@@ -28,8 +28,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * 宿主资源替换。libxposed 102 没有 `XResources`，这里把模块 apk 挂进宿主 `Resources`，再 hook
- * `Resources` / `TypedArray` 的 getter 按「包名 + 类型 + 名称」拦截取值。
+ * 宿主资源替换。借 `ResourcesLoader` 把模块 apk 挂进宿主 `Resources`，再 hook `Resources` / `TypedArray` 的
+ * getter 按「包名 + 类型 + 名称」拦截取值。不依赖 framework 提供资源接口，思路来自 HyperCeiler 的 `ResourcesTool`。
  *
  * ```kotlin
  * EzResources.setResReplacement("com.miui.home", "drawable", "ic_launcher", R.drawable.my_icon)

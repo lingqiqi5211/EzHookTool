@@ -49,7 +49,7 @@ object Methods {
     /**
      * 自动匹配参数并调用实例方法，并将结果转为指定类型。
      *
-     * 找不到方法仍按 [callMethod] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
+     * 找不到方法仍按 [callMethod] 语义抛 [io.github.lingqiqi5211.ezhooktool.core.MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
      *
      * @param obj 目标实例
      * @param methodName 方法名
@@ -73,7 +73,7 @@ object Methods {
     /**
      * 自动匹配参数并调用静态方法，并将结果转为指定类型。
      *
-     * 找不到方法仍按 [callStaticMethod] 语义抛 [MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
+     * 找不到方法仍按 [callStaticMethod] 语义抛 [io.github.lingqiqi5211.ezhooktool.core.MemberNotFoundException]；目标方法返回 `null` 会抛 [NullPointerException]。
      *
      * @param clazz 目标类
      * @param methodName 方法名

@@ -438,11 +438,11 @@ HookHandle handle = Hooks.createHook(method, "license-check", methodHook);
 val current: String? = handle.id
 ```
 
-## libxposed 102 资源替换
+## 资源替换（EzResources）
 
-libxposed 102 没有经典 Xposed 的 `XResources`，`initZygote` 那条替换链路整个不存在。`EzResources`
-用 hook `Resources` / `TypedArray` getter 的方式补上：把模块 apk 作为 `ResourcesLoader` 挂进宿主的
-`Resources`，再按「包名 + 类型 + 名称」拦截取值。
+`EzResources` 借 Android 的 `ResourcesLoader` 把模块 apk 挂进宿主的 `Resources`，再 hook `Resources` /
+`TypedArray` 的 getter，按「包名 + 类型 + 名称」拦截取值。不依赖 framework 提供资源接口，只要能 hook 方法就能用；思路来自
+HyperCeiler 的 `ResourcesTool`。目前只提供在 hook-xposed-102 模块里。
 
 ```kotlin
 // 用模块里的资源顶掉宿主的
@@ -471,8 +471,8 @@ EzResources.setDensityReplacement("com.miui.home", "dimen", "bar_height", 8f)
 行为约定：
 
 - **按需装 hook。** 只有注册过某类替换才会 hook 对应的 getter，一条都没注册时零开销。
-- **不进调用方的 handle sink。** 这些 hook 是进程级的，装一次服务全部替换规则；内部用
-  它们带稳定 reloadKey，热重载时由工具原子替换；模块不需要也不应该自己持有或摘除。
+- **hook 是进程级的。** 装一次服务全部替换规则，带稳定 reloadKey，热重载时由工具原子替换；
+  模块不需要也不应该自己持有或摘除。
 - **resId 缓存按 Resources 分区。** 资源 ID 只在单个 `Resources` 范围内有意义，SystemUI 和它的插件
   在同一进程用不同 `Resources`，只用 int 当 key 会在 ID 复用时命中错误规则。
 - **注册过替换就不能热重载。** 已经 inflate 的 View、缓存的 drawable / color、framework 手里的

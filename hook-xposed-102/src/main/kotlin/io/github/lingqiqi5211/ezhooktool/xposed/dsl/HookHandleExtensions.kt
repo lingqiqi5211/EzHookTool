@@ -21,7 +21,7 @@ import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
  *
  * 注意 Kotlin 的解析规则：`handle.id` 会优先命中 `getId()` 的 Java 合成属性而不是本扩展，因此在可能
  * 运行于 101 framework 的代码里请显式调用 `HookHandles.getId(handle)`（Java）或先判断
- * [io.github.lingqiqi5211.ezhooktool.xposed.EzXposed.hotReloadSupported]。
+ * [io.github.lingqiqi5211.ezhooktool.xposed.XposedFeature.HOOK_ID] 的 `isSupported`。
  */
 val XposedInterface.HookHandle.id: String?
     get() = XposedApiCompat.hookId(this)

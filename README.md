@@ -128,9 +128,11 @@ class MainHook : XposedModule() {
 EzReflect.init(yourClassLoader)
 ```
 
-### 资源替换（API 102）
+### 资源替换
 
-libxposed 102 没有 `XResources`。`EzResources` 用 hook `Resources` / `TypedArray` getter 补上：
+`EzResources`（hook-xposed-102）借 Android 的 `ResourcesLoader` 把模块 apk 挂进宿主 `Resources`，再 hook
+`Resources` / `TypedArray` 的 getter 按「包名 + 类型 + 名称」拦截取值。不依赖 framework 提供资源接口，只要能 hook 方法就能用；
+思路来自 HyperCeiler 的 `ResourcesTool`。目前只提供在 hook-xposed-102 模块里。
 
 ```kotlin
 EzResources.setResReplacement("com.miui.home", "drawable", "ic_launcher", R.drawable.my_icon)
