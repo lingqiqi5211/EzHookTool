@@ -12,6 +12,7 @@ import io.github.lingqiqi5211.ezhooktool.sample102.hooks.BaseHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleCryptoHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleReplaceHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleReporterHook
+import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleResourceHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleSecondaryHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleVipHook
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
@@ -64,6 +65,7 @@ class MainHook : XposedModule() {
                 ExampleCryptoHook.takeIf { switches.crypto },
                 ExampleReporterHook.takeIf { switches.loginReporter },
                 ExampleReplaceHook.takeIf { switches.remoteConfig },
+                ExampleResourceHook.takeIf { switches.resources },
             )
             SecondaryTarget -> initHooks(
                 ExampleSecondaryHook.takeIf { switches.secondaryFeature },
@@ -83,6 +85,7 @@ class MainHook : XposedModule() {
             vip = preferences.getBoolean("$scope:vip", true),
             crypto = preferences.getBoolean("$scope:crypto", true),
             loginReporter = preferences.getBoolean("$scope:login_reporter", true),
+            resources = preferences.getBoolean("$scope:resources", false),
             remoteConfig = preferences.getBoolean("$scope:remote_config", true),
             secondaryFeature = preferences.getBoolean("$scope:secondary_feature", true),
         )
@@ -93,6 +96,8 @@ class MainHook : XposedModule() {
         val crypto: Boolean,
         val loginReporter: Boolean,
         val remoteConfig: Boolean,
+        /** 默认关：注册过资源替换的进程不能热重载，sample 里别默认把这条路堵死。 */
+        val resources: Boolean,
         val secondaryFeature: Boolean,
     )
 }

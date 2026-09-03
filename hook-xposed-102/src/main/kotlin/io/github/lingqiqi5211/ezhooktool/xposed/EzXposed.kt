@@ -3,8 +3,9 @@ package io.github.lingqiqi5211.ezhooktool.xposed
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.ApplicationInfo
-import android.content.res.AssetManager
 import android.content.res.Resources
+import android.os.Build
+import androidx.annotation.RequiresApi
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterfaceWrapper
 import io.github.libxposed.api.XposedModuleInterface
@@ -127,7 +128,7 @@ object EzXposed {
     @JvmStatic
     /** 当前 framework 侧的 libxposed API 版本；[base] 尚未初始化时为 0。 */
     val frameworkApiVersion: Int
-        get() = XposedApiCompat.apiVersion(baseOrNull)
+        get() = XposedApiCompat.apiVersion
 
     @JvmStatic
     /** framework 提供热重载（[XposedFeature.HOT_RELOAD]）且模块启用（[hotReloadEnabled]）时才为 `true`。 */
@@ -158,6 +159,10 @@ object EzXposed {
      */
     lateinit var modulePath: String
         private set
+
+    /** [modulePath] 的安全读取入口；尚未 [initOnModuleLoaded] 时为 `null`。 */
+    internal val modulePathOrNull: String?
+        get() = if (::modulePath.isInitialized) modulePath else null
 
     @JvmStatic
     /** 当前模块资源；调用 [initOnModuleLoaded] 后可用。 */
@@ -316,7 +321,10 @@ object EzXposed {
      */
     @JvmStatic
     fun addModuleAssetPath(resources: Resources) {
-        addAssetPathMethod.invoke(resources.assets, requireModulePath())
+        // 交给 EzResources：R 以上走 ResourcesLoader，更低回退 addAssetPath，注入过的会登记。
+        check(EzResources.inject(resources)) {
+            "Failed to add the module asset path to $resources"
+        }
     }
 
     @JvmStatic
@@ -327,10 +335,12 @@ object EzXposed {
      * 但不会初始化目标进程 [classLoader]。
      */
     fun initOnModuleLoaded(base: XposedInterface, param: XposedModuleInterface.ModuleLoadedParam) {
+        // 先把可选特性解析成掩码。后面所有 isSupported 都只是一次位测试，包括紧接着那句 isHotReloadedParam。
+        XposedApiCompat.resolve(base)
         // API 102 不会在热重载时自动重放 onModuleLoaded；模块应从 onHotReloaded 调用本方法。
         // HotReloadedParam 也标识一个明确的新 generation；即使 framework wrapper 被复用，也不能
         // 让旧 callback 因旧 snapshot 提前执行。101 framework 上这个判断恒为 false。
-        val hotReloadParam = param.takeIf { XposedApiCompat.isHotReloadedParam(base, it) }
+        val hotReloadParam = param.takeIf { XposedApiCompat.isHotReloadedParam(it) }
         val isNewGeneration = !::base.isInitialized ||
             this.base !== base ||
             (hotReloadParam != null && hotReloadParam !== currentHotReloadParam?.get())
@@ -375,7 +385,11 @@ object EzXposed {
      * 适合必须早于 `AppComponentFactory` 创建安装的 hook。此阶段只能使用
      * [XposedModuleInterface.PackageLoadedParam.getDefaultClassLoader]；为保持初次加载与热重载
      * 使用同一个 ClassLoader，随后调用 [initOnPackageReady] 会被忽略。
+     *
+     * `getDefaultClassLoader` 是 Android Q 才有的 API，所以这条路径也要求 Q；更低版本请改用
+     * [initOnPackageReady]。
      */
+    @RequiresApi(Build.VERSION_CODES.Q)
     fun initOnPackageLoadedAsTargetReady(param: XposedModuleInterface.PackageLoadedParam) {
         initializePackageTargetAndDispatch(
             param.packageName,
@@ -493,7 +507,18 @@ object EzXposed {
             EzReflect.logger.warn("EzXposed", "Hot reload rejected: $reason")
             return false
         }
-        param.setSavedInstanceState(snapshot.toCrossGenArray(extra))
+        EzResources.hotReloadBlockReason?.let { reason ->
+            EzReflect.logger.warn("EzXposed", "Hot reload rejected: $reason")
+            return false
+        }
+        // 旧 apk 的 ResourcesLoader 必须在换代前摘掉；摘失败时状态已恢复，拒绝本次即可。
+        try {
+            EzResources.prepareHotReload()
+        } catch (t: Throwable) {
+            EzReflect.logger.warn("EzXposed", "Hot reload rejected: ${t.message}")
+            return false
+        }
+        XposedApiCompat.Api102.setSavedInstanceState(param, snapshot.toCrossGenArray(extra))
         return true
     }
 
@@ -597,7 +622,7 @@ object EzXposed {
         val batch = automaticHookBatch ?: throw IllegalStateException(
             "Automatic hot reload batch is unavailable. Call EzXposed.initOnModuleLoaded first."
         )
-        batch.captureOldHooks(param.oldHookHandles)
+        batch.captureOldHooks(XposedApiCompat.Api102.oldHookHandles(param))
         check(synchronized(targetReadyCallbacks) { targetReadyCallbacks.isNotEmpty() }) {
             "Automatic hot reload requires at least one EzXposed.onTargetReady callback in the new generation."
         }
@@ -636,15 +661,15 @@ object EzXposed {
         onExtra: Consumer<Array<Any?>>?,
         propagateTargetReadyFailure: Boolean,
     ): Boolean {
-        val snapshot = TargetSnapshot.tryRestore(param.savedInstanceState) ?: return false
+        val snapshot = TargetSnapshot.tryRestore(XposedApiCompat.Api102.savedInstanceState(param)) ?: return false
         initOnModuleLoaded(base, param)
         EzReflect.init(snapshot.classLoader)
         packageName = snapshot.packageName
         processName = snapshot.processName
         isSystemServer = snapshot.isSystemServer
         targetSnapshot = snapshot
-        onExtra?.accept(TargetSnapshot.restoreExtra(param.savedInstanceState))
-        onOldHooks?.accept(param.oldHookHandles)
+        onExtra?.accept(TargetSnapshot.restoreExtra(XposedApiCompat.Api102.savedInstanceState(param)))
+        onOldHooks?.accept(XposedApiCompat.Api102.oldHookHandles(param))
         dispatchTargetReady(propagateTargetReadyFailure)
         return true
     }
@@ -739,7 +764,7 @@ object EzXposed {
                     "to be passed into EzXposed.initOnModuleLoaded."
         )
         XposedApiCompat.requireFeature(XposedFeature.DETACH_ENTRY, "EzXposed.detachCurrentEntry")
-        entry.detach()
+        XposedApiCompat.Api102.detach(entry)
     }
 
     private fun getCurrentApplicationContext(): Context? = try {
@@ -802,11 +827,6 @@ object EzXposed {
         runTargetReadyCallbacks(callbacks)
     }
 
-    private val addAssetPathMethod by lazy {
-        AssetManager::class.java.getDeclaredMethod("addAssetPath", String::class.java).apply {
-            isAccessible = true
-        }
-    }
 
     /** 触发当前已注册的 [onTargetReady] 回调。 */
     private fun dispatchTargetReady(propagateFailure: Boolean = false) {

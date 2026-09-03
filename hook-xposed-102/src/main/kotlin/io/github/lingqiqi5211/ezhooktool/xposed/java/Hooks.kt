@@ -450,7 +450,7 @@ object Hooks {
                 AfterChainStage { callback.after(it) },
             ),
         )
-        return handle.replaceHook(hooker)
+        return XposedApiCompat.Api102.replaceHook(handle, hooker)
     }
 
     /**
@@ -473,7 +473,7 @@ object Hooks {
             handle.executable,
             listOf(ReplaceChainStage { callback.replace(it) }),
         )
-        return handle.replaceHook(hooker)
+        return XposedApiCompat.Api102.replaceHook(handle, hooker)
     }
 
     private fun resolveMethod(clazz: Class<*>, methodName: String, args: Array<out Any>): Method {

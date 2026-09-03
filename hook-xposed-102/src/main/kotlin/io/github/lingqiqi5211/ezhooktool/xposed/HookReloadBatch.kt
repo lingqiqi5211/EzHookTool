@@ -291,9 +291,10 @@ class HookReloadBatch @JvmOverloads constructor(
                 hook.token = replacementToken
             }
             State.READY -> {
-                hook.physicalHandle = (hook.physicalHandle
-                    ?: throw IllegalStateException("Hook handle is no longer valid."))
-                    .replaceHook(hooker)
+                hook.physicalHandle = XposedApiCompat.Api102.replaceHook(
+                    hook.physicalHandle ?: throw IllegalStateException("Hook handle is no longer valid."),
+                    hooker,
+                )
                 hook.hooker = hooker
                 hook.token = replacementToken
             }
@@ -442,10 +443,11 @@ class HookReloadBatch @JvmOverloads constructor(
 
     private fun installPhysicalHook(group: HookGroup): XposedInterface.HookHandle {
         val hookers = group.logicalHooks.map { it.hooker }
-        return xposed.hook(group.key.executable)
+        val builder = xposed.hook(group.key.executable)
             .setPriority(group.key.priority)
             .setExceptionMode(group.key.exceptionMode)
-            .setId(group.groupId)
+        // batch 只在 HOOK_ID 可用时才会建立，所以这里不必再判断。
+        return XposedApiCompat.Api102.setId(builder, group.groupId)
             .intercept(CompositeHooker(hookers))
     }
 

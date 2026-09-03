@@ -3,6 +3,7 @@ package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 import io.github.libxposed.api.XposedInterface
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import io.github.lingqiqi5211.ezhooktool.xposed.RequiresXposedApi
 import io.github.lingqiqi5211.ezhooktool.xposed.common.AfterChainStage
 import io.github.lingqiqi5211.ezhooktool.xposed.common.BeforeChainStage
@@ -182,7 +183,7 @@ class HookFactory internal constructor(
                 .setExceptionMode(exceptionMode)
             // API 101 的 HookBuilder 没有 setId。只有拿到 ID 时才走这一步——ID 为 null 说明
             // framework 不支持 hook ID，或模块关掉了热重载。
-            val builderWithId = if (effectiveId != null) builder.setId(effectiveId) else builder
+            val builderWithId = if (effectiveId != null) XposedApiCompat.Api102.setId(builder, effectiveId) else builder
             builderWithId.intercept(effectiveHooker)
         }
     }

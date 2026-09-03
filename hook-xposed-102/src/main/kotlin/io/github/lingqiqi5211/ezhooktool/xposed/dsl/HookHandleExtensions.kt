@@ -45,7 +45,7 @@ fun XposedInterface.HookHandle.replaceWith(
 ): XposedInterface.HookHandle {
     XposedApiCompat.requireFeature(XposedFeature.REPLACE_HOOK, "HookHandle.replaceWith")
     val hooker = buildHooker(executable, listOf(ReplaceChainStage(callback)))
-    return replaceHook(hooker)
+    return XposedApiCompat.Api102.replaceHook(this, hooker)
 }
 
 /**
@@ -63,5 +63,5 @@ fun XposedInterface.HookHandle.replaceIntercept(
 ): XposedInterface.HookHandle {
     XposedApiCompat.requireFeature(XposedFeature.REPLACE_HOOK, "HookHandle.replaceIntercept")
     val hooker = buildHooker(executable, listOf(InterceptChainStage(callback)))
-    return replaceHook(hooker)
+    return XposedApiCompat.Api102.replaceHook(this, hooker)
 }

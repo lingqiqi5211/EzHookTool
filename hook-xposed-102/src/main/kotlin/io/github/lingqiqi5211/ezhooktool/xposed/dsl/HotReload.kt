@@ -28,7 +28,7 @@ fun List<XposedInterface.HookHandle>.replaceAll(
     hooker: XposedInterface.Hooker,
 ): List<XposedInterface.HookHandle> {
     XposedApiCompat.requireFeature(XposedFeature.REPLACE_HOOK, "List<HookHandle>.replaceAll")
-    return map { it.replaceHook(hooker) }
+    return map { XposedApiCompat.Api102.replaceHook(it, hooker) }
 }
 
 /**

@@ -3,7 +3,6 @@ package io.github.lingqiqi5211.ezhooktool.xposed.java
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
-import java.util.Arrays
 
 /**
  * 供 Java 调用的去优化入口。
@@ -25,13 +24,9 @@ object Deoptimizers {
      */
     @JvmStatic
     fun deoptimizeMethods(clazz: Class<*>, vararg names: String) {
-        val list = listOf(*names)
-        Arrays.stream(clazz.declaredMethods)
-            .filter { method: Method? ->
-                list.contains(method!!.name)
-            }.forEach { method: Method? ->
-                deoptimize(method!!)
-            }
+        clazz.declaredMethods
+            .filter { it.name in names }
+            .forEach { deoptimize(it) }
     }
 
     /**

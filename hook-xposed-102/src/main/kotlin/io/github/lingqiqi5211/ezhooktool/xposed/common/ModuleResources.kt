@@ -2,7 +2,7 @@
 
 package io.github.lingqiqi5211.ezhooktool.xposed.common
 
-import android.annotation.TargetApi
+import androidx.annotation.RequiresApi
 import android.content.res.AssetManager
 import android.content.res.Configuration
 import android.content.res.Resources
@@ -60,7 +60,7 @@ internal object ModuleResources {
         }
     }
 
-    @TargetApi(Build.VERSION_CODES.R)
+    @RequiresApi(Build.VERSION_CODES.R)
     private object ResourcesLoaderImpl {
         private val builderClass by lazy { Class.forName("android.content.res.AssetManager\$Builder") }
 

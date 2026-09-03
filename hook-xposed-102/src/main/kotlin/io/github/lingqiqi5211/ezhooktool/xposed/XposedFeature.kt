@@ -3,19 +3,10 @@ package io.github.lingqiqi5211.ezhooktool.xposed
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 
 /**
- * libxposed 的可选特性。
+ * libxposed 的可选特性。本模块按 API 102 编译，运行基线是 API 101；102 及以上的能力全部走这里协商。
  *
- * 每个特性对应一组高版本 API 才提供的能力。[isSupported] 按当前 framework 通过
- * `XposedInterface.getApiVersion()` 报告的运行时版本判定，因此可以直接用来决定要不要走某条代码路径，
- * 也不会受 `PROP_RT_API_PROTECTION` 禁止反射 Xposed API 的影响：
- *
- * ```kotlin
- * if (XposedFeature.HOT_RELOAD.isSupported) {
- *     // 走热重载流程
- * }
- * ```
- *
- * 需要这些特性的公开 API 都标注了 [RequiresXposedApi]。
+ * 版本在 [EzXposed.initOnModuleLoaded] 时解析一次，之后 [isSupported] 只是一次位测试。
+ * 库内对 102 符号的调用全部收在 [XposedApiCompat.Api102]。
  */
 enum class XposedFeature(
     /** 该特性要求的最低 libxposed API 版本。 */
@@ -33,6 +24,9 @@ enum class XposedFeature(
     /** 停止向当前 entry 分发后续生命周期回调：`XposedInterfaceWrapper.detach`。 */
     DETACH_ENTRY(102),
     ;
+
+    /** 在支持掩码里的位。 */
+    internal val bit: Int get() = 1 shl ordinal
 
     /** 当前 framework 是否提供该特性。 */
     val isSupported: Boolean
