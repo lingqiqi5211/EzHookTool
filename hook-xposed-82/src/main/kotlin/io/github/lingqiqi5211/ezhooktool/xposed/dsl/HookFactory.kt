@@ -103,17 +103,20 @@ class HookFactory internal constructor(
     internal fun create(): XC_MethodHook.Unhook {
         val before = beforeCallback
         val after = afterCallback
-        return XposedBridge.hookMethod(target, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
-                if (before == null) return
-                dispatchBefore(before, param)
-            }
+        return XposedBridge.hookMethod(
+            target,
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (before == null) return
+                    dispatchBefore(before, param)
+                }
 
-            override fun afterHookedMethod(param: MethodHookParam) {
-                if (after == null) return
-                dispatchAfter(after, param)
-            }
-        })
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    if (after == null) return
+                    dispatchAfter(after, param)
+                }
+            },
+        )
     }
 
     private fun dispatchBefore(callback: HookCallback, raw: XC_MethodHook.MethodHookParam) {
