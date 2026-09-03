@@ -20,6 +20,11 @@ android {
     }
 }
 
+// 82 与 102 共用的源码。走 LibraryExtension：AGP 9 下 android { sourceSets["main"] } 的访问器会抛 ClassCastException。
+extensions.configure<com.android.build.api.dsl.LibraryExtension>("android") {
+    sourceSets.getByName("main").kotlin.directories.add(rootProject.layout.projectDirectory.dir("shared-src").asFile.path)
+}
+
 dependencies {
     implementation(project(":core"))
     compileOnly(libs.xposed82Api)
