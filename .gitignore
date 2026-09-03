@@ -33,3 +33,6 @@ local.properties
 
 # Generated docs
 doc/api/
+
+# 本地审查记录，不入库
+doc/代码审查.md

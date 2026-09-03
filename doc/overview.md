@@ -438,6 +438,55 @@ HookHandle handle = Hooks.createHook(method, "license-check", methodHook);
 val current: String? = handle.id
 ```
 
+## libxposed 102 资源替换
+
+libxposed 102 没有经典 Xposed 的 `XResources`，`initZygote` 那条替换链路整个不存在。`EzResources`
+用 hook `Resources` / `TypedArray` getter 的方式补上：把模块 apk 作为 `ResourcesLoader` 挂进宿主的
+`Resources`，再按「包名 + 类型 + 名称」拦截取值。
+
+```kotlin
+// 用模块里的资源顶掉宿主的
+EzResources.setResReplacement("com.miui.home", "drawable", "ic_launcher", R.drawable.my_icon)
+// 直接给一个值
+EzResources.setObjectReplacement("com.miui.home", "color", "bg_color", Color.RED)
+// 数值 x 屏幕密度（dp 语义），用于 dimen
+EzResources.setDensityReplacement("com.miui.home", "dimen", "bar_height", 8f)
+```
+
+包名传 `"*"` 表示不限宿主；同时存在精确规则和通配规则时精确的优先。
+
+只想让宿主能解析模块的 `R.xxx`（不做替换）时，用 `EzResources.inject(context)`，或沿用
+`EzXposed.addModuleAssetPath(context)` —— 后者现在就是走前者。
+
+支持的资源类型与对应 getter：
+
+| type | 命中的方法 |
+|---|---|
+| `color` | `Resources.getColor` / `getColorStateList`，`TypedArray.getColor` / `getColorStateList` |
+| `drawable` | `Resources.getDrawable` / `getDrawableForDensity`，`TypedArray.getDrawable` |
+| `string` | `getText` / `getStringArray` / `getTextArray` |
+| `dimen` | `getDimension` / `getDimensionPixelOffset` / `getDimensionPixelSize` |
+| `integer` `bool` `fraction` `layout` `anim` | `getInteger` / `getBoolean` / `getFloat` / `getIntArray` / `getLayout` / `getAnimation` / `getFraction` |
+
+行为约定：
+
+- **按需装 hook。** 只有注册过某类替换才会 hook 对应的 getter，一条都没注册时零开销。
+- **不进调用方的 handle sink。** 这些 hook 是进程级的，装一次服务全部替换规则；内部用
+  它们带稳定 reloadKey，热重载时由工具原子替换；模块不需要也不应该自己持有或摘除。
+- **resId 缓存按 Resources 分区。** 资源 ID 只在单个 `Resources` 范围内有意义，SystemUI 和它的插件
+  在同一进程用不同 `Resources`，只用 int 当 key 会在 ID 复用时命中错误规则。
+- **注册过替换就不能热重载。** 已经 inflate 的 View、缓存的 drawable / color、framework 手里的
+  `ResourcesLoader` 都没法跟着换代。`EzXposed.handleHotReloading` 读
+  `EzResources.hotReloadBlockReason` 后会拒绝本次热重载并记录原因，要求重启目标进程。
+  只通过 `ResourcesLoader` 注入过、没注册替换时热重载正常进行，旧 apk 的 loader 由 `handleHotReloading` 自动摘掉；
+  走过 `AssetManager.addAssetPath` 回退（Android R 以下，或 framework 拒绝 loader）的进程同样被拒绝，那条路径没有摘除手段；
+  摘失败会恢复原状并同样拒绝本次热重载。
+- **值类型要对得上方法。** `getText` 要 `CharSequence`，`getBoolean` 要 `Boolean`，数值类接受任意
+  `Number`。对不上会记一条 warn 并放行原值，不会把错的类型塞给宿主。
+
+`EzResources.fakeResId(name)` 生成一个不与宿主冲突的虚拟资源 ID，用于宿主里本来没有的资源。
+
+
 ## libxposed 102 entry detach
 
 `EzXposed.detachCurrentEntry()` 停止 framework 向当前 module entry 分发后续生命周期回调；
@@ -463,6 +512,11 @@ override fun onPackageReady(param: PackageReadyParam) {
 调用后也不会再收到 `onHotReloading`，所以目标 entry 只要需要热重载就不能 detach。
 
 ## libxposed 102 热重载
+
+**职责先说清楚。** 收集哪些 hook 装了、换代时怎么原子替换、怎么收尾旧 handle，全部是工具在
+`handleHotReloading` / `handleHotReloaded` 这两个回调里做的事 —— 模块不需要、也不应该自己再造一套
+handle 登记。模块唯一要做的是把这两个回调桥接好（原样转发给 `EzXposed`），并保证 hook 在
+`onTargetReady` 的同步窗口里装完。
 
 API 102 的热重载由 framework 在 `onHotReloading` 时发起。要让模块 APK 更新后自动触发，
 在 `META-INF/xposed/module.prop` 中声明：

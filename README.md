@@ -128,6 +128,19 @@ class MainHook : XposedModule() {
 EzReflect.init(yourClassLoader)
 ```
 
+### 资源替换（API 102）
+
+libxposed 102 没有 `XResources`。`EzResources` 用 hook `Resources` / `TypedArray` getter 补上：
+
+```kotlin
+EzResources.setResReplacement("com.miui.home", "drawable", "ic_launcher", R.drawable.my_icon)
+EzResources.setObjectReplacement("com.miui.home", "color", "bg_color", Color.RED)
+EzResources.setDensityReplacement("com.miui.home", "dimen", "bar_height", 8f)
+```
+
+按需装 hook（没注册替换就零开销），包名支持 `"*"` 通配。注册过替换后热重载会被自动拒绝并说明原因 ——
+已经 inflate 的 View 和缓存住的资源没法跟着换代。详见 `doc/overview.md`。
+
 ### API 102 新能力
 
 详细说明见 `doc/overview.md`。
@@ -249,7 +262,10 @@ libxposed 只保证单个 handle 或相同 ID hook 的原子替换，没有“�
 
 - `core`：反射、查找、实例化、descriptor 解析、DSL 作用域
 - `hook-xposed-82`：经典 Xposed API 82 hook 辅助函数与兼容桥接
-- `hook-xposed-102`：libxposed 102 hook 辅助函数与兼容桥接
+- `hook-xposed-102`：libxposed hook 辅助函数与兼容桥接。**按 API 102 编译，运行基线是 API 101**：
+  101 有的直接用；`setId` / `replaceHook` / 热重载 / `detach` 这些 102 才有的能力由 `XposedFeature` 在运行时协商，
+  framework 不支持时对应入口明确报错、其余功能照常。库内部对 102 API 的调用只允许出现在
+  `XposedApiCompat.Api102` 一处，由 `:hook-xposed-102:checkApi102Gateway` 在构建期强制
 
 ### API 文档
 
