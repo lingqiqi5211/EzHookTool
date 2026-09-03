@@ -28,6 +28,7 @@ extensions.configure<com.android.build.api.dsl.LibraryExtension>("android") {
 dependencies {
     implementation(project(":core"))
     compileOnly(libs.xposed82Api)
+    compileOnly(libs.annotation.jvm)
 }
 
 dokka {

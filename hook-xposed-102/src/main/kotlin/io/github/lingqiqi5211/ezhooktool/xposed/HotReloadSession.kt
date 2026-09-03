@@ -114,7 +114,7 @@ class HotReloadSession {
         }
 
         // 新 hook 注册前先读出旧 handle 的 executable 与 hook ID。成功替换后旧 handle 会失效，届时不应再读它。
-        val oldHooks = XposedApiCompat.Api102.oldHookHandles(param).map { handle ->
+        val oldHooks = EzXposed.filterReloadableOldHooks(XposedApiCompat.Api102.oldHookHandles(param)).map { handle ->
             OldHook(handle, HookIdentity.from(handle.executable, handle.id))
         }
         val unkeyedOldHookCount = oldHooks.count { it.identity == null }

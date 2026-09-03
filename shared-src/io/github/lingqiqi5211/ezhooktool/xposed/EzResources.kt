@@ -15,12 +15,11 @@ import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.util.SparseArray
 import android.util.TypedValue
-import io.github.libxposed.api.XposedInterface
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.core.java.Fields
 import io.github.lingqiqi5211.ezhooktool.core.java.Methods
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
-import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createHook
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.ResourcesPlatform
 import java.io.File
 import java.lang.reflect.Method
 import java.util.WeakHashMap
@@ -38,7 +37,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * ```
  *
  * 包名传 `"*"` 表示不限宿主，精确匹配优先。hook 按需装、进程级、带稳定 reloadKey，模块不需要持有或摘除。
- * 注册过替换的进程不能热重载，[EzXposed.handleHotReloading] 会拒绝并要求重启目标进程。
+ * 102 热重载时资源 hook 被跳过：不替换、不摘，上一代原地继续服务；新的替换规则要等目标进程重启才生效。
  */
 object EzResources {
     private const val TAG = "EzResources"
@@ -57,11 +56,13 @@ object EzResources {
     /** 单个 Resources 的 resId 缓存上限。宿主资源表几万条，这里只留热集。 */
     private const val ResIdCacheLimit = 4096
 
+    private const val ResourcesHookIdPrefix = "ezhooktool.internal.resources."
+    private const val TypedArrayHookIdPrefix = "ezhooktool.internal.typedarray."
+
     private val lock = Any()
 
     /** 已经挂上模块资源的宿主 Resources。热重载前要逐个摘干净。 */
     private val injected = CopyOnWriteArrayList<Resources>()
-    private val handles = CopyOnWriteArrayList<XposedInterface.HookHandle>()
     private val replacements = ConcurrentHashMap<ResKey, Replacement>()
 
     /**
@@ -85,13 +86,16 @@ object EzResources {
     @Volatile
     private var mainHandler: Handler? = null
 
-    /** 注入失败过就不在 getter 热路径上重试；热重载换代时重置。 */
+    /** 注入失败过就不在 getter 热路径上重试。 */
     @Volatile
     private var injectFailed = false
 
-    /** 走过 `addAssetPath` 就再也摘不掉，热重载必须拒绝。 */
+    /** 上一代的资源 hook 仍在运行；本代不装 hook、不收规则。 */
     @Volatile
-    private var legacyInjected = false
+    private var inherited = false
+
+    @Volatile
+    private var inheritedWarned = false
 
     private data class ResKey(val pkg: String, val type: String, val name: String)
 
@@ -111,8 +115,8 @@ object EzResources {
     @JvmStatic
     @JvmOverloads
     fun inject(resources: Resources, onMainLooper: Boolean = false): Boolean {
-        val modulePath = EzXposed.modulePathOrNull ?: run {
-            EzReflect.logger.warn(TAG, "inject before EzXposed.initOnModuleLoaded, skipped")
+        val modulePath = ResourcesPlatform.modulePathOrNull ?: run {
+            EzReflect.logger.warn(TAG, "inject before ${ResourcesPlatform.initEntryPoint}, skipped")
             return false
         }
 
@@ -137,7 +141,6 @@ object EzResources {
         val ok = viaLoader || LegacyInjector.attach(resources, modulePath)
         if (ok) {
             injected.addIfAbsent(resources)
-            if (!viaLoader) legacyInjected = true
         } else {
             EzReflect.logger.warn(TAG, "Failed to inject module resources into $resources")
         }
@@ -183,35 +186,7 @@ object EzResources {
             }
         }
 
-        /** 从所有注入过的 Resources 上摘掉 loader；摘到一半失败时把已摘的加回去再抛出。 */
-        fun detachAll(targets: List<Resources>) {
-            val current = loader ?: return
-            val detached = ArrayList<Resources>(targets.size)
-            var failure: Throwable? = null
-            for (resources in targets) {
-                try {
-                    resources.removeLoaders(current)
-                    detached += resources
-                } catch (t: Throwable) {
-                    if (failure == null) failure = t
-                    EzReflect.logger.warn(TAG, "Failed to remove module ResourcesLoader: ${t.message}")
-                }
-            }
-            if (failure != null) {
-                for (resources in detached) {
-                    runCatching { resources.addLoaders(current) }.onFailure {
-                        EzReflect.logger.warn(TAG, "Failed to restore ResourcesLoader after detach failure")
-                    }
-                }
-                throw IllegalStateException(
-                    "Unable to detach the old module ResourcesLoader before hot reload",
-                    failure,
-                )
-            }
-            loader = null
-            loaderFailed = false
         }
-    }
 
     private object LegacyInjector {
         private val addAssetPath by lazy {
@@ -295,6 +270,17 @@ object EzResources {
     }
 
     private fun ensureHooks(type: String): Boolean {
+        if (inherited) {
+            if (!inheritedWarned) {
+                inheritedWarned = true
+                EzReflect.logger.warn(
+                    TAG,
+                    "Resource hooks are still owned by the previous module generation; " +
+                        "new replacements take effect after the target process restarts.",
+                )
+            }
+            return false
+        }
         val needed = maskOf(type)
         if (needed == 0) {
             EzReflect.logger.warn(TAG, "Unsupported resource type \"$type\", replacement ignored")
@@ -304,9 +290,7 @@ object EzResources {
 
         synchronized(lock) {
             if (appliedMask and needed == needed) return true
-            checkNotNull(EzXposed.baseOrNull) {
-                "EzResources requires EzXposed.initOnModuleLoaded to be called first."
-            }
+            ResourcesPlatform.requireInitialized()
             // 这些 hook 是进程级的，一条替换规则装一次就服务全部规则。
             installResourcesHooks(needed)
             installTypedArrayHooks(needed)
@@ -319,10 +303,11 @@ object EzResources {
         for (method in Resources::class.java.declaredMethods) {
             if (!needsResourcesHook(method, mask)) continue
             runCatching {
-                handles += method.createHook {
-                    reloadKey("ezhooktool.internal.resources.${method.name}/${method.parameterCount}")
-                    before(::onResourcesGet)
-                }
+                ResourcesPlatform.hookBefore(
+                    method,
+                    "$ResourcesHookIdPrefix${method.name}/${method.parameterCount}",
+                    ::onResourcesGet,
+                )
             }.onFailure {
                 EzReflect.logger.error(TAG, "Failed to hook Resources.${method.name}", it)
             }
@@ -357,10 +342,11 @@ object EzResources {
         for (method in TypedArray::class.java.declaredMethods) {
             if (!needsTypedArrayHook(method, mask)) continue
             runCatching {
-                handles += method.createHook {
-                    reloadKey("ezhooktool.internal.typedarray.${method.name}/${method.parameterCount}")
-                    before(::onTypedArrayGet)
-                }
+                ResourcesPlatform.hookBefore(
+                    method,
+                    "$TypedArrayHookIdPrefix${method.name}/${method.parameterCount}",
+                    ::onTypedArrayGet,
+                )
             }.onFailure {
                 EzReflect.logger.error(TAG, "Failed to hook TypedArray.${method.name}", it)
             }
@@ -389,7 +375,7 @@ object EzResources {
         if (injected.isEmpty()) {
             // 还没注入就补一次；只试一次，不在热路径上反复开文件。
             if (injectFailed) return
-            val context = EzXposed.appContextOrNull ?: return
+            val context = ResourcesPlatform.appContextOrNull ?: return
             if (!inject(context)) injectFailed = true
             if (injected.isEmpty()) return
         }
@@ -573,46 +559,15 @@ object EzResources {
 
     // endregion
 
-    // region 生命周期
+    // region 热重载
 
-    /**
-     * 阻止热重载的原因；没有就是 `null`。注册过替换、或走过 `addAssetPath` 注入，都必须整进程重启：
-     * 已 inflate 的 View 和缓存的资源不会跟着换代，`addAssetPath` 也没有摘除手段。[EzXposed.handleHotReloading] 会读这个值。
-     */
-    @JvmStatic
-    val hotReloadBlockReason: String?
-        get() = when {
-            replacements.isNotEmpty() || appliedMask != 0 ->
-                "EzResources has active resource replacements; already-inflated views and cached " +
-                    "resources cannot be migrated. Restart the target process instead."
+    /** 资源 hook 的 id 是否命中。这些 id 在热重载时被跳过：不替换、不摘，上一代的 hook 原地继续服务。 */
+    internal fun isResourceHookId(id: String?): Boolean =
+        id != null && (id.startsWith(ResourcesHookIdPrefix) || id.startsWith(TypedArrayHookIdPrefix))
 
-            legacyInjected ->
-                "EzResources injected the module apk via AssetManager.addAssetPath, which cannot be " +
-                    "detached. Restart the target process instead."
-
-            else -> null
-        }
-
-    /**
-     * 热重载换代前摘掉旧 apk 的 `ResourcesLoader`。不 unhook getter，它们带稳定 `reloadKey` 由新代原子替换。
-     * 摘失败时抛出，调用方应拒绝本次热重载。
-     */
-    @JvmStatic
-    fun prepareHotReload() {
-        synchronized(lock) {
-            mainHandler?.removeCallbacksAndMessages(null)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                LoaderInjector.detachAll(injected.toList())
-            }
-            injected.clear()
-            replacements.clear()
-            synchronized(resIdCacheLock) { resIdCache.clear() }
-            mainHandler = null
-            appliedMask = 0
-            injectFailed = false
-            legacyInjected = false
-            mismatchWarned.clear()
-        }
+    /** 新一代得知上一代的资源 hook 仍在运行时调用。之后本代不再装 hook、不再收规则，直到进程重启。 */
+    internal fun inheritPreviousGeneration() {
+        inherited = true
     }
 
     // endregion

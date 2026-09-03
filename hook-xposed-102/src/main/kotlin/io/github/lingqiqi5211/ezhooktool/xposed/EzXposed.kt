@@ -164,6 +164,21 @@ object EzXposed {
     internal val modulePathOrNull: String?
         get() = if (::modulePath.isInitialized) modulePath else null
 
+    /**
+     * 从上一代的 hook handle 里剔掉资源 hook。它们是进程级的，热重载时跳过：不替换、不摘。
+     * 剔掉了任何一个就通知 [EzResources]，本代不再装资源 hook。
+     */
+    internal fun filterReloadableOldHooks(
+        handles: Iterable<XposedInterface.HookHandle>,
+    ): List<XposedInterface.HookHandle> {
+        val (resource, reloadable) = handles.partition { EzResources.isResourceHookId(XposedApiCompat.hookId(it)) }
+        if (resource.isNotEmpty()) {
+            EzResources.inheritPreviousGeneration()
+            EzReflect.logger.debug("EzXposed", "Skipping ${resource.size} resource hook(s) during hot reload")
+        }
+        return reloadable
+    }
+
     @JvmStatic
     /** 当前模块资源；调用 [initOnModuleLoaded] 后可用。 */
     lateinit var moduleRes: Resources
@@ -507,17 +522,6 @@ object EzXposed {
             EzReflect.logger.warn("EzXposed", "Hot reload rejected: $reason")
             return false
         }
-        EzResources.hotReloadBlockReason?.let { reason ->
-            EzReflect.logger.warn("EzXposed", "Hot reload rejected: $reason")
-            return false
-        }
-        // 旧 apk 的 ResourcesLoader 必须在换代前摘掉；摘失败时状态已恢复，拒绝本次即可。
-        try {
-            EzResources.prepareHotReload()
-        } catch (t: Throwable) {
-            EzReflect.logger.warn("EzXposed", "Hot reload rejected: ${t.message}")
-            return false
-        }
         XposedApiCompat.Api102.setSavedInstanceState(param, snapshot.toCrossGenArray(extra))
         return true
     }
@@ -622,7 +626,7 @@ object EzXposed {
         val batch = automaticHookBatch ?: throw IllegalStateException(
             "Automatic hot reload batch is unavailable. Call EzXposed.initOnModuleLoaded first."
         )
-        batch.captureOldHooks(XposedApiCompat.Api102.oldHookHandles(param))
+        batch.captureOldHooks(filterReloadableOldHooks(XposedApiCompat.Api102.oldHookHandles(param)))
         check(synchronized(targetReadyCallbacks) { targetReadyCallbacks.isNotEmpty() }) {
             "Automatic hot reload requires at least one EzXposed.onTargetReady callback in the new generation."
         }
@@ -669,7 +673,7 @@ object EzXposed {
         isSystemServer = snapshot.isSystemServer
         targetSnapshot = snapshot
         onExtra?.accept(TargetSnapshot.restoreExtra(XposedApiCompat.Api102.savedInstanceState(param)))
-        onOldHooks?.accept(XposedApiCompat.Api102.oldHookHandles(param))
+        onOldHooks?.accept(filterReloadableOldHooks(XposedApiCompat.Api102.oldHookHandles(param)))
         dispatchTargetReady(propagateTargetReadyFailure)
         return true
     }

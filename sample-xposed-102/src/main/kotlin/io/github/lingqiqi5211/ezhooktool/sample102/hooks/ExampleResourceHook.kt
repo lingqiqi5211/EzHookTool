@@ -6,7 +6,7 @@ import io.github.lingqiqi5211.ezhooktool.xposed.EzResources
 
 /**
  * 演示宿主资源替换。注册即生效，一条都没注册时 EzResources 零开销；包名传 "*" 表示不限宿主。
- * 注册过替换之后这个进程不能再热重载，EzXposed.handleHotReloading 会拒绝。
+ * 热重载时资源 hook 被跳过，上一代原地继续服务；这里改了替换规则要重启目标进程才看得到。
  */
 object ExampleResourceHook : BaseHook() {
     override val name: String = "ExampleResourceHook"

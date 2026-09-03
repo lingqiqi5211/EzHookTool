@@ -91,7 +91,7 @@ class HookReloadBatch @JvmOverloads constructor(
      * 切换会造成无法验证的行为。首次从旧实现迁移到本类时，应先完整重启一次目标进程。
      */
     fun captureOldHooks(handles: Iterable<XposedInterface.HookHandle>) {
-        val snapshots = handles.map { handle ->
+        val snapshots = EzXposed.filterReloadableOldHooks(handles).map { handle ->
             val executable = try {
                 handle.executable
             } catch (t: Throwable) {

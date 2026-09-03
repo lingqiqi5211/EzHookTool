@@ -85,7 +85,7 @@ class MainHook : XposedModule() {
             vip = preferences.getBoolean("$scope:vip", true),
             crypto = preferences.getBoolean("$scope:crypto", true),
             loginReporter = preferences.getBoolean("$scope:login_reporter", true),
-            resources = preferences.getBoolean("$scope:resources", false),
+            resources = preferences.getBoolean("$scope:resources", true),
             remoteConfig = preferences.getBoolean("$scope:remote_config", true),
             secondaryFeature = preferences.getBoolean("$scope:secondary_feature", true),
         )
@@ -96,7 +96,6 @@ class MainHook : XposedModule() {
         val crypto: Boolean,
         val loginReporter: Boolean,
         val remoteConfig: Boolean,
-        /** 默认关：注册过资源替换的进程不能热重载，sample 里别默认把这条路堵死。 */
         val resources: Boolean,
         val secondaryFeature: Boolean,
     )

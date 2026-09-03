@@ -442,7 +442,7 @@ val current: String? = handle.id
 
 `EzResources` 借 Android 的 `ResourcesLoader` 把模块 apk 挂进宿主的 `Resources`，再 hook `Resources` /
 `TypedArray` 的 getter，按「包名 + 类型 + 名称」拦截取值。不依赖 framework 提供资源接口，只要能 hook 方法就能用；思路来自
-HyperCeiler 的 `ResourcesTool`。目前只提供在 hook-xposed-102 模块里。
+HyperCeiler 的 `ResourcesTool`。hook-xposed-82 与 hook-xposed-102 都提供，API 相同。
 
 ```kotlin
 // 用模块里的资源顶掉宿主的
@@ -475,12 +475,10 @@ EzResources.setDensityReplacement("com.miui.home", "dimen", "bar_height", 8f)
   模块不需要也不应该自己持有或摘除。
 - **resId 缓存按 Resources 分区。** 资源 ID 只在单个 `Resources` 范围内有意义，SystemUI 和它的插件
   在同一进程用不同 `Resources`，只用 int 当 key 会在 ID 复用时命中错误规则。
-- **注册过替换就不能热重载。** 已经 inflate 的 View、缓存的 drawable / color、framework 手里的
-  `ResourcesLoader` 都没法跟着换代。`EzXposed.handleHotReloading` 读
-  `EzResources.hotReloadBlockReason` 后会拒绝本次热重载并记录原因，要求重启目标进程。
-  只通过 `ResourcesLoader` 注入过、没注册替换时热重载正常进行，旧 apk 的 loader 由 `handleHotReloading` 自动摘掉；
-  走过 `AssetManager.addAssetPath` 回退（Android R 以下，或 framework 拒绝 loader）的进程同样被拒绝，那条路径没有摘除手段；
-  摘失败会恢复原状并同样拒绝本次热重载。
+- **热重载时资源 hook 被跳过。** 资源 hook 是进程级的，id 带固定前缀；102 的 `EzXposed` 在处理上一代 hook handle 时
+  把这些 id 剔掉：不替换、不摘，上一代的 hook 和替换规则原地继续服务，其它 hook 正常热重载。代价是上一代
+  classloader 留在内存里，以及新一代注册的替换规则要等目标进程重启才生效（新一代会记一条 warn）。
+  82 没有热重载，这一条不适用。
 - **值类型要对得上方法。** `getText` 要 `CharSequence`，`getBoolean` 要 `Boolean`，数值类接受任意
   `Number`。对不上会记一条 warn 并放行原值，不会把错的类型塞给宿主。
 

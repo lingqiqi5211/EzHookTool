@@ -17,7 +17,8 @@ EzHookTool 是 Kotlin 反射工具库，同时提供 Android / Xposed / libxpose
 - `hook-xposed-82`：经典 Xposed API 82 运行时辅助（`de.robv.android.xposed`、`XResources`、`XModuleResources`）。
 - `hook-xposed-102`：libxposed 运行时辅助。**按 API 102 编译，运行基线是 API 101**，见下一节。
 - `shared-src`：82 与 102 编译同一份的源码（`FieldHelper`、`ExtraFields`、`IReplaceHook`、`AdditionalFields`、
-  `HookClassLoader`）。不是 Gradle 模块，两个 hook 模块各自把它加进 `main` source set，FQCN 在两个 artifact
+  `HookClassLoader`、`EzResources`）。framework 相关的部分由两个模块各自的同名 `internal object`
+  提供（如 `ResourcesPlatform`），共享代码只依赖这些对象的签名。不是 Gradle 模块，两个 hook 模块各自把它加进 `main` source set，FQCN 在两个 artifact
   里一致。改这里等于同时改两个 artifact；加新文件前先确认它与具体 framework 无关。
 - `sample-xposed-82`、`sample-xposed-102`：示例工程，只放示例用法。
 
@@ -40,8 +41,8 @@ EzHookTool 是 Kotlin 反射工具库，同时提供 Android / Xposed / libxpose
 - 收集哪些 hook 装了、换代时怎么原子替换、怎么收尾旧 handle，全部是工具在 `handleHotReloading` /
   `handleHotReloaded` 里做的事。**不要给模块提供 hook 收集 / 登记 API**，也不要要求模块自己持有 handle。
   模块唯一要做的是把两个回调原样桥接给 `EzXposed`，并保证 hook 在 `onTargetReady` 的同步窗口里装完。
-- 库内部自己装的 hook（Application attach、`EzResources` 的 getter）都带稳定 `reloadKey`，由热重载原子替换。
-  不要在热重载前手工摘它们，那会留下一段没有逻辑的窗口。
+- 库内部自己装的 Application attach hook 带稳定 `reloadKey`，由热重载原子替换；`EzResources` 的 getter hook
+  例外，见资源替换一节。不要在热重载前手工摘它们。
 
 ## 运行时初始化
 
@@ -59,14 +60,17 @@ EzHookTool 是 Kotlin 反射工具库，同时提供 Android / Xposed / libxpose
 
 - `EzXposed.initZygote(...)` 是唯一可靠的模块路径来源，也自动初始化模块资源。
 - 缺 `initZygote(...)` 时 `initModuleResources(...)` / `addModuleAssetPath(...)` 必须给出明确错误。
+- `addModuleAssetPath(...)` 与 102 一样委托 `EzResources.inject`。
 - 不要把 `XposedInterface` 的假设带到 82。
 
-### 资源替换（`EzResources`）
+### 资源替换（`EzResources`，82 与 102 共用）
 
 - hook 是进程级、按需装的：注册过某类替换才 hook 对应 getter；一条没注册时零开销。
 - `resIdCache` 按 `Resources` 弱引用分区、每区 4096 封顶、查找不分配；注入失败只记一次，不在 getter
   热路径上重试。改这个类先想清楚它每秒被调几千次。
-- 注册过替换、或走过 `addAssetPath` 注入的进程不能热重载，`handleHotReloading` 据 `hotReloadBlockReason` 拒绝。这是有意的，不要绕。
+- 热重载时资源 hook 被跳过：`EzXposed.filterReloadableOldHooks` 按 id 前缀剔掉它们，不替换、不摘，上一代原地
+  继续服务；新一代 `EzResources` 收到 `inheritPreviousGeneration` 后不再装 hook。`onHotReloading` 返回 `false` 会取消
+  整个请求，资源状态永远不能拖累其它 hook。
 
 ## Core 约束
 

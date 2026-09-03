@@ -7,6 +7,7 @@ import io.github.lingqiqi5211.ezhooktool.sample82.hooks.BaseHook
 import io.github.lingqiqi5211.ezhooktool.sample82.hooks.ExampleJavaHook
 import io.github.lingqiqi5211.ezhooktool.sample82.hooks.ExampleKotlinHook
 import io.github.lingqiqi5211.ezhooktool.sample82.hooks.ExampleReporterHook
+import io.github.lingqiqi5211.ezhooktool.sample82.hooks.ExampleResourceHook
 import io.github.lingqiqi5211.ezhooktool.sample82.hooks.ExampleVipHook
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 
@@ -21,7 +22,7 @@ class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
         if (lpparam.packageName != TargetApp) return
 
         EzXposed.init(lpparam)
-        initHooks(ExampleKotlinHook, ExampleJavaHook.INSTANCE, ExampleVipHook, ExampleReporterHook)
+        initHooks(ExampleKotlinHook, ExampleJavaHook.INSTANCE, ExampleVipHook, ExampleReporterHook, ExampleResourceHook)
     }
 
     private fun initHooks(vararg hooks: BaseHook) {

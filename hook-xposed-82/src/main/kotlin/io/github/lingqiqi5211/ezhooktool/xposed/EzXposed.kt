@@ -2,7 +2,6 @@ package io.github.lingqiqi5211.ezhooktool.xposed
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.res.AssetManager
 import android.content.res.Resources
 import android.content.res.XModuleResources
 import android.content.res.XResources
@@ -45,6 +44,10 @@ object EzXposed {
     /** 当前模块 apk 路径；调用 [initZygote] 后可用。 */
     lateinit var modulePath: String
         private set
+
+    /** [modulePath] 的安全读取入口；尚未 [initZygote] 时为 `null`。 */
+    internal val modulePathOrNull: String?
+        get() = if (::modulePath.isInitialized) modulePath else null
 
     @JvmStatic
     /** 当前模块资源；调用 [initZygote] 后可用。 */
@@ -204,7 +207,8 @@ object EzXposed {
     @JvmStatic
     /** 将模块资源路径注入到指定 [resources]。 */
     fun addModuleAssetPath(resources: Resources) {
-        addAssetPathMethod.invoke(resources.assets, requireModulePath())
+        requireModulePath()
+        check(EzResources.inject(resources)) { "Failed to add the module asset path to $resources" }
     }
 
     @JvmStatic
@@ -230,12 +234,6 @@ object EzXposed {
         throw IllegalStateException(
             "Cannot get modulePath before EzXposed.initZygote is called."
         )
-    }
-
-    private val addAssetPathMethod by lazy {
-        AssetManager::class.java.getDeclaredMethod("addAssetPath", String::class.java).apply {
-            isAccessible = true
-        }
     }
 }
 

@@ -130,9 +130,9 @@ EzReflect.init(yourClassLoader)
 
 ### 资源替换
 
-`EzResources`（hook-xposed-102）借 Android 的 `ResourcesLoader` 把模块 apk 挂进宿主 `Resources`，再 hook
+`EzResources` 借 Android 的 `ResourcesLoader` 把模块 apk 挂进宿主 `Resources`，再 hook
 `Resources` / `TypedArray` 的 getter 按「包名 + 类型 + 名称」拦截取值。不依赖 framework 提供资源接口，只要能 hook 方法就能用；
-思路来自 HyperCeiler 的 `ResourcesTool`。目前只提供在 hook-xposed-102 模块里。
+思路来自 HyperCeiler 的 `ResourcesTool`。hook-xposed-82 与 hook-xposed-102 都提供。
 
 ```kotlin
 EzResources.setResReplacement("com.miui.home", "drawable", "ic_launcher", R.drawable.my_icon)
@@ -140,8 +140,8 @@ EzResources.setObjectReplacement("com.miui.home", "color", "bg_color", Color.RED
 EzResources.setDensityReplacement("com.miui.home", "dimen", "bar_height", 8f)
 ```
 
-按需装 hook（没注册替换就零开销），包名支持 `"*"` 通配。注册过替换后热重载会被自动拒绝并说明原因 ——
-已经 inflate 的 View 和缓存住的资源没法跟着换代。详见 `doc/overview.md`。
+按需装 hook（没注册替换就零开销），包名支持 `"*"` 通配。102 热重载时资源 hook 被跳过，上一代原地继续服务，
+新的替换规则要等目标进程重启才生效。详见 `doc/overview.md`。
 
 ### API 102 新能力
 
