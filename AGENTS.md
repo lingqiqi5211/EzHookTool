@@ -68,9 +68,9 @@ EzHookTool 是 Kotlin 反射工具库，同时提供 Android / Xposed / libxpose
 - hook 是进程级、按需装的：注册过某类替换才 hook 对应 getter；一条没注册时零开销。
 - `resIdCache` 按 `Resources` 弱引用分区、每区 4096 封顶、查找不分配；注入失败只记一次，不在 getter
   热路径上重试。改这个类先想清楚它每秒被调几千次。
-- 热重载时资源 hook 被跳过：`EzXposed.filterReloadableOldHooks` 按 id 前缀剔掉它们，不替换、不摘，上一代原地
-  继续服务；新一代 `EzResources` 收到 `inheritPreviousGeneration` 后不再装 hook。`onHotReloading` 返回 `false` 会取消
-  整个请求，资源状态永远不能拖累其它 hook。
+- 热重载三件事分开：getter hook 走正常迁移；注入过的 `Resources` 与旧 `ResourcesLoader`（都是框架对象）经 saved state
+  第 9 位交给新一代，`EzResources.restoreFromHotReload` 在 `onTargetReady` 之前先挂新再摘旧；替换规则按名字存。
+  `onHotReloading` 返回 `false` 会取消整个请求，资源状态永远不能拖累其它 hook，也不要为它跳过 hook（会钉住上一代 classloader）。
 
 ## Core 约束
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.2
+
+### 修复
+
+- `EzResources` 与 libxposed 102 热重载的配合重做。1.2.1 把资源 hook 从热重载里跳过，这会把上一代 classloader
+  钉在内存里，新规则也要重启才生效。现在 getter hook 和别的 hook 一样由新一代重新声明、原子替换；注入过的宿主
+  `Resources` 与旧 `ResourcesLoader` 经 saved state 交给新一代，新一代先挂新 loader、再摘旧的，宿主解析模块资源
+  没有空窗，新 hook 安装失败时把旧 loader 换回；替换规则按资源名字存，取值时才对当前挂着的 apk 解析 id，换了 apk 也不会串。已在 HyperOS 3 真机上
+  连续热重载验证，包括模块资源 id 变化的情形。
+- 模块资源在命中规则的那个宿主 `Resources` 里解析，规则命中时才把模块 apk 挂上去。此前只在 application 的
+  `Resources` 上解析，Activity 的夜间模式、密度等配置不同时会拿到错误变体。注入过的 `Resources` 改为弱引用。
+
 ## 1.2.1
 
 ### 新增

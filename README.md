@@ -140,8 +140,8 @@ EzResources.setObjectReplacement("com.miui.home", "color", "bg_color", Color.RED
 EzResources.setDensityReplacement("com.miui.home", "dimen", "bar_height", 8f)
 ```
 
-按需装 hook（没注册替换就零开销），包名支持 `"*"` 通配。102 热重载时资源 hook 被跳过，上一代原地继续服务，
-新的替换规则要等目标进程重启才生效。详见 `doc/overview.md`。
+按需装 hook（没注册替换就零开销），包名支持 `"*"` 通配。102 热重载时 getter hook 正常原子替换，模块 apk 的 loader
+由新一代先挂新再摘旧、没有空窗，规则按名字存所以换 apk 也不串。详见 `doc/overview.md`。
 
 ### API 102 新能力
 

@@ -473,11 +473,13 @@ EzResources.setDensityReplacement("com.miui.home", "dimen", "bar_height", 8f)
 - **按需装 hook。** 只有注册过某类替换才会 hook 对应的 getter，一条都没注册时零开销。
 - **hook 是进程级的。** 装一次服务全部替换规则，带稳定 reloadKey，热重载时由工具原子替换；
   模块不需要也不应该自己持有或摘除。
-- **resId 缓存按 Resources 分区。** 资源 ID 只在单个 `Resources` 范围内有意义，SystemUI 和它的插件
-  在同一进程用不同 `Resources`，只用 int 当 key 会在 ID 复用时命中错误规则。
-- **热重载时资源 hook 被跳过。** 资源 hook 是进程级的，id 带固定前缀；102 的 `EzXposed` 在处理上一代 hook handle 时
-  把这些 id 剔掉：不替换、不摘，上一代的 hook 和替换规则原地继续服务，其它 hook 正常热重载。代价是上一代
-  classloader 留在内存里，以及新一代注册的替换规则要等目标进程重启才生效（新一代会记一条 warn）。
+- **一切按宿主当前那个 `Resources` 解析。** resId 到名字的缓存按 Resources 分区（SystemUI 和它的插件在同一进程用不同
+  `Resources`，只用 int 当 key 会串）；模块资源也在命中规则的那个 Resources 里解析，规则命中时才把模块 apk 挂上去，
+  配置和主题都是宿主自己的，不会拿错夜间模式或密度变体。
+- **热重载（102）不否决、不跳过，三件事分开处理。** getter hook 带稳定 reloadKey，和别的 hook 一样由新一代重新声明、
+  `replaceHook` 原子替换。注入过的宿主 `Resources` 和旧 `ResourcesLoader` 都是框架对象，上一代把它们放进 saved state，
+  新一代在 `onTargetReady` 之前对每个 Resources **先挂新 loader、再摘旧的**，宿主解析模块 id 没有空窗。替换规则按名字存、
+  取值时才对当前挂着的 apk 解析 id，所以换了 apk 也不会串。Android R 以下走 `addAssetPath` 摘不掉，模块自身资源保持旧版到重启。
   82 没有热重载，这一条不适用。
 - **值类型要对得上方法。** `getText` 要 `CharSequence`，`getBoolean` 要 `Boolean`，数值类接受任意
   `Number`。对不上会记一条 warn 并放行原值，不会把错的类型塞给宿主。
