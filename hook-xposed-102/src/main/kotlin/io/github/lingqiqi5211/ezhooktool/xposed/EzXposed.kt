@@ -164,25 +164,14 @@ object EzXposed {
     internal val modulePathOrNull: String?
         get() = if (::modulePath.isInitialized) modulePath else null
 
-    /**
-     * 从上一代的 hook handle 里剔掉资源 hook。它们是进程级的，热重载时跳过：不替换、不摘。
-     * 剔掉了任何一个就通知 [EzResources]，本代不再装资源 hook。
-     */
-    internal fun filterReloadableOldHooks(
-        handles: Iterable<XposedInterface.HookHandle>,
-    ): List<XposedInterface.HookHandle> {
-        val (resource, reloadable) = handles.partition { EzResources.isResourceHookId(XposedApiCompat.hookId(it)) }
-        if (resource.isNotEmpty()) {
-            EzResources.inheritPreviousGeneration()
-            EzReflect.logger.debug("EzXposed", "Skipping ${resource.size} resource hook(s) during hot reload")
-        }
-        return reloadable
-    }
-
     @JvmStatic
     /** 当前模块资源；调用 [initOnModuleLoaded] 后可用。 */
     lateinit var moduleRes: Resources
         private set
+
+    /** [moduleRes] 的安全读取入口；尚未 [initOnModuleLoaded] 时为 `null`。 */
+    internal val moduleResOrNull: Resources?
+        get() = if (::moduleRes.isInitialized) moduleRes else null
 
     @JvmStatic
     /** 当前默认 `ClassLoader`。 */
@@ -522,7 +511,8 @@ object EzXposed {
             EzReflect.logger.warn("EzXposed", "Hot reload rejected: $reason")
             return false
         }
-        XposedApiCompat.Api102.setSavedInstanceState(param, snapshot.toCrossGenArray(extra))
+        // 资源注入的跨代状态（宿主 Resources、旧 loader）都是框架对象，可以合法进 saved state。
+        XposedApiCompat.Api102.setSavedInstanceState(param, snapshot.toCrossGenArray(extra, EzResources.captureForHotReload()))
         return true
     }
 
@@ -626,7 +616,7 @@ object EzXposed {
         val batch = automaticHookBatch ?: throw IllegalStateException(
             "Automatic hot reload batch is unavailable. Call EzXposed.initOnModuleLoaded first."
         )
-        batch.captureOldHooks(filterReloadableOldHooks(XposedApiCompat.Api102.oldHookHandles(param)))
+        batch.captureOldHooks(XposedApiCompat.Api102.oldHookHandles(param))
         check(synchronized(targetReadyCallbacks) { targetReadyCallbacks.isNotEmpty() }) {
             "Automatic hot reload requires at least one EzXposed.onTargetReady callback in the new generation."
         }
@@ -672,9 +662,18 @@ object EzXposed {
         processName = snapshot.processName
         isSystemServer = snapshot.isSystemServer
         targetSnapshot = snapshot
+        // 先挂新 loader 再摘旧的，且在 onTargetReady 之前：新一代注册替换时 injected 已就位，宿主解析模块 id 没有空窗。
+        EzResources.restoreFromHotReload(TargetSnapshot.restoreResources(XposedApiCompat.Api102.savedInstanceState(param)))
         onExtra?.accept(TargetSnapshot.restoreExtra(XposedApiCompat.Api102.savedInstanceState(param)))
-        onOldHooks?.accept(filterReloadableOldHooks(XposedApiCompat.Api102.oldHookHandles(param)))
-        dispatchTargetReady(propagateTargetReadyFailure)
+        onOldHooks?.accept(XposedApiCompat.Api102.oldHookHandles(param))
+        // 新 hook 装失败时框架保留上一代继续跑，loader 必须换回去；装好了才把旧 loader 放手。
+        try {
+            dispatchTargetReady(propagateTargetReadyFailure)
+        } catch (t: Throwable) {
+            EzResources.rollbackHotReload()
+            throw t
+        }
+        EzResources.commitHotReload()
         return true
     }
 
@@ -924,7 +923,7 @@ internal data class TargetSnapshot(
     val applicationInfo: ApplicationInfo?,
     val isSystemServer: Boolean,
 ) {
-    fun toCrossGenArray(extra: Array<Any?>): Array<Any?> = arrayOf(
+    fun toCrossGenArray(extra: Array<Any?>, resources: Any? = null): Array<Any?> = arrayOf(
         MAGIC,
         VERSION,
         packageName,
@@ -933,6 +932,7 @@ internal data class TargetSnapshot(
         applicationInfo,
         isSystemServer,
         extra,
+        resources,
     )
 
     companion object {
@@ -964,6 +964,13 @@ internal data class TargetSnapshot(
             if (arr.size < 8 || arr[0] != MAGIC || arr[1] != VERSION) return emptyArray()
             @Suppress("UNCHECKED_CAST")
             return arr[7] as? Array<Any?> ?: emptyArray()
+        }
+
+        /** 第 9 位是 EzResources 的跨代状态；1.2.0 的数组只有 8 位，读不到就是 null。 */
+        fun restoreResources(saved: Any?): Any? {
+            val arr = saved as? Array<*> ?: return null
+            if (arr.size < 9 || arr[0] != MAGIC || arr[1] != VERSION) return null
+            return arr[8]
         }
     }
 }

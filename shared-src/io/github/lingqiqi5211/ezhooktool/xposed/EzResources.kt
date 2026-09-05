@@ -22,9 +22,9 @@ import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.ResourcesPlatform
 import java.io.File
 import java.lang.reflect.Method
+import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * 宿主资源替换。借 `ResourcesLoader` 把模块 apk 挂进宿主 `Resources`，再 hook `Resources` / `TypedArray` 的
@@ -37,7 +37,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * ```
  *
  * 包名传 `"*"` 表示不限宿主，精确匹配优先。hook 按需装、进程级、带稳定 reloadKey，模块不需要持有或摘除。
- * 102 热重载时资源 hook 被跳过：不替换、不摘，上一代原地继续服务；新的替换规则要等目标进程重启才生效。
+ * 替换规则按名字存、取值时才对当前挂着的 apk 解析 id，所以 102 热重载换 apk 不会串资源；loader 由新一代先挂新再摘旧。
  */
 object EzResources {
     private const val TAG = "EzResources"
@@ -61,8 +61,9 @@ object EzResources {
 
     private val lock = Any()
 
-    /** 已经挂上模块资源的宿主 Resources。热重载前要逐个摘干净。 */
-    private val injected = CopyOnWriteArrayList<Resources>()
+    /** 挂上了模块 apk 的宿主 Resources，以及注入失败过的。弱引用，不能钉住 Activity 的 Resources；都在 [lock] 下访问。 */
+    private val injected: MutableSet<Resources> = Collections.newSetFromMap(WeakHashMap())
+    private val injectFailed: MutableSet<Resources> = Collections.newSetFromMap(WeakHashMap())
     private val replacements = ConcurrentHashMap<ResKey, Replacement>()
 
     /**
@@ -70,6 +71,7 @@ object EzResources {
      * 未命中也缓存，否则每次都要查三次资源表。
      */
     private val resIdCache = WeakHashMap<Resources, SparseArray<ResKey>>()
+    private val moduleIdCache = WeakHashMap<Resources, HashMap<ModuleRes, Int>>()
     private val resIdCacheLock = Any()
 
     /** 递归防护：替换值本身要再调一次原方法去取，不挡住就会自己套自己。 */
@@ -86,20 +88,16 @@ object EzResources {
     @Volatile
     private var mainHandler: Handler? = null
 
-    /** 注入失败过就不在 getter 热路径上重试。 */
+    /** 热重载换过 loader 但新 hook 尚未装好的 Resources 与旧 loader；装失败时据此换回。 */
     @Volatile
-    private var injectFailed = false
-
-    /** 上一代的资源 hook 仍在运行；本代不装 hook、不收规则。 */
-    @Volatile
-    private var inherited = false
-
-    @Volatile
-    private var inheritedWarned = false
+    private var pendingSwap: Pair<List<Resources>, Any?>? = null
 
     private data class ResKey(val pkg: String, val type: String, val name: String)
 
-    private enum class Kind { MODULE_RES_ID, DENSITY, VALUE }
+    /** 模块资源按名字记。id 是编译期常量，换代后可能变，按名字对当前 apk 解析才不会串。 */
+    private data class ModuleRes(val pkg: String, val type: String, val name: String)
+
+    private enum class Kind { MODULE_RES, DENSITY, VALUE }
 
     private data class Replacement(val kind: Kind, val value: Any)
 
@@ -139,12 +137,19 @@ object EzResources {
     private fun attach(resources: Resources, modulePath: String): Boolean {
         val viaLoader = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && LoaderInjector.attach(resources, modulePath)
         val ok = viaLoader || LegacyInjector.attach(resources, modulePath)
-        if (ok) {
-            injected.addIfAbsent(resources)
-        } else {
-            EzReflect.logger.warn(TAG, "Failed to inject module resources into $resources")
-        }
+        synchronized(lock) { (if (ok) injected else injectFailed).add(resources) }
+        if (!ok) EzReflect.logger.warn(TAG, "Failed to inject module resources into $resources")
         return ok
+    }
+
+    /** 规则命中时才把模块 apk 挂到这个 Resources 上；失败过的不再试，热路径上不能反复开文件。 */
+    private fun ensureInjected(resources: Resources): Boolean {
+        synchronized(lock) {
+            if (resources in injected) return true
+            if (resources in injectFailed) return false
+        }
+        val modulePath = ResourcesPlatform.modulePathOrNull ?: return false
+        return attach(resources, modulePath)
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -174,6 +179,22 @@ object EzResources {
             }
         }
 
+        val currentLoader: Any? get() = loader
+
+        fun detachOld(resources: Resources, oldLoader: Any?): Boolean {
+            val old = oldLoader as? ResourcesLoader ?: return false
+            if (old === loader) return false
+            return runCatching { resources.removeLoaders(old) }.onFailure {
+                EzReflect.logger.warn(TAG, "Failed to remove the previous generation's ResourcesLoader: ${it.message}")
+            }.isSuccess
+        }
+
+        fun swapBack(resources: Resources, oldLoader: Any?) {
+            val old = oldLoader as? ResourcesLoader ?: return
+            runCatching { resources.addLoaders(old) }
+            loader?.let { runCatching { resources.removeLoaders(it) } }
+        }
+
         fun attach(resources: Resources, modulePath: String): Boolean {
             val current = requireLoader(modulePath) ?: return false
             return try {
@@ -185,8 +206,7 @@ object EzResources {
                 false
             }
         }
-
-        }
+    }
 
     private object LegacyInjector {
         private val addAssetPath by lazy {
@@ -218,7 +238,21 @@ object EzResources {
      */
     @JvmStatic
     fun setResReplacement(pkg: String, type: String, name: String, moduleResId: Int) {
-        register(pkg, type, name, Replacement(Kind.MODULE_RES_ID, moduleResId))
+        val moduleRes = ResourcesPlatform.moduleResourcesOrNull ?: run {
+            EzReflect.logger.warn(TAG, "setResReplacement before ${ResourcesPlatform.initEntryPoint}, ignored")
+            return
+        }
+        val target = runCatching {
+            ModuleRes(
+                moduleRes.getResourcePackageName(moduleResId),
+                moduleRes.getResourceTypeName(moduleResId),
+                moduleRes.getResourceEntryName(moduleResId),
+            )
+        }.getOrElse {
+            EzReflect.logger.warn(TAG, "Module resource 0x${Integer.toHexString(moduleResId)} not found, ignored")
+            return
+        }
+        register(pkg, type, name, Replacement(Kind.MODULE_RES, target))
     }
 
     /**
@@ -240,7 +274,10 @@ object EzResources {
     @JvmStatic
     fun clearReplacements() {
         replacements.clear()
-        synchronized(resIdCacheLock) { resIdCache.clear() }
+        synchronized(resIdCacheLock) {
+            resIdCache.clear()
+            moduleIdCache.clear()
+        }
     }
 
     /** 生成一个不与宿主冲突的虚拟资源 ID，用于宿主里本来没有的资源。 */
@@ -270,17 +307,6 @@ object EzResources {
     }
 
     private fun ensureHooks(type: String): Boolean {
-        if (inherited) {
-            if (!inheritedWarned) {
-                inheritedWarned = true
-                EzReflect.logger.warn(
-                    TAG,
-                    "Resource hooks are still owned by the previous module generation; " +
-                        "new replacements take effect after the target process restarts.",
-                )
-            }
-            return false
-        }
         val needed = maskOf(type)
         if (needed == 0) {
             EzReflect.logger.warn(TAG, "Unsupported resource type \"$type\", replacement ignored")
@@ -372,38 +398,22 @@ object EzResources {
         if (inReplacement.get() == true) return
         if (replacements.isEmpty()) return
 
-        if (injected.isEmpty()) {
-            // 还没注入就补一次；只试一次，不在热路径上反复开文件。
-            if (injectFailed) return
-            val context = ResourcesPlatform.appContextOrNull ?: return
-            if (!inject(context)) injectFailed = true
-            if (injected.isEmpty()) return
-        }
-
         val requestedId = param.args.getOrNull(0) as? Int ?: return
         if (requestedId == 0) return
         val hostResources = param.thisObjectOrNull as? Resources ?: return
         val methodName = param.executable.name
 
-        for (moduleResources in injected) {
-            val value = try {
-                resolve(moduleResources, hostResources, methodName, param.args)
-            } catch (_: Resources.NotFoundException) {
-                continue
-            } ?: continue
-
-            val converted = convert(methodName, value)
-            if (converted != null) {
-                param.result = converted
-            } else {
-                if (mismatchWarned.add("$methodName ${value.javaClass.name}")) {
-                    EzReflect.logger.warn(
-                        TAG,
-                        "Mismatched replacement type for $methodName: got ${value.javaClass.name}",
-                    )
-                }
-            }
+        val value = try {
+            resolve(hostResources, methodName, param.args)
+        } catch (_: Resources.NotFoundException) {
             return
+        } ?: return
+
+        val converted = convert(methodName, value)
+        if (converted != null) {
+            param.result = converted
+        } else if (mismatchWarned.add("$methodName ${value.javaClass.name}")) {
+            EzReflect.logger.warn(TAG, "Mismatched replacement type for $methodName: got ${value.javaClass.name}")
         }
     }
 
@@ -433,7 +443,7 @@ object EzResources {
                 Kind.VALUE -> asValue(replacement.value, methodName)
                 Kind.DENSITY -> asDensity(replacement.value, resources, methodName)
                 // TypedArray 的取值方法签名和 Resources 的不一样，补齐成后者的形状再转发。
-                Kind.MODULE_RES_ID -> when (methodName) {
+                Kind.MODULE_RES -> if (!ensureInjected(resources)) null else when (methodName) {
                     "getColor" ->
                         asModuleRes(replacement.value, resources, methodName, arrayOf(resId, 0))
 
@@ -454,12 +464,7 @@ object EzResources {
 
     // region 替换求值
 
-    private fun resolve(
-        moduleResources: Resources,
-        hostResources: Resources,
-        method: String,
-        args: Array<Any?>,
-    ): Any? {
+    private fun resolve(hostResources: Resources, method: String, args: Array<Any?>): Any? {
         val resId = args.getOrNull(0) as? Int ?: return null
         if (resId == 0) return null
         val key = resolveKey(hostResources, resId) ?: return null
@@ -468,25 +473,36 @@ object EzResources {
         return when (replacement.kind) {
             Kind.VALUE -> asValue(replacement.value, method)
             Kind.DENSITY -> asDensity(replacement.value, hostResources, method)
-            Kind.MODULE_RES_ID -> asModuleRes(replacement.value, moduleResources, method, args)
+            // 模块资源就在宿主当前这个 Resources 里解析：配置和主题都是它自己的，不会拿错变体。
+            Kind.MODULE_RES ->
+                if (ensureInjected(hostResources)) asModuleRes(replacement.value, hostResources, method, args) else null
         }
     }
 
     private fun resolveKey(resources: Resources, resId: Int): ResKey? {
+        synchronized(resIdCacheLock) { resIdCache[resources]?.get(resId) }?.let { return it.takeIf { k -> k != emptyKey } }
+        // 资源表查询在锁外做，锁内只碰表。
+        val key = runCatching {
+            ResKey(
+                resources.getResourcePackageName(resId),
+                resources.getResourceTypeName(resId),
+                resources.getResourceEntryName(resId),
+            )
+        }.getOrDefault(emptyKey)
         synchronized(resIdCacheLock) {
             val table = resIdCache.getOrPut(resources) { SparseArray() }
-            table.get(resId)?.let { return it.takeIf { k -> k != emptyKey } }
             if (table.size() >= ResIdCacheLimit) table.clear()
-            val key = runCatching {
-                ResKey(
-                    resources.getResourcePackageName(resId),
-                    resources.getResourceTypeName(resId),
-                    resources.getResourceEntryName(resId),
-                )
-            }.getOrDefault(emptyKey)
             table.put(resId, key)
-            return key.takeIf { it != emptyKey }
         }
+        return key.takeIf { it != emptyKey }
+    }
+
+    /** 对 [resources] 当前挂着的模块 apk 解析名字；查不到是 0。结果按 Resources 缓存，本代内 loader 不会变。 */
+    private fun moduleIdOf(resources: Resources, res: ModuleRes): Int {
+        synchronized(resIdCacheLock) { moduleIdCache[resources]?.get(res) }?.let { return it }
+        val id = resources.getIdentifier(res.name, res.type, res.pkg)
+        synchronized(resIdCacheLock) { moduleIdCache.getOrPut(resources) { HashMap() }[res] = id }
+        return id
     }
 
     /** 精确匹配优先，其次是包名通配的规则。 */
@@ -520,26 +536,23 @@ object EzResources {
 
     private fun asModuleRes(
         value: Any,
-        moduleResources: Resources,
+        resources: Resources,
         method: String,
         args: Array<Any?>,
     ): Any? {
-        val moduleResId = (value as? Number)?.toInt() ?: return null
+        val moduleResId = moduleIdOf(resources, value as? ModuleRes ?: return null)
         if (moduleResId == 0) return null
-
-        // 先确认模块里真有这个资源；没有会抛 NotFoundException，由调用点当成「不替换」处理。
-        moduleResources.getResourceName(moduleResId)
 
         inReplacement.set(true)
         return try {
             when {
                 (method == "getDrawable" || method == "getColorStateList") && args.size >= 2 ->
-                    Methods.callMethod(moduleResources, method, moduleResId, args[1])
+                    Methods.callMethod(resources, method, moduleResId, args[1])
 
                 (method == "getDrawableForDensity" || method == "getFraction") && args.size >= 3 ->
-                    Methods.callMethod(moduleResources, method, moduleResId, args[1], args[2])
+                    Methods.callMethod(resources, method, moduleResId, args[1], args[2])
 
-                else -> Methods.callMethod(moduleResources, method, moduleResId)
+                else -> Methods.callMethod(resources, method, moduleResId)
             }
         } finally {
             inReplacement.remove()
@@ -559,15 +572,59 @@ object EzResources {
 
     // endregion
 
-    // region 热重载
+    // region 热重载（102）
 
-    /** 资源 hook 的 id 是否命中。这些 id 在热重载时被跳过：不替换、不摘，上一代的 hook 原地继续服务。 */
-    internal fun isResourceHookId(id: String?): Boolean =
-        id != null && (id.startsWith(ResourcesHookIdPrefix) || id.startsWith(TypedArrayHookIdPrefix))
+    /**
+     * 上一代在 onHotReloading 里调用。只交出注入过的宿主 Resources 和旧 loader，两者都是框架对象；
+     * 不摘 loader，摘了新一代挂上之前宿主解析模块 id 就是 NotFoundException。getter hook 走正常迁移。
+     */
+    internal fun captureForHotReload(): Any? {
+        val live = synchronized(lock) {
+            mainHandler?.removeCallbacksAndMessages(null)
+            if (injected.isEmpty()) return null
+            ArrayList(injected)
+        }
+        val oldLoader = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) LoaderInjector.currentLoader else null
+        EzReflect.logger.debug(TAG, "hot reload capture: ${live.size} resources, loader=${oldLoader != null}")
+        return arrayOf<Any?>(live, oldLoader)
+    }
 
-    /** 新一代得知上一代的资源 hook 仍在运行时调用。之后本代不再装 hook、不再收规则，直到进程重启。 */
-    internal fun inheritPreviousGeneration() {
-        inherited = true
+    /**
+     * 新一代在 onTargetReady 之前调用。对每个 Resources 先挂新 apk 的 loader 再摘旧的，中间没有空窗；
+     * 后挂的 loader 优先级高，两者并存的一瞬也是新 apk 生效。R 以下的 addAssetPath 摘不掉，模块资源保持旧版到重启。
+     */
+    internal fun restoreFromHotReload(saved: Any?) {
+        val arr = saved as? Array<*> ?: return
+        val resources = (arr.getOrNull(0) as? List<*>)?.filterIsInstance<Resources>() ?: return
+        val oldLoader = arr.getOrNull(1)
+        var injectedCount = 0
+        val swapped = ArrayList<Resources>()
+        for (target in resources) {
+            if (!inject(target)) continue
+            injectedCount++
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && LoaderInjector.detachOld(target, oldLoader)) swapped += target
+        }
+        if (swapped.isNotEmpty()) pendingSwap = swapped to oldLoader
+        EzReflect.logger.debug(
+            TAG,
+            "hot reload restore: ${resources.size} resources, injected=$injectedCount, oldLoader=${oldLoader != null}, detached=${swapped.size}",
+        )
+    }
+
+    /** 新一代 hook 装失败、框架保留上一代继续跑时调用：把旧 loader 换回去，上一代的 by-id 注入组件才对得上。 */
+    internal fun rollbackHotReload() {
+        val (targets, oldLoader) = pendingSwap ?: return
+        pendingSwap = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            for (target in targets) LoaderInjector.swapBack(target, oldLoader)
+        }
+        synchronized(lock) { injected.removeAll(targets.toSet()) }
+        EzReflect.logger.warn(TAG, "hot reload rolled back: restored the previous ResourcesLoader on ${targets.size} resources")
+    }
+
+    /** 新一代 hook 装好后调用，丢掉旧 loader 的引用。 */
+    internal fun commitHotReload() {
+        pendingSwap = null
     }
 
     // endregion

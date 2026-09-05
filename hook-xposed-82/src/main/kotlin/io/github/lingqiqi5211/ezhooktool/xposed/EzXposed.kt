@@ -54,6 +54,10 @@ object EzXposed {
     lateinit var moduleRes: XModuleResources
         private set
 
+    /** [moduleRes] 的安全读取入口；尚未 [initZygote] 时为 `null`。 */
+    internal val moduleResOrNull: Resources?
+        get() = if (::moduleRes.isInitialized) moduleRes else null
+
     @JvmStatic
     /** 当前默认 `ClassLoader`。 */
     val classLoader: ClassLoader

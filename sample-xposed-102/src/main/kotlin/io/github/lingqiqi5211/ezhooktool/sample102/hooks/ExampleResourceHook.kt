@@ -6,7 +6,7 @@ import io.github.lingqiqi5211.ezhooktool.xposed.EzResources
 
 /**
  * 演示宿主资源替换。注册即生效，一条都没注册时 EzResources 零开销；包名传 "*" 表示不限宿主。
- * 热重载时资源 hook 被跳过，上一代原地继续服务；这里改了替换规则要重启目标进程才看得到。
+ * 热重载时 getter hook 正常迁移、模块 apk 的 loader 由新一代换掉；改了这里的规则热重载后立刻生效。
  */
 object ExampleResourceHook : BaseHook() {
     override val name: String = "ExampleResourceHook"

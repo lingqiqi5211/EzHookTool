@@ -1,6 +1,6 @@
 package io.github.lingqiqi5211.ezhooktool.xposed.internal
 
-import android.content.Context
+import android.content.res.Resources
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createHook
@@ -12,7 +12,7 @@ internal object ResourcesPlatform {
 
     val modulePathOrNull: String? get() = EzXposed.modulePathOrNull
 
-    val appContextOrNull: Context? get() = EzXposed.appContextOrNull
+    val moduleResourcesOrNull: Resources? get() = EzXposed.moduleResOrNull
 
     fun requireInitialized() {
         checkNotNull(EzXposed.baseOrNull) { "EzResources requires $initEntryPoint to be called first." }
