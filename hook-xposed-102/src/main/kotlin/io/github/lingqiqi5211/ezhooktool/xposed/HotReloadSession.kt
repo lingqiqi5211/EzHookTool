@@ -6,6 +6,7 @@ import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import java.lang.reflect.Executable
 import java.util.IdentityHashMap
 import java.util.LinkedHashMap
+import java.util.LinkedHashSet
 import java.util.function.Consumer
 
 /**
@@ -73,24 +74,34 @@ class HotReloadSession {
         extra: Array<Any?> = emptyArray(),
     ): Boolean {
         check(!prepared) { "HotReloadSession.prepare can only be called once per module entry." }
-        CrossGenerationState.requireSafe(extra)
-        val scopeState = scope.snapshotState()
-        CrossGenerationState.requireSafe(scopeState)
-        val savedState = arrayOf<Any?>(
-            SAVED_STATE_MAGIC,
-            SAVED_STATE_VERSION,
-            scopeState,
-            extra.copyOf(),
-        )
-        if (!EzXposed.handleHotReloading(param, savedState)) return false
-
-        prepared = true
+        val scopeState = scope.beginPrepare()
+        var accepted = false
         try {
-            scope.dispose()
-        } finally {
-            scope.clearOldGenerationState()
+            val savedState =
+                arrayOf<Any?>(
+                    SAVED_STATE_MAGIC,
+                    SAVED_STATE_VERSION,
+                    scopeState,
+                    extra.copyOf(),
+                )
+            if (!EzXposed.handleHotReloading(param, savedState)) {
+                scope.prepareFailed()
+                return false
+            }
+
+            accepted = true
+            prepared = true
+            scope.sealAfterPrepare()
+            try {
+                scope.dispose()
+            } finally {
+                scope.clearOldGenerationState()
+            }
+            return true
+        } catch (t: Throwable) {
+            if (!accepted) scope.prepareFailed()
+            throw t
         }
-        return true
     }
 
     /**
@@ -114,35 +125,42 @@ class HotReloadSession {
         }
 
         // 新 hook 注册前先读出旧 handle 的 executable 与 hook ID。成功替换后旧 handle 会失效，届时不应再读它。
-        val oldHooks = XposedApiCompat.Api102.oldHookHandles(param).map { handle ->
-            OldHook(handle, HookIdentity.from(handle.executable, handle.id))
-        }
+        val oldHooks =
+            XposedApiCompat.Api102.oldHookHandles(param).map { handle ->
+                OldHook(handle, HookIdentity.from(handle.executable, XposedApiCompat.hookId(handle)))
+            }
         val unkeyedOldHookCount = oldHooks.count { it.identity == null }
         check(unkeyedOldHookCount == 0) {
             "HotReloadSession cannot safely migrate $unkeyedOldHookCount old hook(s) without a reloadKey. " +
-                    "Restart the target process once after adding stable keys to every hook."
+                "Restart the target process once after adding stable keys to every hook."
         }
         restored = true
 
-        val recovered = EzXposed.withHotReloadSession(this) {
-            EzXposed.restoreHotReloaded(
-                base = base,
-                param = param,
-                // 保留到所有新 hook 都成功安装后再统一清理，避免默认全量 unhook 的空窗。
-                onOldHooks = Consumer { },
-                onExtra = Consumer { extra ->
-                    val payload = SavedState.restore(extra)
-                    scope.restoreState(payload.scopeState)
-                    onExtra?.accept(payload.extra)
-                },
-                propagateTargetReadyFailure = true,
-            )
-        }
+        val recovered =
+            EzXposed.withHotReloadSession(this) {
+                EzXposed.restoreHotReloaded(
+                    base = base,
+                    param = param,
+                    // 保留到所有新 hook 都成功安装后再统一清理，避免默认全量 unhook 的空窗。
+                    onOldHooks = null,
+                    onExtra =
+                        Consumer { extra ->
+                            val payload = SavedState.restore(extra)
+                            scope.restoreState(payload.scopeState)
+                            onExtra?.accept(payload.extra)
+                        },
+                )
+            }
         check(recovered) {
             "HotReloadSession.restore requires saved state created by HotReloadSession.prepare."
         }
 
-        return removeObsoleteOldHooks(oldHooks)
+        return try {
+            removeObsoleteOldHooks(oldHooks)
+        } catch (t: Throwable) {
+            EzXposed.recordHotReloadFailure(t)
+            throw t
+        }
     }
 
     /** 仅供 [EzXposed] 在当前线程处于本 session 时调用。 */
@@ -152,10 +170,11 @@ class HotReloadSession {
         hooker: XposedInterface.Hooker,
         installer: (String?, XposedInterface.Hooker) -> XposedInterface.HookHandle,
     ): XposedInterface.HookHandle {
-        val identity = HookIdentity.from(target, id)
-            ?: throw IllegalStateException(
-                "HotReloadSession requires HookFactory.reloadKey(\"stable-key\") for ${describe(target)}."
-            )
+        val identity =
+            HookIdentity.from(target, id)
+                ?: throw IllegalStateException(
+                    "HotReloadSession requires HookFactory.reloadKey(\"stable-key\") for ${describe(target)}.",
+                )
         synchronized(this) {
             check(identity !in installedHooks && identity !in pendingHooks) {
                 "Duplicate reloadKey \"${identity.key}\" for ${describe(target)} in one HotReloadSession."
@@ -164,6 +183,7 @@ class HotReloadSession {
         }
 
         return try {
+            EzXposed.markHotReloadIrreversible()
             installer(identity.key, hooker).also {
                 synchronized(this) {
                     pendingHooks -= identity
@@ -200,7 +220,7 @@ class HotReloadSession {
 
         if (failures.isNotEmpty()) {
             throw IllegalStateException(
-                "HotReloadSession could not remove ${failures.size} obsolete old hook(s)."
+                "HotReloadSession could not remove ${failures.size} obsolete old hook(s); restart the target process.",
             ).also { error -> failures.forEach(error::addSuppressed) }
         }
         return HotReloadResult(
@@ -225,23 +245,25 @@ class HotReloadSession {
                 check(array.size == 4 && array[0] == SAVED_STATE_MAGIC && array[1] == SAVED_STATE_VERSION) {
                     "HotReloadSession saved state is missing or incompatible."
                 }
-                val rawScopeState = array[2] as? Map<*, *> ?: throw IllegalStateException(
-                    "HotReloadSession saved scope state is invalid."
-                )
+                val rawScopeState =
+                    array[2] as? Map<*, *> ?: throw IllegalStateException(
+                        "HotReloadSession saved scope state is invalid.",
+                    )
                 val scopeState = LinkedHashMap<String, Any?>()
                 for ((key, stateValue) in rawScopeState) {
                     check(key is String && key.isNotBlank()) {
                         "HotReloadSession saved scope state contains an invalid key."
                     }
-                    CrossGenerationState.requireSafe(stateValue)
                     scopeState[key] = stateValue
                 }
-                @Suppress("UNCHECKED_CAST")
-                val extra = array[3] as? Array<Any?> ?: throw IllegalStateException(
-                    "HotReloadSession saved extra state is invalid."
+                val extra =
+                    array[3] as? Array<*> ?: throw IllegalStateException(
+                        "HotReloadSession saved extra state is invalid.",
+                    )
+                return SavedState(
+                    CrossGenerationState.snapshotState(scopeState),
+                    CrossGenerationState.snapshotArray(extra),
                 )
-                CrossGenerationState.requireSafe(extra)
-                return SavedState(scopeState, extra)
             }
         }
     }
@@ -251,8 +273,10 @@ class HotReloadSession {
         val key: String,
     ) {
         companion object {
-            fun from(target: Executable, id: String?): HookIdentity? =
-                id?.takeIf(String::isNotBlank)?.let { HookIdentity(target, it) }
+            fun from(
+                target: Executable,
+                id: String?,
+            ): HookIdentity? = id?.takeIf(String::isNotBlank)?.let { HookIdentity(target, it) }
         }
     }
 
@@ -280,12 +304,15 @@ fun interface HotReloadCleanup {
 /**
  * [HotReloadSession] 的跨代状态与外部资源清理容器。
  *
- * 只存放 system / system_server / target app classloader 的对象。模块自己的对象、lambda 或包含它们的
- * 容器不能跨代保存；本类会尽早拒绝常见错误，framework 仍会执行最终校验。
+ * Map、Collection 和数组会生成独立快照，最多 32 层、4096 个节点/槽位；循环容器和不能保持键或数组类型的复制会被拒绝。
+ * 其它 system / target app 对象保留引用，不隔离内部可变状态；模块对象及依赖模块的子加载器会被拒绝。
+ * 准备交接时拒收新状态和清理动作，准备失败后恢复接收；framework 仍会执行最终校验。
  */
 class HotReloadScope {
     private val cleanupCallbacks = mutableListOf<HotReloadCleanup>()
     private val state = LinkedHashMap<String, Any?>()
+    private var accepting = true
+    private var preparing = false
 
     /**
      * 登记旧 entry 在热重载前的清理动作，例如注销 listener、receiver 或 binder callback。
@@ -293,15 +320,20 @@ class HotReloadScope {
      */
     fun onReloading(callback: HotReloadCleanup) {
         synchronized(this) {
+            check(accepting) { "HotReloadScope no longer accepts cleanup callbacks." }
             cleanupCallbacks += callback
         }
     }
 
     /** 保存一个需要交给新 entry 的宿主状态。 */
-    fun putState(key: String, value: Any?) {
+    fun putState(
+        key: String,
+        value: Any?,
+    ) {
         require(key.isNotBlank()) { "HotReloadScope state key must not be blank." }
         CrossGenerationState.requireSafe(value)
         synchronized(this) {
+            check(accepting) { "HotReloadScope no longer accepts state." }
             state[key] = value
         }
     }
@@ -313,25 +345,57 @@ class HotReloadScope {
     }
 
     /** 按 [type] 读取已恢复的宿主状态；类型不匹配时返回 `null`。 */
-    fun <T> state(key: String, type: Class<T>): T? = state(key)?.let { value ->
-        if (type.isInstance(value)) type.cast(value) else null
-    }
+    fun <T> state(
+        key: String,
+        type: Class<T>,
+    ): T? =
+        state(key)?.let { value ->
+            if (type.isInstance(value)) type.cast(value) else null
+        }
 
-    internal fun snapshotState(): Map<String, Any?> = synchronized(this) {
-        LinkedHashMap(state)
-    }
+    internal fun snapshotState(): Map<String, Any?> =
+        synchronized(this) {
+            CrossGenerationState.snapshotState(state)
+        }
+
+    internal fun beginPrepare(): Map<String, Any?> =
+        synchronized(this) {
+            check(accepting) { "HotReloadScope is already preparing or retired." }
+            CrossGenerationState.snapshotState(state).also {
+                accepting = false
+                preparing = true
+            }
+        }
 
     internal fun restoreState(savedState: Map<String, Any?>) {
         synchronized(this) {
+            check(accepting) { "HotReloadScope no longer accepts restored state." }
             state.clear()
             state.putAll(savedState)
         }
     }
 
-    internal fun dispose() {
-        val callbacks = synchronized(this) {
-            cleanupCallbacks.asReversed().toList().also { cleanupCallbacks.clear() }
+    internal fun sealAfterPrepare() {
+        synchronized(this) {
+            accepting = false
+            preparing = false
         }
+    }
+
+    internal fun prepareFailed() {
+        synchronized(this) {
+            if (preparing) {
+                accepting = true
+                preparing = false
+            }
+        }
+    }
+
+    internal fun dispose() {
+        val callbacks =
+            synchronized(this) {
+                cleanupCallbacks.asReversed().toList().also { cleanupCallbacks.clear() }
+            }
         var failure: Throwable? = null
         for (callback in callbacks) {
             try {
@@ -339,7 +403,7 @@ class HotReloadScope {
             } catch (t: Throwable) {
                 if (failure == null) {
                     failure = t
-                } else {
+                } else if (failure !== t) {
                     failure.addSuppressed(t)
                 }
             }
@@ -356,56 +420,190 @@ class HotReloadScope {
     }
 }
 
-/** 仅作尽早报错；libxposed 对 saved state 的校验仍是最终准则。 */
-private object CrossGenerationState {
+/** 业务状态的有限深快照；libxposed 对 saved state 的校验仍是最终准则。 */
+internal object CrossGenerationState {
+    internal const val MAX_DEPTH = 32
+    internal const val MAX_VALUES = 4096
+
     private val moduleClassLoader = HotReloadSession::class.java.classLoader
 
     fun requireSafe(value: Any?) {
-        validate(value, IdentityHashMap())
+        snapshot(value)
     }
 
-    private fun validate(value: Any?, seen: IdentityHashMap<Any, Boolean>) {
-        if (value == null) return
-        if (seen.put(value, true) != null) return
-        if (isModuleClassLoader(value.javaClass.classLoader)) {
-            reject(value.javaClass.name)
+    fun snapshot(value: Any?): Any? = Snapshotter().copy(value, 0)
+
+    @Suppress("UNCHECKED_CAST")
+    fun snapshotArray(value: Array<*>): Array<Any?> = snapshot(value) as Array<Any?>
+
+    @Suppress("UNCHECKED_CAST")
+    fun snapshotState(value: Map<String, Any?>): Map<String, Any?> = snapshot(value) as Map<String, Any?>
+
+    private class Snapshotter {
+        private val copies = IdentityHashMap<Any, Any>()
+        private val activeContainers = IdentityHashMap<Any, Boolean>()
+        private var valueCount = 0
+
+        fun copy(
+            value: Any?,
+            depth: Int,
+        ): Any? {
+            if (value == null) return null
+            if (depth > MAX_DEPTH) {
+                throw IllegalArgumentException(
+                    "Hot reload state exceeds the maximum container depth of $MAX_DEPTH.",
+                )
+            }
+            if (activeContainers[value] == true) {
+                throw IllegalArgumentException(
+                    "Hot reload state must not contain cyclic containers.",
+                )
+            }
+            copies[value]?.let { return it }
+            consumeValue()
+
+            val type = value.javaClass
+            if (type.isArray) {
+                if (CrossGenerationState.isModuleClassLoader(type.classLoader)) {
+                    CrossGenerationState.reject(type.name)
+                }
+                return copyArray(value, depth)
+            }
+            if (value is Map<*, *>) {
+                requireBudget(value.size)
+                val cloned: MutableMap<Any?, Any?> =
+                    if (value is IdentityHashMap<*, *>) IdentityHashMap(value.size) else LinkedHashMap(value.size)
+                copies[value] = cloned
+                activeContainers[value] = true
+                try {
+                    value.forEach { (key, item) ->
+                        consumeValues(2)
+                        val copiedKey = copy(key, depth + 1)
+                        require(!cloned.containsKey(copiedKey)) { "Hot reload snapshot cannot preserve distinct map keys." }
+                        cloned[copiedKey] = copy(item, depth + 1)
+                    }
+                } finally {
+                    activeContainers.remove(value)
+                }
+                return cloned
+            }
+            if (value is Collection<*>) {
+                requireBudget(value.size)
+                val cloned: MutableCollection<Any?> =
+                    if (value is Set<*>) LinkedHashSet(value.size) else ArrayList(value.size)
+                copies[value] = cloned
+                activeContainers[value] = true
+                try {
+                    value.forEach { item ->
+                        consumeValue()
+                        require(cloned.add(copy(item, depth + 1))) { "Hot reload snapshot cannot preserve distinct set elements." }
+                    }
+                } finally {
+                    activeContainers.remove(value)
+                }
+                return cloned
+            }
+
+            validateAtomic(value)
+            copies[value] = value
+            return value
         }
-        when (value) {
-            is Class<*> -> {
-                if (isModuleClassLoader(value.classLoader)) {
-                    reject("Class<${value.name}>")
+
+        private fun copyArray(
+            value: Any,
+            depth: Int,
+        ): Any {
+            val length = java.lang.reflect.Array.getLength(value)
+            val componentType = value.javaClass.componentType!!
+            if (componentType.isPrimitive) {
+                consumeValues(length)
+                val copy = java.lang.reflect.Array.newInstance(componentType, length)
+                copies[value] = copy
+                System.arraycopy(value, 0, copy, 0, length)
+                return copy
+            }
+            consumeValues(length)
+            val cloned = java.lang.reflect.Array.newInstance(componentType, length)
+            copies[value] = cloned
+            activeContainers[value] = true
+            try {
+                for (index in 0 until length) {
+                    val item = copy(java.lang.reflect.Array.get(value, index), depth + 1)
+                    if (item != null && !componentType.isInstance(item)) {
+                        throw IllegalArgumentException(
+                            "Hot reload state cannot preserve array component type ${componentType.name} " +
+                                "after copying ${item.javaClass.name}.",
+                        )
+                    }
+                    java.lang.reflect.Array.set(cloned, index, item)
+                }
+            } finally {
+                activeContainers.remove(value)
+            }
+            return cloned
+        }
+
+        private fun consumeValue() {
+            consumeValues(1)
+        }
+
+        private fun consumeValues(count: Int) {
+            requireBudget(count)
+            valueCount += count
+        }
+
+        private fun requireBudget(count: Int) {
+            require(count in 0..(MAX_VALUES - valueCount)) {
+                "Hot reload state exceeds the maximum of $MAX_VALUES values."
+            }
+        }
+
+        private fun validateAtomic(value: Any) {
+            if (CrossGenerationState.isModuleClassLoader(value.javaClass.classLoader)) {
+                CrossGenerationState.reject(value.javaClass.name)
+            }
+
+            when (value) {
+                is Class<*> -> {
+                    if (CrossGenerationState.isModuleClassLoader(value.classLoader)) {
+                        CrossGenerationState.reject("Class<${value.name}>")
+                    }
+                }
+
+                is ClassLoader -> {
+                    if (CrossGenerationState.isModuleClassLoader(value)) {
+                        CrossGenerationState.reject(value.javaClass.name)
+                    }
+                }
+
+                is java.lang.reflect.Member -> {
+                    if (CrossGenerationState.isModuleClassLoader(value.declaringClass.classLoader)) {
+                        CrossGenerationState.reject("${value.javaClass.name}<${value.declaringClass.name}>")
+                    }
                 }
             }
-            is ClassLoader -> {
-                if (value === moduleClassLoader) {
-                    reject(value.javaClass.name)
-                }
-            }
-            is java.lang.reflect.Member -> {
-                if (isModuleClassLoader(value.declaringClass.classLoader)) {
-                    reject("${value.javaClass.name}<${value.declaringClass.name}>")
-                }
-            }
-            is Array<*> -> value.forEach { validate(it, seen) }
-            is Map<*, *> -> value.forEach { (key, item) ->
-                validate(key, seen)
-                validate(item, seen)
-            }
-            is Iterable<*> -> value.forEach { validate(it, seen) }
         }
     }
 
-    private fun isModuleClassLoader(classLoader: ClassLoader?): Boolean =
-        moduleClassLoader != null && classLoader === moduleClassLoader
+    private fun isModuleClassLoader(classLoader: ClassLoader?): Boolean {
+        var current = classLoader
+        while (current != null) {
+            if (current === moduleClassLoader) return true
+            current = current.parent
+        }
+        return false
+    }
 
-    private fun reject(typeName: String): Nothing = throw IllegalArgumentException(
-        "Hot reload state must not contain module-classloader object: $typeName"
-    )
+    private fun reject(typeName: String): Nothing =
+        throw IllegalArgumentException(
+            "Hot reload state must not contain module-classloader object: $typeName",
+        )
 }
 
-private fun describe(target: Executable): String = buildString {
-    append(target.declaringClass.name)
-    append('#')
-    append(target.name)
-    append(target.parameterTypes.joinToString(prefix = "(", postfix = ")") { it.name })
-}
+private fun describe(target: Executable): String =
+    buildString {
+        append(target.declaringClass.name)
+        append('#')
+        append(target.name)
+        append(target.parameterTypes.joinToString(prefix = "(", postfix = ")") { it.name })
+    }

@@ -2,6 +2,9 @@ package io.github.lingqiqi5211.ezhooktool.xposed.internal
 
 import android.content.res.Resources
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
+import io.github.lingqiqi5211.ezhooktool.xposed.HookReloadBatch
+import io.github.lingqiqi5211.ezhooktool.xposed.ResourceHookState
+import io.github.lingqiqi5211.ezhooktool.xposed.XposedFeature
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createHook
 import java.lang.reflect.Method
@@ -18,10 +21,16 @@ internal object ResourcesPlatform {
         checkNotNull(EzXposed.baseOrNull) { "EzResources requires $initEntryPoint to be called first." }
     }
 
-    fun hookBefore(method: Method, key: String, callback: (HookParam) -> Unit) {
+    fun hookBefore(
+        method: Method,
+        key: String,
+        callback: (HookParam) -> Unit,
+    ): () -> ResourceHookState {
+        val batch = HookReloadBatch.currentActive()
         method.createHook {
-            reloadKey(key)
+            if (XposedFeature.HOOK_ID.isSupported) reloadKey(key)
             before(callback)
         }
+        return { batch?.resourceHookState ?: ResourceHookState.INSTALLED }
     }
 }

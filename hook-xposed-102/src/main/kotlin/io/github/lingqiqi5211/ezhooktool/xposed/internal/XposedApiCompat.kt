@@ -3,6 +3,7 @@ package io.github.lingqiqi5211.ezhooktool.xposed.internal
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterfaceWrapper
 import io.github.libxposed.api.XposedModuleInterface
+import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 import io.github.lingqiqi5211.ezhooktool.xposed.XposedFeature
 
 /**
@@ -13,6 +14,17 @@ import io.github.lingqiqi5211.ezhooktool.xposed.XposedFeature
  * [Api102]；调用前必须已经过特性判断，网关内不重复检查。
  */
 internal object XposedApiCompat {
+    /** 构建阶段不经过这里；intercept 抛错可能已经安装，不能据此撤回资源。API 101 也适用。 */
+    fun intercept(
+        builder: XposedInterface.HookBuilder,
+        hooker: XposedInterface.Hooker,
+    ): XposedInterface.HookHandle =
+        try {
+            builder.intercept(hooker)
+        } catch (failure: Throwable) {
+            EzXposed.markHotReloadIrreversible()
+            throw IllegalStateException("Physical Hook installation failed; its outcome is unknown. Please restart the target process.", failure)
+        }
 
     @Volatile
     private var supported: Int = 0
@@ -24,9 +36,10 @@ internal object XposedApiCompat {
     fun resolve(base: XposedInterface) {
         val version = runCatching { base.apiVersion }.getOrDefault(0)
         resolvedApiVersion = version
-        supported = XposedFeature.entries.fold(0) { mask, feature ->
-            if (version >= feature.minApiVersion) mask or feature.bit else mask
-        }
+        supported =
+            XposedFeature.entries.fold(0) { mask, feature ->
+                if (version >= feature.minApiVersion) mask or feature.bit else mask
+            }
     }
 
     /** 当前 framework 是否提供 [feature]。一次 volatile 读加一次 AND。 */
@@ -43,15 +56,17 @@ internal object XposedApiCompat {
      * 安全读取 hook ID；[XposedFeature.HOOK_ID] 不可用时返回 `null`。库内一律走这里，不要写 `handle.id`，
      * 它会解析成直接调用 `getId()`，101 上抛 `NoSuchMethodError`。
      */
-    fun hookId(handle: XposedInterface.HookHandle): String? =
-        if (isSupported(XposedFeature.HOOK_ID)) Api102.hookId(handle) else null
+    fun hookId(handle: XposedInterface.HookHandle): String? = if (isSupported(XposedFeature.HOOK_ID)) Api102.hookId(handle) else null
 
     /**
      * 标注了 [io.github.lingqiqi5211.ezhooktool.xposed.RequiresXposedApi] 的入口统一在这里做前置检查。
      *
      * @param api 报错信息里显示的 API 名称
      */
-    fun requireFeature(feature: XposedFeature, api: String) {
+    fun requireFeature(
+        feature: XposedFeature,
+        api: String,
+    ) {
         check(isSupported(feature)) {
             val current = resolvedApiVersion.takeIf { it > 0 }?.toString() ?: "unknown"
             "$api requires libxposed API ${feature.minApiVersion} (${feature.name}); " +
@@ -61,29 +76,33 @@ internal object XposedApiCompat {
 
     /** 库内部触碰 102 符号的唯一出口，每个方法都是薄转发；别处出现这些符号会被 checkApi102Gateway 挡下。 */
     object Api102 {
-        fun isHotReloadedParam(param: XposedModuleInterface.ModuleLoadedParam): Boolean =
-            param is XposedModuleInterface.HotReloadedParam
+        fun isHotReloadedParam(param: XposedModuleInterface.ModuleLoadedParam): Boolean = param is XposedModuleInterface.HotReloadedParam
 
         fun hookId(handle: XposedInterface.HookHandle): String? = handle.getId()
 
-        fun setId(builder: XposedInterface.HookBuilder, id: String): XposedInterface.HookBuilder =
-            builder.setId(id)
+        fun setId(
+            builder: XposedInterface.HookBuilder,
+            id: String,
+        ): XposedInterface.HookBuilder = builder.setId(id)
 
         fun replaceHook(
             handle: XposedInterface.HookHandle,
             hooker: XposedInterface.Hooker,
-        ): XposedInterface.HookHandle = handle.replaceHook(hooker)
+        ): XposedInterface.HookHandle {
+            EzXposed.markHotReloadIrreversible()
+            return handle.replaceHook(hooker)
+        }
 
         fun detach(entry: XposedInterfaceWrapper) = entry.detach()
 
-        fun setSavedInstanceState(param: XposedModuleInterface.HotReloadingParam, state: Array<Any?>) =
-            param.setSavedInstanceState(state)
+        fun setSavedInstanceState(
+            param: XposedModuleInterface.HotReloadingParam,
+            state: Array<Any?>,
+        ) = param.setSavedInstanceState(state)
 
         // libxposed 声明的返回类型就是 Object，TargetSnapshot 自己做形状校验，这里不收窄。
-        fun savedInstanceState(param: XposedModuleInterface.HotReloadedParam): Any? =
-            param.savedInstanceState
+        fun savedInstanceState(param: XposedModuleInterface.HotReloadedParam): Any? = param.savedInstanceState
 
-        fun oldHookHandles(param: XposedModuleInterface.HotReloadedParam): List<XposedInterface.HookHandle> =
-            param.oldHookHandles
+        fun oldHookHandles(param: XposedModuleInterface.HotReloadedParam): List<XposedInterface.HookHandle> = param.oldHookHandles
     }
 }

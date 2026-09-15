@@ -2,9 +2,9 @@ package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
-import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.HookDiagnostics
 import java.lang.reflect.Member
 import java.util.function.Consumer
 import java.util.function.Function
@@ -21,7 +21,7 @@ typealias HookCallback = (HookParam) -> Unit
  *
  * - 每个 [HookFactory] 实例只保留**一对** before / after 回调。重复调用 [before] / [after] / [replace] /
  *   [returnConstant] 会**覆盖**前一次注册，不会叠加。
- * - 没有 `priority` / `id` / `intercept` 等 102 才支持的 hook 元信息——经典 Xposed API 82 在框架层就没有这些能力。
+ * - 本 DSL 尚未提供 priority 入口，但经典 Xposed 支持优先级；id 与 chain intercept 属于另一套框架能力。
  *
  * 如果你的代码同时支持两个工件，请按 102 的多 stage 思路写时显式包装，
  * 不要假设 82 也会按顺序执行多次 before/after。
@@ -119,36 +119,42 @@ class HookFactory internal constructor(
         )
     }
 
-    private fun dispatchBefore(callback: HookCallback, raw: XC_MethodHook.MethodHookParam) {
+    private fun dispatchBefore(
+        callback: HookCallback,
+        raw: XC_MethodHook.MethodHookParam,
+    ) {
         if (!EzXposed.safeMode) {
             callback(HookParam(raw))
             return
         }
-        // safeMode: callback 抛出时恢复完整调用状态，避免参数或返回值只修改了一半。
-        val savedArgs = raw.args.copyOf()
-        val savedResult = raw.result
-        val savedThrowable = raw.throwable
-        try {
-            callback(HookParam(raw))
-        } catch (t: Throwable) {
-            raw.args = savedArgs
-            raw.result = savedResult
-            raw.throwable = savedThrowable
-            EzReflect.logger.error("Hook", "before hook failed for $target; reverted to original call", t)
-        }
+        dispatchSafely(callback, raw, "before")
     }
 
-    private fun dispatchAfter(callback: HookCallback, raw: XC_MethodHook.MethodHookParam) {
+    private fun dispatchAfter(
+        callback: HookCallback,
+        raw: XC_MethodHook.MethodHookParam,
+    ) {
         if (!EzXposed.safeMode) {
             callback(HookParam(raw))
             return
         }
-        // safeMode: after 阶段原方法已经执行完，捕获 callback 异常不还原 result/throwable，
-        // 因为这正是上游方法的真实输出；只记日志。
+        dispatchSafely(callback, raw, "after")
+    }
+
+    private fun dispatchSafely(
+        callback: HookCallback,
+        raw: XC_MethodHook.MethodHookParam,
+        phase: String,
+    ) {
+        val param = HookParam(raw)
+        param.beginCallback()
         try {
-            callback(HookParam(raw))
+            callback(param)
         } catch (t: Throwable) {
-            EzReflect.logger.error("Hook", "after hook failed for $target", t)
+            param.discardCallback()
+            HookDiagnostics.error("Hook", "$phase hook failed for $target; discarded callback changes", t)
+            return
         }
+        param.commitCallback()
     }
 }

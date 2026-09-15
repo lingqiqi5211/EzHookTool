@@ -1,9 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 
 import io.github.libxposed.api.XposedInterface
-import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
-import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import io.github.lingqiqi5211.ezhooktool.xposed.RequiresXposedApi
 import io.github.lingqiqi5211.ezhooktool.xposed.common.AfterChainStage
 import io.github.lingqiqi5211.ezhooktool.xposed.common.BeforeChainStage
@@ -13,6 +11,8 @@ import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookStageException
 import io.github.lingqiqi5211.ezhooktool.xposed.common.InterceptChainStage
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ReplaceChainStage
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.HookDiagnostics
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import java.lang.reflect.Executable
 import java.util.function.Consumer
 import java.util.function.Function
@@ -178,13 +178,15 @@ class HookFactory internal constructor(
             automaticIdEnabled = automaticIdEnabled,
             hooker = hooker,
         ) { effectiveId, effectiveHooker ->
-            val builder = EzXposed.base.hook(target)
-                .setPriority(priority)
-                .setExceptionMode(exceptionMode)
+            val builder =
+                EzXposed.base
+                    .hook(target)
+                    .setPriority(priority)
+                    .setExceptionMode(exceptionMode)
             // API 101 的 HookBuilder 没有 setId。只有拿到 ID 时才走这一步——ID 为 null 说明
             // framework 不支持 hook ID，或模块关掉了热重载。
             val builderWithId = if (effectiveId != null) XposedApiCompat.Api102.setId(builder, effectiveId) else builder
-            builderWithId.intercept(effectiveHooker)
+            XposedApiCompat.intercept(builderWithId, effectiveHooker)
         }
     }
 }
@@ -206,7 +208,7 @@ internal fun buildHooker(
             try {
                 hookChain.invoke(chain)
             } catch (t: HookStageException) {
-                EzReflect.logger.error("Hook", "${t.phase} hook failed for $target", t.cause ?: t)
+                HookDiagnostics.error("Hook", "${t.phase} hook failed for $target", t.cause ?: t)
                 t.fallback()
             }
         }

@@ -3,6 +3,7 @@
 package io.github.lingqiqi5211.ezhooktool.xposed.dsl
 
 import io.github.libxposed.api.XposedInterface
+import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 import io.github.lingqiqi5211.ezhooktool.xposed.RequiresXposedApi
 import io.github.lingqiqi5211.ezhooktool.xposed.XposedFeature
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
@@ -14,8 +15,7 @@ import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
  * 典型用法：在新 code 的 `onHotReloaded` 里据此挑出感兴趣的旧 handle，并用
  * [XposedInterface.HookHandle.replaceHook]、[replaceWith] 或 [replaceIntercept] 替换。
  */
-fun List<XposedInterface.HookHandle>.groupById(): Map<String?, List<XposedInterface.HookHandle>> =
-    groupBy(XposedApiCompat::hookId)
+fun List<XposedInterface.HookHandle>.groupById(): Map<String?, List<XposedInterface.HookHandle>> = groupBy(XposedApiCompat::hookId)
 
 /**
  * 用同一个 [XposedInterface.Hooker] 逐个原子替换旧 handle，返回新 handle 列表。
@@ -24,9 +24,7 @@ fun List<XposedInterface.HookHandle>.groupById(): Map<String?, List<XposedInterf
  * 未替换的不会回滚。返回列表的顺序与原列表一致；如果中途抛异常，返回前不包含未处理项。
  */
 @RequiresXposedApi(102)
-fun List<XposedInterface.HookHandle>.replaceAll(
-    hooker: XposedInterface.Hooker,
-): List<XposedInterface.HookHandle> {
+fun List<XposedInterface.HookHandle>.replaceAll(hooker: XposedInterface.Hooker): List<XposedInterface.HookHandle> {
     XposedApiCompat.requireFeature(XposedFeature.REPLACE_HOOK, "List<HookHandle>.replaceAll")
     return map { XposedApiCompat.Api102.replaceHook(it, hooker) }
 }
@@ -38,6 +36,7 @@ fun List<XposedInterface.HookHandle>.unhookAll() {
     val failures = mutableListOf<Throwable>()
     for (handle in this) {
         try {
+            EzXposed.markHotReloadIrreversible()
             handle.unhook()
         } catch (t: Throwable) {
             failures += t

@@ -25,18 +25,18 @@ import io.github.lingqiqi5211.ezhooktool.xposed.internal.ApplicationLifecycle
 object EzXposed {
     private var appContextValue: Context? = null
 
+    /** 是否启用安全模式。 */
     @JvmStatic
     @Volatile
-    /** 是否启用安全模式。 */
     var safeMode: Boolean = true
 
-    @JvmStatic
     /** 当前包名；`init(lpparam)` 之前为空字符串。 */
+    @JvmStatic
     var packageName: String = ""
         private set
 
-    @JvmStatic
     /** 当前进程名；`init(lpparam)` 之前为空字符串。 */
+    @JvmStatic
     var processName: String = ""
         private set
 
@@ -58,32 +58,33 @@ object EzXposed {
     internal val moduleResOrNull: Resources?
         get() = if (::moduleRes.isInitialized) moduleRes else null
 
-    @JvmStatic
     /** 当前默认 `ClassLoader`。 */
+    @JvmStatic
     val classLoader: ClassLoader
         get() = EzReflect.classLoader
 
-    @JvmStatic
     /** 始终可用的 `ClassLoader`；未初始化时回退到 `SystemClassLoader`。 */
+    @JvmStatic
     val safeClassLoader: ClassLoader
         get() = EzReflect.safeClassLoader
 
-    @JvmStatic
     /** 当前进程的 application context；过早访问时会抛异常。 */
+    @JvmStatic
     val appContext: Context
         @Synchronized get() {
             appContextValue?.let { return it }
 
-            val current = getCurrentApplicationContext()
-                ?: throw NullPointerException(
-                    "Cannot get appContext now, is Application onCreate finished?"
-                )
+            val current =
+                getCurrentApplicationContext()
+                    ?: throw NullPointerException(
+                        "Cannot get appContext now, is Application onCreate finished?",
+                    )
             appContextValue = current
             return current
         }
 
-    @JvmStatic
     /** 当前进程的 application context；尚未可用时返回 `null`。 */
+    @JvmStatic
     val appContextOrNull: Context?
         @Synchronized get() {
             appContextValue?.let { return it }
@@ -99,7 +100,8 @@ object EzXposed {
      * 默认行为：仅当 [appContext] 尚未初始化时才写入；已初始化时入参 `context` 会被忽略，
      * 避免不同 hook 回调以非 application context（如 Activity / ContextWrapper）反复覆盖全局缓存。
      *
-     * 仍需覆盖现有缓存时把 [force] 设为 `true`。
+     * 默认只缓存 `context.applicationContext`（或传入的 Application）；不可用时抛出 IllegalStateException。
+     * [force] 为 `true` 时原样缓存指定 Context 并覆盖旧值；调用者自行承担其生命周期，避免传入 Activity。
      *
      * [injectModuleAssetPath] 的资源注入副作用始终按入参 `context` 执行，与 [force] 无关。
      *
@@ -112,20 +114,23 @@ object EzXposed {
         injectModuleAssetPath: Boolean = false,
         force: Boolean = false,
     ) {
-        val resolved = context ?: throw NullPointerException(
-            "Cannot init appContext with null context."
-        )
+        val resolved =
+            context ?: throw NullPointerException(
+                "Cannot init appContext with null context.",
+            )
         synchronized(this) {
             if (force || appContextValue == null) {
-                if (!force && resolved.applicationContext !== resolved) {
-                    EzReflect.logger.warn(
-                        "EzXposed",
-                        "initAppContext received non-Application context " +
-                                "(${resolved.javaClass.name}); using it as application cache. " +
-                                "Prefer EzXposed.runOnApplicationAttach for the global application context."
-                    )
-                }
-                appContextValue = resolved
+                appContextValue =
+                    if (force) {
+                        resolved
+                    } else {
+                        resolved.applicationContext
+                            ?: (resolved as? android.app.Application)
+                            ?: throw IllegalStateException(
+                                "Application context is not available for ${resolved.javaClass.name}; " +
+                                    "wait for Application.attach or use force=true to explicitly retain this Context.",
+                            )
+                    }
             }
         }
         if (injectModuleAssetPath) {
@@ -163,14 +168,13 @@ object EzXposed {
         }
     }
 
-    @JvmStatic
     /** 在 `IXposedHookZygoteInit.initZygote` 阶段记录模块 apk 路径并初始化模块资源。 */
+    @JvmStatic
     fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
         modulePath = startupParam.modulePath
         initModuleResources()
     }
 
-    @JvmStatic
     /**
      * 初始化模块资源。
      *
@@ -178,11 +182,11 @@ object EzXposed {
      * 如需复用资源配置，可显式传入 [origRes]。
      * 通常不需要手动调用；[initZygote] 会自动初始化一次。
      */
+    @JvmStatic
     fun initModuleResources(origRes: XResources? = null) {
         moduleRes = XModuleResources.createInstance(requireModulePath(), origRes)
     }
 
-    @JvmStatic
     /**
      * 添加模块路径到目标 `Context.resources`。允许通过“R.xx.xxx”直接使用模块资源。
      *
@@ -204,39 +208,44 @@ object EzXposed {
      *
      * 3. 使用前调用该函数。
      */
+    @JvmStatic
     fun addModuleAssetPath(context: Context) {
         addModuleAssetPath(context.resources)
     }
 
-    @JvmStatic
     /** 将模块资源路径注入到指定 [resources]。 */
+    @JvmStatic
     fun addModuleAssetPath(resources: Resources) {
         requireModulePath()
         check(EzResources.inject(resources)) { "Failed to add the module asset path to $resources" }
     }
 
-    @JvmStatic
     /** 使用 `LoadPackageParam` 初始化当前进程的反射环境和进程信息。 */
+    @JvmStatic
     fun init(lpparam: XC_LoadPackage.LoadPackageParam) {
         EzReflect.init(lpparam.classLoader)
         packageName = lpparam.packageName
         processName = lpparam.processName
     }
 
-    private fun getCurrentApplicationContext(): Context? = try {
-        val activityThreadClass = Class.forName("android.app.ActivityThread")
-        val currentApplication = activityThreadClass.getDeclaredMethod("currentApplication").apply {
-            isAccessible = true
-        }.invoke(null) as? Context
-        currentApplication?.applicationContext ?: currentApplication
-    } catch (e: ReflectiveOperationException) {
-        throw IllegalStateException("Cannot get current application context.", e)
-    }
+    private fun getCurrentApplicationContext(): Context? =
+        try {
+            val activityThreadClass = Class.forName("android.app.ActivityThread")
+            val currentApplication =
+                activityThreadClass
+                    .getDeclaredMethod("currentApplication")
+                    .apply {
+                        isAccessible = true
+                    }.invoke(null) as? Context
+            currentApplication?.applicationContext ?: currentApplication
+        } catch (e: ReflectiveOperationException) {
+            throw IllegalStateException("Cannot get current application context.", e)
+        }
 
     private fun requireModulePath(): String {
         if (::modulePath.isInitialized) return modulePath
         throw IllegalStateException(
-            "Cannot get modulePath before EzXposed.initZygote is called."
+            "Cannot get modulePath before EzXposed.initZygote is called.",
         )
     }
 }

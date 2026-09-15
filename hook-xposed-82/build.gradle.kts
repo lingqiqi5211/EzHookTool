@@ -18,17 +18,33 @@ android {
         targetCompatibility = JavaVersion.VERSION_25
         sourceCompatibility = JavaVersion.VERSION_25
     }
+    testOptions.unitTests.isReturnDefaultValues = true
+}
+
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    useJUnitPlatform()
 }
 
 // 82 与 102 共用的源码。走 LibraryExtension：AGP 9 下 android { sourceSets["main"] } 的访问器会抛 ClassCastException。
 extensions.configure<com.android.build.api.dsl.LibraryExtension>("android") {
-    sourceSets.getByName("main").kotlin.directories.add(rootProject.layout.projectDirectory.dir("shared-src").asFile.path)
+    sourceSets
+        .getByName("main")
+        .kotlin.directories
+        .add(
+            rootProject.layout.projectDirectory
+                .dir("shared-src")
+                .asFile.path,
+        )
 }
 
 dependencies {
     implementation(project(":core"))
     compileOnly(libs.xposed82Api)
     compileOnly(libs.annotation.jvm)
+    testImplementation(libs.xposed82Api)
+    testImplementation(libs.junit.api)
+    testRuntimeOnly(libs.junit.engine)
+    testRuntimeOnly(libs.junit.launcher)
 }
 
 dokka {

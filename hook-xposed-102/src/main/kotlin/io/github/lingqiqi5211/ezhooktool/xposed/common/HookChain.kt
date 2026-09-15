@@ -4,7 +4,9 @@ import io.github.libxposed.api.XposedInterface
 import java.lang.reflect.Executable
 import java.util.Collections
 
-internal class InvocationContext(private val chain: XposedInterface.Chain) {
+internal class InvocationContext(
+    private val chain: XposedInterface.Chain,
+) {
     private val originalThisObject: Any? = chain.thisObject
     private val originalArgs: Array<Any?> = chain.args.toTypedArray()
 
@@ -20,11 +22,12 @@ internal class InvocationContext(private val chain: XposedInterface.Chain) {
         if (skipped) return
         try {
             val receiver = thisObject
-            result = if (receiver == null) {
-                chain.proceed(args)
-            } else {
-                chain.proceedWith(receiver, args)
-            }
+            result =
+                if (receiver == null) {
+                    chain.proceed(args)
+                } else {
+                    chain.proceedWith(receiver, args)
+                }
             throwable = null
         } catch (t: Throwable) {
             result = null
@@ -62,15 +65,21 @@ private fun InvocationContext.resultOrThrow(): Any? {
 }
 
 internal fun interface ChainStage {
-    fun intercept(context: InvocationContext, proceed: () -> Unit)
+    fun intercept(
+        context: InvocationContext,
+        proceed: () -> Unit,
+    )
 }
 
-internal class HookChain(private val stages: List<ChainStage>) {
+internal class HookChain(
+    stages: List<ChainStage>,
+) {
+    private val beforeStages = stages.filterIsInstance<BeforeChainStage>()
+    private val aroundStages = stages.filter { it !is BeforeChainStage && it !is AfterChainStage }
+    private val afterStages = stages.filterIsInstance<AfterChainStage>().asReversed()
+
     fun invoke(chain: XposedInterface.Chain): Any? {
         val context = InvocationContext(chain)
-        val beforeStages = stages.filterIsInstance<BeforeChainStage>()
-        val aroundStages = stages.filter { it !is BeforeChainStage && it !is AfterChainStage }
-        val afterStages = stages.filterIsInstance<AfterChainStage>()
 
         for (stage in beforeStages) {
             stage.intercept(context) {}
@@ -91,7 +100,7 @@ internal class HookChain(private val stages: List<ChainStage>) {
             proceed(0)
         }
 
-        afterStages.asReversed().forEach { stage ->
+        afterStages.forEach { stage ->
             stage.intercept(context) {}
         }
 
@@ -103,7 +112,10 @@ internal class HookChain(private val stages: List<ChainStage>) {
 internal class BeforeChainStage(
     private val callback: (HookParam) -> Unit,
 ) : ChainStage {
-    override fun intercept(context: InvocationContext, proceed: () -> Unit) {
+    override fun intercept(
+        context: InvocationContext,
+        proceed: () -> Unit,
+    ) {
         context.isAfterStage = false
         try {
             callback(HookParam(context))
@@ -117,7 +129,10 @@ internal class BeforeChainStage(
 internal class AfterChainStage(
     private val callback: (HookParam) -> Unit,
 ) : ChainStage {
-    override fun intercept(context: InvocationContext, proceed: () -> Unit) {
+    override fun intercept(
+        context: InvocationContext,
+        proceed: () -> Unit,
+    ) {
         proceed()
         val savedResult = context.result
         val savedThrowable = context.throwable
@@ -138,14 +153,18 @@ internal class AfterChainStage(
 internal class ReplaceChainStage(
     private val callback: (HookParam) -> Any?,
 ) : ChainStage {
-    override fun intercept(context: InvocationContext, proceed: () -> Unit) {
+    override fun intercept(
+        context: InvocationContext,
+        proceed: () -> Unit,
+    ) {
         context.isAfterStage = false
         context.skipped = true
-        context.result = try {
-            callback(HookParam(context))
-        } catch (t: Throwable) {
-            throw HookStageException("replace", t, context::fallbackToOriginal)
-        }
+        context.result =
+            try {
+                callback(HookParam(context))
+            } catch (t: Throwable) {
+                throw HookStageException("replace", t, context::fallbackToOriginal)
+            }
         context.throwable = null
     }
 }
@@ -153,82 +172,90 @@ internal class ReplaceChainStage(
 internal class InterceptChainStage(
     private val callback: (XposedInterface.Chain) -> Any?,
 ) : ChainStage {
-    override fun intercept(context: InvocationContext, proceed: () -> Unit) {
+    override fun intercept(
+        context: InvocationContext,
+        proceed: () -> Unit,
+    ) {
         context.isAfterStage = false
         var proceedCount = 0
         val ownerThread = Thread.currentThread()
         var closed = false
-        val chain = object : XposedInterface.Chain {
-            private fun ensureUsable() {
-                check(Thread.currentThread() === ownerThread) { "Chain cannot be shared across threads" }
-                check(!closed) { "Chain cannot be reused after intercept returns" }
-            }
+        val chain =
+            object : XposedInterface.Chain {
+                private fun ensureUsable() {
+                    check(Thread.currentThread() === ownerThread) { "Chain cannot be shared across threads" }
+                    check(!closed) { "Chain cannot be reused after intercept returns" }
+                }
 
-            override fun getExecutable(): Executable {
-                ensureUsable()
-                return context.executable
-            }
+                override fun getExecutable(): Executable {
+                    ensureUsable()
+                    return context.executable
+                }
 
-            override fun getThisObject(): Any? {
-                ensureUsable()
-                return context.thisObject
-            }
+                override fun getThisObject(): Any? {
+                    ensureUsable()
+                    return context.thisObject
+                }
 
-            override fun getArgs(): List<Any?> {
-                ensureUsable()
-                return Collections.unmodifiableList(context.args.asList())
-            }
+                override fun getArgs(): List<Any?> {
+                    ensureUsable()
+                    return Collections.unmodifiableList(context.args.asList())
+                }
 
-            override fun getArg(index: Int): Any? {
-                ensureUsable()
-                return context.args[index]
-            }
+                override fun getArg(index: Int): Any? {
+                    ensureUsable()
+                    return context.args[index]
+                }
 
-            override fun proceedWith(thisObject: Any): Any? {
-                ensureUsable()
-                return proceedWith(thisObject, context.args)
-            }
+                override fun proceedWith(thisObject: Any): Any? {
+                    ensureUsable()
+                    return proceedWith(thisObject, context.args)
+                }
 
-            override fun proceedWith(thisObject: Any, args: Array<out Any?>): Any? {
-                ensureUsable()
-                val originalThisObject = context.thisObject
-                context.thisObject = thisObject
-                try {
+                override fun proceedWith(
+                    thisObject: Any,
+                    args: Array<out Any?>,
+                ): Any? {
+                    ensureUsable()
+                    val originalThisObject = context.thisObject
+                    context.thisObject = thisObject
+                    try {
+                        return proceedInternal(Array(args.size) { args[it] })
+                    } finally {
+                        context.thisObject = originalThisObject
+                    }
+                }
+
+                private fun proceedInternal(args: Array<Any?>): Any? {
+                    ensureUsable()
+                    proceedCount += 1
+                    context.args = args
+                    proceed()
+                    context.throwable?.let { throw it }
+                    return context.result
+                }
+
+                override fun proceed(args: Array<out Any?>): Any? {
+                    ensureUsable()
                     return proceedInternal(Array(args.size) { args[it] })
-                } finally {
-                    context.thisObject = originalThisObject
+                }
+
+                override fun proceed(): Any? {
+                    ensureUsable()
+                    return proceedInternal(context.args)
                 }
             }
-
-            private fun proceedInternal(args: Array<Any?>): Any? {
-                ensureUsable()
-                proceedCount += 1
-                context.args = args
-                proceed()
-                context.throwable?.let { throw it }
-                return context.result
-            }
-
-            override fun proceed(args: Array<out Any?>): Any? {
-                ensureUsable()
-                return proceedInternal(Array(args.size) { args[it] })
-            }
-
-            override fun proceed(): Any? {
-                ensureUsable()
-                return proceedInternal(context.args)
-            }
-        }
 
         try {
-            val result = try {
-                callback(chain)
-            } catch (t: Throwable) {
-                if (t is HookStageException || context.throwable === t) throw t
-                throw HookStageException("intercept", t) {
-                    if (proceedCount == 0) context.fallbackToOriginal() else context.resultOrThrow()
+            val result =
+                try {
+                    callback(chain)
+                } catch (t: Throwable) {
+                    if (t is HookStageException || context.throwable === t) throw t
+                    throw HookStageException("intercept", t) {
+                        if (proceedCount == 0) context.fallbackToOriginal() else context.resultOrThrow()
+                    }
                 }
-            }
             if (proceedCount == 0) {
                 context.skipped = true
             }

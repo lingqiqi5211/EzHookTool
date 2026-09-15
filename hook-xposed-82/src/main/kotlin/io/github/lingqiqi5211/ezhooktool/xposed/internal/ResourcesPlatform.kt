@@ -2,6 +2,7 @@ package io.github.lingqiqi5211.ezhooktool.xposed.internal
 
 import android.content.res.Resources
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
+import io.github.lingqiqi5211.ezhooktool.xposed.ResourceHookState
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam
 import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createHook
 import java.lang.reflect.Method
@@ -19,7 +20,12 @@ internal object ResourcesPlatform {
     }
 
     @Suppress("UNUSED_PARAMETER")
-    fun hookBefore(method: Method, key: String, callback: (HookParam) -> Unit) {
+    fun hookBefore(
+        method: Method,
+        key: String,
+        callback: (HookParam) -> Unit,
+    ): () -> ResourceHookState {
         method.createHook { before(callback) }
+        return { ResourceHookState.INSTALLED }
     }
 }
