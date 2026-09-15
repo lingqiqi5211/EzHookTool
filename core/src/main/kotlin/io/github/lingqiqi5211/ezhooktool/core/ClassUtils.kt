@@ -4,32 +4,39 @@ package io.github.lingqiqi5211.ezhooktool.core
 
 import io.github.lingqiqi5211.ezhooktool.core.query.ClassQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryPlan
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryResultMode
 import io.github.lingqiqi5211.ezhooktool.core.query.classQuery
 import kotlin.reflect.KProperty
 
-private data class ClassNameCacheKey(val name: String)
-
-private data class FirstClassNameCacheKey(val names: List<String>)
-
-private data class ClassIfCacheKey(
-    val queryKey: List<Any>,
-    val resultMode: String,
+private data class ClassNameCacheKey(
+    val name: String,
 )
 
-private fun Throwable.isRecoverableClassLoadError(): Boolean = when (this) {
-    is ClassNotFoundException,
-    is NoClassDefFoundError,
-    is TypeNotPresentException,
-    is LinkageError -> true
-    else -> false
-}
+private data class FirstClassNameCacheKey(
+    val names: List<String>,
+)
+
+private fun Throwable.isRecoverableClassLoadError(): Boolean =
+    when (this) {
+        is ClassNotFoundException,
+        is NoClassDefFoundError,
+        is TypeNotPresentException,
+        is LinkageError,
+        -> true
+
+        else -> false
+    }
 
 private fun String.withLastDotAsDollar(): String? {
     val index = lastIndexOf('.')
     return if (index >= 0) replaceRange(index, index + 1, "\$") else null
 }
 
-private fun tryLoadClass(name: String, classLoader: ClassLoader): Class<*>? =
+private fun tryLoadClass(
+    name: String,
+    classLoader: ClassLoader,
+): Class<*>? =
     try {
         Class.forName(name, false, classLoader)
     } catch (throwable: Throwable) {
@@ -51,19 +58,20 @@ class LazyClass internal constructor(
 ) {
     /** 加载并返回类，找不到时抛出 [ClassNotFoundError]。 */
     fun resolve(): Class<*> =
-        loadClassFirst(
-            *names.toTypedArray(),
-            classLoader = classLoaderProvider(),
-        )
+        EzReflect.withQuery {
+            loadClassFirst(*names.toTypedArray(), classLoader = classLoaderProvider())
+        }
 
     /** 加载并返回类，找不到时返回 null。 */
     fun resolveOrNull(): Class<*>? =
-        loadClassFirstOrNull(
-            *names.toTypedArray(),
-            classLoader = classLoaderProvider(),
-        )
+        EzReflect.withQuery {
+            loadClassFirstOrNull(*names.toTypedArray(), classLoader = classLoaderProvider())
+        }
 
-    operator fun getValue(thisRef: Any?, property: KProperty<*>): Class<*> = resolve()
+    operator fun getValue(
+        thisRef: Any?,
+        property: KProperty<*>,
+    ): Class<*> = resolve()
 }
 
 /**
@@ -74,14 +82,16 @@ class NullableLazyClass internal constructor(
 ) {
     fun resolveOrNull(): Class<*>? = delegate.resolveOrNull()
 
-    operator fun getValue(thisRef: Any?, property: KProperty<*>): Class<*>? = resolveOrNull()
+    operator fun getValue(
+        thisRef: Any?,
+        property: KProperty<*>,
+    ): Class<*>? = resolveOrNull()
 }
 
 /**
  * 创建延迟加载类。默认使用当前 [EzReflect.classLoader]。
  */
-fun lazyClass(vararg names: String): LazyClass =
-    LazyClass(names.toList(), { EzReflect.classLoader })
+fun lazyClass(vararg names: String): LazyClass = LazyClass(names.toList(), { EzReflect.classLoader })
 
 /**
  * 创建延迟加载类，使用指定 [ClassLoader]。
@@ -89,14 +99,12 @@ fun lazyClass(vararg names: String): LazyClass =
 fun lazyClass(
     classLoader: ClassLoader,
     vararg names: String,
-): LazyClass =
-    LazyClass(names.toList(), { classLoader })
+): LazyClass = LazyClass(names.toList(), { classLoader })
 
 /**
  * 创建延迟加载类，找不到时返回 null。
  */
-fun lazyClassOrNull(vararg names: String): NullableLazyClass =
-    NullableLazyClass(lazyClass(*names))
+fun lazyClassOrNull(vararg names: String): NullableLazyClass = NullableLazyClass(lazyClass(*names))
 
 /**
  * 创建延迟加载类，使用指定 [ClassLoader]，找不到时返回 null。
@@ -104,8 +112,7 @@ fun lazyClassOrNull(vararg names: String): NullableLazyClass =
 fun lazyClassOrNull(
     classLoader: ClassLoader,
     vararg names: String,
-): NullableLazyClass =
-    NullableLazyClass(lazyClass(classLoader, *names))
+): NullableLazyClass = NullableLazyClass(lazyClass(classLoader, *names))
 
 // ═══════════════════════ 基础加载 ═══════════════════════
 
@@ -124,10 +131,12 @@ fun lazyClassOrNull(
 @JvmOverloads
 fun loadClass(
     name: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
 ): Class<*> =
-    loadClassOrNull(name, classLoader)
-        ?: throw ClassNotFoundError(name, classLoader.toString())
+    EzReflect.withQuery(classLoader) { classLoader ->
+        loadClassOrNull(name, classLoader)
+            ?: throw ClassNotFoundError(name, classLoader.toString())
+    }
 
 /**
  * 加载类。找不到时返回 null。
@@ -146,56 +155,56 @@ fun loadClass(
 @JvmOverloads
 fun loadClassOrNull(
     name: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
-): Class<*>? {
-    val key = ClassNameCacheKey(name)
-    EzReflect.classCacheGet(classLoader, key)?.let { return it }
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+): Class<*>? =
+    EzReflect.withQuery(classLoader) { classLoader ->
+        val key = ClassNameCacheKey(name)
+        EzReflect.classCacheGet(classLoader, key)?.let { return@withQuery it }
 
-    val clz = tryLoadClass(name, classLoader)
-        ?: name.withLastDotAsDollar()?.let { tryLoadClass(it, classLoader) }
+        val clz =
+            tryLoadClass(name, classLoader)
+                ?: name.withLastDotAsDollar()?.let { tryLoadClass(it, classLoader) }
 
-    if (clz != null) {
-        EzReflect.classCachePut(classLoader, key, clz)
+        if (clz != null) {
+            EzReflect.classCachePut(classLoader, key, clz)
+        }
+        clz
     }
-    return clz
-}
 
 private fun findClassesMatching(
     classLoader: ClassLoader,
-    query: ClassQuery,
-    collectAll: Boolean,
+    plan: QueryPlan<Class<*>>,
 ): List<Class<*>> {
-    val queryKey = query.cacheKeyOrNull()
-    val resultMode = if (collectAll) "all" else "first"
-    val cacheKey = queryKey?.let { ClassIfCacheKey(it, resultMode) }
+    val collectAll = plan.resultMode == QueryResultMode.ALL
+    val cacheKey = plan.cacheKey
     if (cacheKey != null) {
         val cached = EzReflect.classQueryCacheGet(classLoader, cacheKey)
         if (collectAll && cached is List<*>) {
             @Suppress("UNCHECKED_CAST")
-            return cached as List<Class<*>>
+            return ArrayList(cached as List<Class<*>>)
         }
         if (!collectAll && cached is Class<*>) return listOf(cached)
     }
 
     val results = mutableListOf<Class<*>>()
     for (name in EzReflect.classResolver.classNamesOf(classLoader).distinct()) {
-        if (!query.matchesName(name)) continue
+        if (!plan.matchesName(name)) continue
         val clz = loadClassOrNull(name, classLoader) ?: continue
-        if (!query.matchesClass(clz)) continue
+        if (!plan.matches(clz)) continue
 
         results += clz
-        if (!collectAll && !query.requiresSingleResult) break
-        if (!collectAll && results.size > 1) {
+        if (plan.resultMode == QueryResultMode.FIRST) break
+        if (plan.requiresSingleResult && results.size > 1) {
             throw SingleResultExpectedException(
                 target = "class in $classLoader",
-                conditionDesc = query.describe(),
+                conditionDesc = plan.description,
             )
         }
     }
 
     if (cacheKey != null) {
         if (collectAll) {
-            EzReflect.classQueryCachePut(classLoader, cacheKey, results.toList())
+            EzReflect.classQueryCachePut(classLoader, cacheKey, ArrayList(results))
         } else {
             results.firstOrNull()?.let { EzReflect.classQueryCachePut(classLoader, cacheKey, it) }
         }
@@ -210,41 +219,44 @@ private fun findClassesMatching(
  */
 @JvmOverloads
 fun findClassIf(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: ClassQuery.() -> Unit,
-): Class<*> {
-    QueryFilterContext.warnNestedFind("findClassIf")
-    val builtQuery = classQuery(query)
-    return findClassesMatching(classLoader, builtQuery, collectAll = false).firstOrNull()
-        ?: throw ClassNotFoundError(
-            className = builtQuery.describe() ?: "<condition>",
-            classLoaderInfo = classLoader.toString(),
-        )
-}
+): Class<*> =
+    EzReflect.withQuery(classLoader) { classLoader ->
+        QueryFilterContext.warnNestedFind("findClassIf")
+        val plan = classQuery(query).freeze(QueryResultMode.FIRST)
+        findClassesMatching(classLoader, plan).firstOrNull()
+            ?: throw ClassNotFoundError(
+                className = plan.description ?: "<condition>",
+                classLoaderInfo = classLoader.toString(),
+            )
+    }
 
 /**
  * 按条件查找类，找不到时返回 null。
  */
 @JvmOverloads
 fun findClassIfOrNull(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: ClassQuery.() -> Unit,
-): Class<*>? {
-    QueryFilterContext.warnNestedFind("findClassIfOrNull")
-    return findClassesMatching(classLoader, classQuery(query), collectAll = false).firstOrNull()
-}
+): Class<*>? =
+    EzReflect.withQuery(classLoader) { classLoader ->
+        QueryFilterContext.warnNestedFind("findClassIfOrNull")
+        findClassesMatching(classLoader, classQuery(query).freeze(QueryResultMode.FIRST)).firstOrNull()
+    }
 
 /**
  * 按条件查找全部类。
  */
 @JvmOverloads
 fun findAllClassesIf(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: ClassQuery.() -> Unit,
-): List<Class<*>> {
-    QueryFilterContext.warnNestedFind("findAllClassesIf")
-    return findClassesMatching(classLoader, classQuery(query), collectAll = true)
-}
+): List<Class<*>> =
+    EzReflect.withQuery(classLoader) { classLoader ->
+        QueryFilterContext.warnNestedFind("findAllClassesIf")
+        findClassesMatching(classLoader, classQuery(query).freeze(QueryResultMode.ALL))
+    }
 
 // ═══════════════════════ 多名称兜底 ═══════════════════════
 
@@ -264,14 +276,16 @@ fun findAllClassesIf(
  */
 fun loadClassFirst(
     vararg names: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
 ): Class<*> =
-    loadClassFirstOrNull(*names, classLoader = classLoader)
-        ?: throw ClassNotFoundError(
-            className = names.firstOrNull() ?: "<empty>",
-            classLoaderInfo = classLoader.toString(),
-            triedNames = names.toList()
-        )
+    EzReflect.withQuery(classLoader) { classLoader ->
+        loadClassFirstOrNull(*names, classLoader = classLoader)
+            ?: throw ClassNotFoundError(
+                className = names.firstOrNull() ?: "<empty>",
+                classLoaderInfo = classLoader.toString(),
+                triedNames = names.toList(),
+            )
+    }
 
 /**
  * 同 [loadClassFirst]，全部找不到时返回 null。
@@ -285,20 +299,22 @@ fun loadClassFirst(
  */
 fun loadClassFirstOrNull(
     vararg names: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
-): Class<*>? {
-    val key = FirstClassNameCacheKey(names.toList())
-    EzReflect.classCacheGet(classLoader, key)?.let { return it }
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+): Class<*>? =
+    EzReflect.withQuery(classLoader) { classLoader ->
+        val candidates = names.toList()
+        val key = FirstClassNameCacheKey(candidates)
+        EzReflect.classCacheGet(classLoader, key)?.let { return@withQuery it }
 
-    for (name in names) {
-        val clz = loadClassOrNull(name, classLoader)
-        if (clz != null) {
-            EzReflect.classCachePut(classLoader, key, clz)
-            return clz
+        for (name in candidates) {
+            val clz = loadClassOrNull(name, classLoader)
+            if (clz != null) {
+                EzReflect.classCachePut(classLoader, key, clz)
+                return@withQuery clz
+            }
         }
+        null
     }
-    return null
-}
 
 // ═══════════════════════ 批量加载 ═══════════════════════
 
@@ -315,9 +331,11 @@ fun loadClassFirstOrNull(
  */
 fun loadClasses(
     vararg names: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
 ): List<Class<*>> =
-    names.mapNotNull { loadClassOrNull(it, classLoader) }
+    EzReflect.withQuery(classLoader) { classLoader ->
+        names.mapNotNull { loadClassOrNull(it, classLoader) }
+    }
 
 // ═══════════════════════ String 扩展 ═══════════════════════
 
@@ -331,10 +349,7 @@ fun loadClasses(
  * @param classLoader 用于加载当前类名的 `ClassLoader`
  */
 @JvmOverloads
-fun String.toClass(
-    classLoader: ClassLoader = EzReflect.classLoader,
-): Class<*> =
-    loadClass(this, classLoader)
+fun String.toClass(classLoader: ClassLoader = EzReflect.defaultLoaderMarker): Class<*> = loadClass(this, classLoader)
 
 /**
  * 字符串直接转 Class，找不到返回 null。
@@ -346,10 +361,7 @@ fun String.toClass(
  * @param classLoader 用于加载当前类名的 `ClassLoader`
  */
 @JvmOverloads
-fun String.toClassOrNull(
-    classLoader: ClassLoader = EzReflect.classLoader,
-): Class<*>? =
-    loadClassOrNull(this, classLoader)
+fun String.toClassOrNull(classLoader: ClassLoader = EzReflect.defaultLoaderMarker): Class<*>? = loadClassOrNull(this, classLoader)
 
 // ═══════════════════════ Class 工具扩展 ═══════════════════════
 
@@ -377,7 +389,7 @@ fun Class<*>.isSubclassOf(parent: Class<*>): Boolean = parent.isAssignableFrom(t
 @JvmOverloads
 fun Class<*>.isSubclassOf(
     parentName: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
 ): Boolean {
     val parent = loadClassOrNull(parentName, classLoader) ?: return false
     return isSubclassOf(parent)
@@ -392,5 +404,4 @@ fun Class<*>.isSubclassOf(
  *
  * @param name 要检测的类名
  */
-fun ClassLoader.hasClass(name: String): Boolean =
-    loadClassOrNull(name, this) != null
+fun ClassLoader.hasClass(name: String): Boolean = loadClassOrNull(name, this) != null

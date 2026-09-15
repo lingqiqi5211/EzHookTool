@@ -1,345 +1,195 @@
 package io.github.lingqiqi5211.ezhooktool.core
 
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 
-/**
- * 日志接口。
- *
- * core 模块默认使用 [DefaultLogger]（输出到 System.err）。
- * Android 环境可替换为 android.util.Log 实现。
- *
- * ```kotlin
- * EzReflect.logger = object : EzLogger {
- *     override fun debug(tag: String, msg: String) { Log.d(tag, msg) }
- *     override fun warn(tag: String, msg: String) { Log.w(tag, msg) }
- *     override fun error(tag: String, msg: String, t: Throwable?) { Log.e(tag, msg, t) }
- * }
- * ```
- */
+/** 日志接口；core 默认输出到 System.err，Android 调用方可替换实现。 */
 interface EzLogger {
-    /**
-     * 输出调试日志。
-     *
-     * @param tag 日志标签
-     * @param msg 日志内容
-     */
-    fun debug(tag: String, msg: String)
+    /** 输出调试日志。 */
+    fun debug(
+        tag: String,
+        msg: String,
+    )
 
-    /**
-     * 输出警告日志。
-     *
-     * @param tag 日志标签
-     * @param msg 日志内容
-     */
-    fun warn(tag: String, msg: String)
+    /** 输出警告日志。 */
+    fun warn(
+        tag: String,
+        msg: String,
+    )
 
-    /**
-     * 输出错误日志，并可附带异常。
-     *
-     * @param tag 日志标签
-     * @param msg 日志内容
-     * @param t 可选异常对象
-     */
-    fun error(tag: String, msg: String, t: Throwable? = null)
+    /** 输出错误日志，并可附带异常。 */
+    fun error(
+        tag: String,
+        msg: String,
+        t: Throwable? = null,
+    )
 }
 
 /** 默认日志实现，输出到 System.err。 */
 internal object DefaultLogger : EzLogger {
-    override fun debug(tag: String, msg: String) {
+    override fun debug(
+        tag: String,
+        msg: String,
+    ) {
         System.err.println("[$tag] D: $msg")
     }
 
-    override fun warn(tag: String, msg: String) {
+    override fun warn(
+        tag: String,
+        msg: String,
+    ) {
         System.err.println("[$tag] W: $msg")
     }
 
-    override fun error(tag: String, msg: String, t: Throwable?) {
+    override fun error(
+        tag: String,
+        msg: String,
+        t: Throwable?,
+    ) {
         System.err.println("[$tag] E: $msg")
         t?.printStackTrace(System.err)
     }
 }
 
-internal enum class ReflectCacheBucket {
-    METHOD,
-    FIELD,
-    CONSTRUCTOR,
-}
+internal enum class ReflectCacheBucket { METHOD, FIELD, CONSTRUCTOR }
 
 /**
- * EzHookTool 反射核心初始化入口。
- *
- * 所有反射 API 的 classLoader 参数默认使用 [classLoader]。
- * 不调用 [init] 时，默认使用 [ClassLoader.getSystemClassLoader]。
- *
- * ```kotlin
- * // Xposed 中
- * EzReflect.init(lpparam.classLoader)
- *
- * // 纯 JVM 中
- * EzReflect.init(MyClass::class.java.classLoader!!)
- * ```
+ * 反射核心入口，无需 Android 或 Hook 运行时。
+ * 未初始化时使用 SystemClassLoader；[init]、[reset]、[clearCache] 和解析器变更会发布新的配置/缓存状态。
+ * 同步查询及其嵌套查询使用同一状态，在途旧查询不能向新缓存写入结果。
  */
 object EzReflect {
-
     private const val TAG = "EzReflect"
-    private const val CACHE_TRIM_PUT_INTERVAL = 64
-    private const val CACHE_STALE_ACCESS_GAP = 4096L
+    internal val context = ReflectionContext()
 
-    @Volatile
-    private var _initialized = false
+    /** 默认参数占位，不作为真实加载器使用；进入查询状态后才解析当前默认 loader。 */
+    @PublishedApi
+    internal val defaultLoaderMarker: ClassLoader = object : ClassLoader(null) {}
 
-    /**
-     * 当前全局默认 ClassLoader。
-     *
-     * 所有反射查找 API 的 classLoader 参数默认使用此值。
-     * 调用 [init] 设置，未初始化时为 [ClassLoader.getSystemClassLoader]。
-     */
-    @Volatile
-    var classLoader: ClassLoader = ClassLoader.getSystemClassLoader()
-        private set
+    @OptIn(ExperimentalContracts::class)
+    internal inline fun <T> withQuery(block: () -> T): T {
+        contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+        return context.query(block)
+    }
 
-    /**
-     * 始终可用的 `ClassLoader`。
-     *
-     * 未初始化时会回退到 `SystemClassLoader`。
-     */
-    @JvmStatic
-    val safeClassLoader: ClassLoader
-        get() = if (_initialized) classLoader else ClassLoader.getSystemClassLoader()
+    @OptIn(ExperimentalContracts::class)
+    internal inline fun <T> withQuery(
+        classLoader: ClassLoader,
+        block: (ClassLoader) -> T,
+    ): T {
+        contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+        return context.query {
+            block(if (classLoader === defaultLoaderMarker) context.state.classLoader else classLoader)
+        }
+    }
 
-    /** 是否已调用过 [init]。 */
-    val isInitialized: Boolean get() = _initialized
-
-    /**
-     * 是否启用查找结果缓存。默认 true。
-     *
-     * 开启后，loadClass / findClassIf / findMethod / findField / findConstructor 的结果会以稳定查询条件为 key 缓存，
-     * 减少重复加载类和重复遍历成员列表。
-     *
-     * `name`、`paramCount`、`type`、`params` 等结构化条件会参与缓存。
-     * 自定义 `filter` 可能捕获外部状态，不会参与缓存，避免错误复用旧结果。
-     * 缓存仅保存在当前运行期内，会在 [init]、[reset] 或 [clearCache] 时清空。
-     *
-     * 关闭缓存并释放已有缓存：`EzReflect.cacheEnabled = false`
-     * 清除已有缓存：`EzReflect.clearCache()`
-     */
-    @Volatile
-    @JvmStatic
-    var cacheEnabled: Boolean = true
-        set(value) {
-            field = value
-            if (!value) clearCache()
+    /** 当前默认 ClassLoader；查询内部读取的是该次查询捕获的配置。 */
+    var classLoader: ClassLoader
+        get() = context.state.classLoader
+        private set(value) {
+            context.update { it.copy(classLoader = value) }
         }
 
+    /** 始终可用的 ClassLoader，未初始化时为 SystemClassLoader。 */
+    @JvmStatic
+    val safeClassLoader: ClassLoader get() = classLoader
+
+    /** 是否已调用 [init]。 */
+    val isInitialized: Boolean get() = context.state.initialized
+
     /**
-     * 调试模式。默认 false。
-     *
-     * 开启后，[MemberNotFoundException] 的错误信息会包含候选成员列表，
-     * 方便排查条件写错的问题。
-     *
-     * ```kotlin
-     * EzReflect.debugMode = true
-     * ```
+     * 是否缓存查找结果，默认 true。
+     * 当前作用域的成员和类查询合计最多 4096 条，超过 256 项的集合结果不缓存。
+     * 缓存有效期间强引用键及结果；[init]、[reset]、[clearCache] 或配置切换会清空退休状态并停止其写入。
+     * 自定义 filter 默认不自动缓存；主动 cache key 的一致性由调用者负责。
      */
+    @JvmStatic
+    var cacheEnabled: Boolean
+        get() = context.state.cacheEnabled
+        set(value) {
+            context.update { it.copy(cacheEnabled = value) }
+        }
+
+    /** 开启后查找失败信息包含候选成员。 */
     @Volatile
     @JvmStatic
     var debugMode: Boolean = false
 
-    /**
-     * 日志实现。默认 [DefaultLogger]（输出到 System.err）。
-     *
-     * ```kotlin
-     * EzReflect.logger = MyAndroidLogger()
-     * ```
-     */
+    /** 日志实现，默认 [DefaultLogger]。 */
     @Volatile
     @JvmStatic
     var logger: EzLogger = DefaultLogger
 
-    /**
-     * 成员枚举策略。
-     *
-     * 默认直接读取 `declaredMembers`，如需兼容特殊运行时或自定义过滤逻辑，可替换为自己的实现。
-     * 替换策略时会清空查找缓存，避免复用旧策略下的结果。
-     */
-    @Volatile
+    /** 成员枚举策略；替换时与缓存一起发布，在途查询继续使用原策略。 */
     @JvmStatic
-    var memberResolver: MemberResolver = DefaultMemberResolver
+    var memberResolver: MemberResolver
+        get() = context.state.memberResolver
         set(value) {
-            field = value
-            clearCache()
+            context.update { it.copy(memberResolver = value) }
         }
 
-    /**
-     * 类名枚举策略。
-     *
-     * 默认 [DefaultClassResolver] 返回空列表——core 没有"主动注册类名"的入口，所以默认下
-     * `findClassIf { ... }` 这类基于枚举的查找会始终空结果。
-     *
-     * Android / Xposed 场景里通常会接入 DexKit 或自带类名索引，把 [ClassResolver] 替换成那一侧的实现。
-     */
-    @Volatile
+    /** 类名枚举策略；默认返回空序列，可接入平台索引，替换时发布新的缓存状态。 */
     @JvmStatic
-    var classResolver: ClassResolver = DefaultClassResolver
+    var classResolver: ClassResolver
+        get() = context.state.classResolver
         set(value) {
-            field = value
-            clearCache()
+            context.update { it.copy(classResolver = value) }
         }
 
-    private data class CacheEntry(
-        val value: Any,
-        @Volatile var lastAccess: Long,
-    )
+    internal fun cacheGet(
+        owner: Class<*>,
+        bucket: ReflectCacheBucket,
+        key: Any,
+    ): Any? = context.state.get(owner, bucket, key)
 
-    private class MemberClassCache {
-        val methods = ConcurrentHashMap<Any, CacheEntry>()
-        val fields = ConcurrentHashMap<Any, CacheEntry>()
-        val constructors = ConcurrentHashMap<Any, CacheEntry>()
-        private val putCount = AtomicInteger()
+    internal fun cachePut(
+        owner: Class<*>,
+        bucket: ReflectCacheBucket,
+        key: Any,
+        value: Any,
+    ) = context.state.put(owner, bucket, key, value)
 
-        fun bucket(type: ReflectCacheBucket): ConcurrentHashMap<Any, CacheEntry> = when (type) {
-            ReflectCacheBucket.METHOD -> methods
-            ReflectCacheBucket.FIELD -> fields
-            ReflectCacheBucket.CONSTRUCTOR -> constructors
-        }
+    internal fun classCacheGet(
+        classLoader: ClassLoader,
+        key: Any,
+    ): Class<*>? = context.state.get(classLoader, null, key) as? Class<*>
 
-        fun shouldTrimAfterPut(): Boolean =
-            putCount.incrementAndGet() % CACHE_TRIM_PUT_INTERVAL == 0
-    }
+    internal fun classCachePut(
+        classLoader: ClassLoader,
+        key: Any,
+        value: Class<*>,
+    ) = context.state.put(classLoader, null, key, value)
 
-    private class ClassLoaderCache {
-        val classes = ConcurrentHashMap<Any, CacheEntry>()
-        private val putCount = AtomicInteger()
+    internal fun classQueryCacheGet(
+        classLoader: ClassLoader,
+        key: Any,
+    ): Any? = context.state.get(classLoader, null, key)
 
-        fun shouldTrimAfterPut(): Boolean =
-            putCount.incrementAndGet() % CACHE_TRIM_PUT_INTERVAL == 0
-    }
+    internal fun classQueryCachePut(
+        classLoader: ClassLoader,
+        key: Any,
+        value: Any,
+    ) = context.state.put(classLoader, null, key, value)
 
-    private val memberCache = WeakKeyConcurrentMap<Class<*>, MemberClassCache>()
-    private val classCache = WeakKeyConcurrentMap<ClassLoader, ClassLoaderCache>()
-    /**
-     * 缓存访问时钟。故意用 racy 的 volatile 读改写而不是 AtomicLong：每次命中都要 tick，全局 CAS 会成为
-     * 所有反射调用的汇聚点，而这个值只服务「谁更冷」的淘汰判断，丢几次自增无关紧要。
-     */
-    @Volatile
-    private var cacheClock = 0L
-
-    private fun tick(): Long {
-        val next = cacheClock + 1
-        cacheClock = next
-        return next
-    }
-
-    internal fun cacheGet(owner: Class<*>, bucket: ReflectCacheBucket, key: Any): Any? {
-        if (!cacheEnabled) return null
-        val ownerCache = memberCache.get(owner) ?: return null
-        val entry = ownerCache.bucket(bucket)[key] ?: return null
-        entry.lastAccess = tick()
-        return entry.value
-    }
-
-    internal fun cachePut(owner: Class<*>, bucket: ReflectCacheBucket, key: Any, value: Any) {
-        if (!cacheEnabled) return
-        val tick = tick()
-        val ownerCache = memberCache.getOrPut(owner) { MemberClassCache() }
-        ownerCache.bucket(bucket)[key] = CacheEntry(value, tick)
-        if (ownerCache.shouldTrimAfterPut()) {
-            trimColdEntries(ownerCache, tick)
-        }
-    }
-
-    internal fun classCacheGet(classLoader: ClassLoader, key: Any): Class<*>? {
-        if (!cacheEnabled) return null
-        val loaderCache = classCache.get(classLoader) ?: return null
-        val entry = loaderCache.classes[key] ?: return null
-        entry.lastAccess = tick()
-        return entry.value as? Class<*>
-    }
-
-    internal fun classCachePut(classLoader: ClassLoader, key: Any, value: Class<*>) {
-        if (!cacheEnabled) return
-        val tick = tick()
-        val loaderCache = classCache.getOrPut(classLoader) { ClassLoaderCache() }
-        loaderCache.classes[key] = CacheEntry(value, tick)
-        if (loaderCache.shouldTrimAfterPut()) {
-            trimColdEntries(loaderCache, tick)
-        }
-    }
-
-    internal fun classQueryCacheGet(classLoader: ClassLoader, key: Any): Any? {
-        if (!cacheEnabled) return null
-        val loaderCache = classCache.get(classLoader) ?: return null
-        val entry = loaderCache.classes[key] ?: return null
-        entry.lastAccess = tick()
-        return entry.value
-    }
-
-    internal fun classQueryCachePut(classLoader: ClassLoader, key: Any, value: Any) {
-        if (!cacheEnabled) return
-        val tick = tick()
-        val loaderCache = classCache.getOrPut(classLoader) { ClassLoaderCache() }
-        loaderCache.classes[key] = CacheEntry(value, tick)
-        if (loaderCache.shouldTrimAfterPut()) {
-            trimColdEntries(loaderCache, tick)
-        }
-    }
-
-    private fun trimColdEntries(classCache: MemberClassCache, currentTick: Long) {
-        val staleBefore = currentTick - CACHE_STALE_ACCESS_GAP
-        if (staleBefore <= 0) return
-        trimColdEntries(classCache.methods, staleBefore)
-        trimColdEntries(classCache.fields, staleBefore)
-        trimColdEntries(classCache.constructors, staleBefore)
-    }
-
-    private fun trimColdEntries(classCache: ClassLoaderCache, currentTick: Long) {
-        val staleBefore = currentTick - CACHE_STALE_ACCESS_GAP
-        if (staleBefore <= 0) return
-        trimColdEntries(classCache.classes, staleBefore)
-    }
-
-    private fun trimColdEntries(bucket: ConcurrentHashMap<Any, CacheEntry>, staleBefore: Long) {
-        for ((key, entry) in bucket) {
-            if (entry.lastAccess <= staleBefore) {
-                bucket.remove(key, entry)
-            }
-        }
-    }
-
-    /**
-     * 初始化默认 ClassLoader。
-     *
-     * 通常在 Xposed handleLoadPackage 中调用:
-     * ```kotlin
-     * EzReflect.init(lpparam.classLoader)
-     * ```
-     *
-     * @param classLoader 要设置为全局默认值的 `ClassLoader`
-     */
+    /** 设置默认 ClassLoader，建立新的运行作用域；不改变已配置的解析器。 */
     @JvmStatic
     fun init(classLoader: ClassLoader) {
-        this.classLoader = classLoader
-        _initialized = true
-        clearCache()
+        context.update { it.copy(classLoader = classLoader, initialized = true) }
         logger.debug(TAG, "Initialized with classLoader: $classLoader")
     }
 
-    /** 清除查找结果缓存。 */
+    /** 切换到同配置的新缓存；旧查询完成后不会重新填入清空后的缓存。 */
     @JvmStatic
     fun clearCache() {
-        memberCache.clear()
-        classCache.clear()
-        cacheClock = 0L
+        context.update { it.copy() }
         logger.debug(TAG, "Cache cleared")
     }
 
-    /** 重置为 SystemClassLoader，清除初始化状态和缓存。 */
+    /** 重置默认加载器和初始化状态，释放当前缓存；保留解析器等显式配置。 */
     @JvmStatic
     fun reset() {
-        classLoader = ClassLoader.getSystemClassLoader()
-        _initialized = false
-        clearCache()
+        context.update { it.copy(classLoader = ClassLoader.getSystemClassLoader(), initialized = false) }
         logger.debug(TAG, "Reset to default state")
     }
 }

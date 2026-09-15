@@ -5,9 +5,9 @@ package io.github.lingqiqi5211.ezhooktool.core
 import io.github.lingqiqi5211.ezhooktool.core.query.ConstructorQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.FieldQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.MethodQuery
-import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 
 /**
@@ -15,6 +15,7 @@ import java.lang.reflect.Method
  *
  * 默认实现直接读取 `declaredMethods`、`declaredFields` 和 `declaredConstructors`，
  * 如需兼容特殊运行时，可替换为自定义实现后赋给 [EzReflect.memberResolver]。
+ * 枚举失败应抛出原因；空数组只表示成功枚举后没有成员，不能用于掩盖链接错误。
  */
 interface MemberResolver {
     /**
@@ -41,26 +42,28 @@ interface MemberResolver {
 
 private val hiddenMemberBooleanArg = arrayOf(Boolean::class.javaPrimitiveType!!)
 
-private fun Throwable.unwrapMemberResolveCause(): Throwable =
-    if (this is InvocationTargetException) targetException ?: this else this
+private fun Throwable.unwrapMemberResolveCause(): Throwable = if (this is InvocationTargetException) targetException ?: this else this
 
-private fun Throwable.isRecoverableMemberResolveError(): Boolean = when (unwrapMemberResolveCause()) {
-    is NoClassDefFoundError,
-    is TypeNotPresentException,
-    is LinkageError -> true
-    else -> false
-}
+private fun Throwable.isRecoverableMemberResolveError(): Boolean =
+    when (unwrapMemberResolveCause()) {
+        is NoClassDefFoundError,
+        is TypeNotPresentException,
+        is LinkageError,
+        -> true
+
+        else -> false
+    }
 
 internal fun <T> resolveDeclaredMembersFallback(
     directAccess: () -> Array<T>,
     hiddenAccess: () -> Array<T>? = { null },
-    emptyAccess: () -> Array<T>,
-): Array<T> = try {
-    directAccess()
-} catch (throwable: Throwable) {
-    if (!throwable.isRecoverableMemberResolveError()) throw throwable
-    hiddenAccess() ?: emptyAccess()
-}
+): Array<T> =
+    try {
+        directAccess()
+    } catch (throwable: Throwable) {
+        if (!throwable.isRecoverableMemberResolveError()) throw throwable
+        hiddenAccess() ?: throw throwable
+    }
 
 @Suppress("UNCHECKED_CAST")
 private fun <T> Class<*>.hiddenDeclaredMembersOrNull(
@@ -68,57 +71,59 @@ private fun <T> Class<*>.hiddenDeclaredMembersOrNull(
     vararg accessorNames: String,
 ): Array<T>? {
     for (accessorName in accessorNames) {
-        val accessor = Class::class.java.declaredMethods.firstOrNull {
-            it.name == accessorName &&
+        val accessor =
+            Class::class.java.declaredMethods.firstOrNull {
+                it.name == accessorName &&
                     it.parameterTypes.contentEquals(hiddenMemberBooleanArg) &&
                     it.returnType.isArray &&
                     it.returnType.componentType == componentType
-        } ?: continue
-        val members = runCatching {
-            accessor.isAccessible = true
-            accessor.invoke(this, false)
-        }.getOrNull()
+            } ?: continue
+        val members =
+            runCatching {
+                accessor.isAccessible = true
+                accessor.invoke(this, false)
+            }.getOrNull()
         if (members is Array<*>) return members as Array<T>
     }
     return null
 }
 
 internal object DefaultMemberResolver : MemberResolver {
-    override fun methodsOf(clz: Class<*>): Array<Method> = resolveDeclaredMembersFallback(
-        directAccess = { clz.declaredMethods },
-        hiddenAccess = {
-            clz.hiddenDeclaredMembersOrNull(
-                componentType = Method::class.java,
-                "getDeclaredMethodsUnchecked",
-                "privateGetDeclaredMethods",
-            )
-        },
-        emptyAccess = { emptyArray() },
-    )
+    override fun methodsOf(clz: Class<*>): Array<Method> =
+        resolveDeclaredMembersFallback(
+            directAccess = { clz.declaredMethods },
+            hiddenAccess = {
+                clz.hiddenDeclaredMembersOrNull(
+                    componentType = Method::class.java,
+                    "getDeclaredMethodsUnchecked",
+                    "privateGetDeclaredMethods",
+                )
+            },
+        )
 
-    override fun fieldsOf(clz: Class<*>): Array<Field> = resolveDeclaredMembersFallback(
-        directAccess = { clz.declaredFields },
-        hiddenAccess = {
-            clz.hiddenDeclaredMembersOrNull(
-                componentType = Field::class.java,
-                "getDeclaredFieldsUnchecked",
-                "privateGetDeclaredFields",
-            )
-        },
-        emptyAccess = { emptyArray() },
-    )
+    override fun fieldsOf(clz: Class<*>): Array<Field> =
+        resolveDeclaredMembersFallback(
+            directAccess = { clz.declaredFields },
+            hiddenAccess = {
+                clz.hiddenDeclaredMembersOrNull(
+                    componentType = Field::class.java,
+                    "getDeclaredFieldsUnchecked",
+                    "privateGetDeclaredFields",
+                )
+            },
+        )
 
-    override fun constructorsOf(clz: Class<*>): Array<Constructor<*>> = resolveDeclaredMembersFallback(
-        directAccess = { clz.declaredConstructors },
-        hiddenAccess = {
-            clz.hiddenDeclaredMembersOrNull(
-                componentType = Constructor::class.java,
-                "getDeclaredConstructorsInternal",
-                "privateGetDeclaredConstructors",
-            )
-        },
-        emptyAccess = { emptyArray() },
-    )
+    override fun constructorsOf(clz: Class<*>): Array<Constructor<*>> =
+        resolveDeclaredMembersFallback(
+            directAccess = { clz.declaredConstructors },
+            hiddenAccess = {
+                clz.hiddenDeclaredMembersOrNull(
+                    componentType = Constructor::class.java,
+                    "getDeclaredConstructorsInternal",
+                    "privateGetDeclaredConstructors",
+                )
+            },
+        )
 }
 
 /**
@@ -170,43 +175,49 @@ class ResolveSession private constructor(
     }
 
     /** 按查询条件解析单个方法。未命中抛 [MemberNotFoundException]，需要 null 结果请用 [methodOrNull]。 */
-    fun method(query: MethodQuery.() -> Unit): Method = findMethod(targetClass) {
-        applySearchScope()
-        query()
-    }
+    fun method(query: MethodQuery.() -> Unit): Method =
+        findMethod(targetClass) {
+            applySearchScope()
+            query()
+        }
 
     /** 按查询条件解析单个方法，未命中时返回 `null`。 */
-    fun methodOrNull(query: MethodQuery.() -> Unit): Method? = findMethodOrNull(targetClass) {
-        applySearchScope()
-        query()
-    }
+    fun methodOrNull(query: MethodQuery.() -> Unit): Method? =
+        findMethodOrNull(targetClass) {
+            applySearchScope()
+            query()
+        }
 
     /** 按查询条件解析全部匹配的方法。 */
-    fun methods(query: MethodQuery.() -> Unit): List<Method> = findAllMethods(targetClass) {
-        applySearchScope()
-        query()
-    }
+    fun methods(query: MethodQuery.() -> Unit): List<Method> =
+        findAllMethods(targetClass) {
+            applySearchScope()
+            query()
+        }
 
     /** 解析全部方法。 */
     fun methods(): List<Method> = findAllMethods(targetClass) { applySearchScope() }
 
     /** 按查询条件解析单个字段。未命中抛 [MemberNotFoundException]，需要 null 结果请用 [fieldOrNull]。 */
-    fun field(query: FieldQuery.() -> Unit): Field = findField(targetClass) {
-        applySearchScope()
-        query()
-    }
+    fun field(query: FieldQuery.() -> Unit): Field =
+        findField(targetClass) {
+            applySearchScope()
+            query()
+        }
 
     /** 按查询条件解析单个字段，未命中时返回 `null`。 */
-    fun fieldOrNull(query: FieldQuery.() -> Unit): Field? = findFieldOrNull(targetClass) {
-        applySearchScope()
-        query()
-    }
+    fun fieldOrNull(query: FieldQuery.() -> Unit): Field? =
+        findFieldOrNull(targetClass) {
+            applySearchScope()
+            query()
+        }
 
     /** 按查询条件解析全部匹配的字段。 */
-    fun fields(query: FieldQuery.() -> Unit): List<Field> = findAllFields(targetClass) {
-        applySearchScope()
-        query()
-    }
+    fun fields(query: FieldQuery.() -> Unit): List<Field> =
+        findAllFields(targetClass) {
+            applySearchScope()
+            query()
+        }
 
     /** 解析全部字段。 */
     fun fields(): List<Field> = findAllFields(targetClass) { applySearchScope() }
@@ -229,7 +240,10 @@ class ResolveSession private constructor(
      * @param methodName 目标方法名
      * @param args 传给目标方法的实参
      */
-    fun call(methodName: String, vararg args: Any?): Any? {
+    fun call(
+        methodName: String,
+        vararg args: Any?,
+    ): Any? {
         val instance = targetInstance ?: error("ResolveSession.call requires bound instance")
         return instance.callMethod(methodName, *args)
     }
@@ -242,7 +256,10 @@ class ResolveSession private constructor(
      * @param methodName 目标方法名
      * @param args 传给目标方法的实参
      */
-    fun callOrNull(methodName: String, vararg args: Any?): Any? {
+    fun callOrNull(
+        methodName: String,
+        vararg args: Any?,
+    ): Any? {
         val instance = targetInstance ?: return null
         return instance.callMethodOrNull(methodName, *args)
     }
@@ -253,7 +270,10 @@ class ResolveSession private constructor(
      * @param methodName 目标静态方法名
      * @param args 传给目标方法的实参
      */
-    fun callStatic(methodName: String, vararg args: Any?): Any? = targetClass.callStaticMethod(methodName, *args)
+    fun callStatic(
+        methodName: String,
+        vararg args: Any?,
+    ): Any? = targetClass.callStaticMethod(methodName, *args)
 
     /**
      * 对绑定类按名称执行静态方法自动匹配调用，找不到或调用失败时返回 `null`。
@@ -263,8 +283,10 @@ class ResolveSession private constructor(
      * @param methodName 目标静态方法名
      * @param args 传给目标方法的实参
      */
-    fun callStaticOrNull(methodName: String, vararg args: Any?): Any? =
-        targetClass.callStaticMethodOrNull(methodName, *args)
+    fun callStaticOrNull(
+        methodName: String,
+        vararg args: Any?,
+    ): Any? = targetClass.callStaticMethodOrNull(methodName, *args)
 
     private fun copy(
         targetClass: Class<*> = this.targetClass,

@@ -12,8 +12,10 @@ import java.lang.reflect.Method
  * Field format:  `Lcom/example/Foo;->name:Ljava/lang/String;`
  */
 internal object DexDescriptor {
-
-    private data class ParsedType(val type: Class<*>, val endIndex: Int)
+    private data class ParsedType(
+        val type: Class<*>,
+        val endIndex: Int,
+    )
 
     private fun parseTypeAt(
         desc: String,
@@ -22,21 +24,49 @@ internal object DexDescriptor {
         allowVoid: Boolean,
     ): ParsedType {
         if (startIndex >= desc.length) throw IllegalArgumentException("Empty type descriptor")
-        val primitive = when (desc[startIndex]) {
-            'V' -> {
-                if (!allowVoid) throw IllegalArgumentException("void is not valid here: $desc")
-                Void.TYPE
+        val primitive =
+            when (desc[startIndex]) {
+                'V' -> {
+                    if (!allowVoid) throw IllegalArgumentException("void is not valid here: $desc")
+                    Void.TYPE
+                }
+
+                'Z' -> {
+                    Boolean::class.javaPrimitiveType!!
+                }
+
+                'B' -> {
+                    Byte::class.javaPrimitiveType!!
+                }
+
+                'C' -> {
+                    Char::class.javaPrimitiveType!!
+                }
+
+                'S' -> {
+                    Short::class.javaPrimitiveType!!
+                }
+
+                'I' -> {
+                    Int::class.javaPrimitiveType!!
+                }
+
+                'J' -> {
+                    Long::class.javaPrimitiveType!!
+                }
+
+                'F' -> {
+                    Float::class.javaPrimitiveType!!
+                }
+
+                'D' -> {
+                    Double::class.javaPrimitiveType!!
+                }
+
+                else -> {
+                    null
+                }
             }
-            'Z' -> Boolean::class.javaPrimitiveType!!
-            'B' -> Byte::class.javaPrimitiveType!!
-            'C' -> Char::class.javaPrimitiveType!!
-            'S' -> Short::class.javaPrimitiveType!!
-            'I' -> Int::class.javaPrimitiveType!!
-            'J' -> Long::class.javaPrimitiveType!!
-            'F' -> Float::class.javaPrimitiveType!!
-            'D' -> Double::class.javaPrimitiveType!!
-            else -> null
-        }
         if (primitive != null) return ParsedType(primitive, startIndex + 1)
 
         return when (desc[startIndex]) {
@@ -47,13 +77,22 @@ internal object DexDescriptor {
                 if (internalName.isEmpty()) throw IllegalArgumentException("Empty object type descriptor: $desc")
                 ParsedType(loadClass(internalName.replace('/', '.'), classLoader), end + 1)
             }
+
             '[' -> {
                 val component = parseTypeAt(desc, startIndex + 1, classLoader, allowVoid = false)
-                ParsedType(java.lang.reflect.Array.newInstance(component.type, 0).javaClass, component.endIndex)
+                ParsedType(
+                    java.lang.reflect.Array
+                        .newInstance(component.type, 0)
+                        .javaClass,
+                    component.endIndex,
+                )
             }
-            else -> throw IllegalArgumentException(
-                "Unknown type descriptor '${desc[startIndex]}' at pos $startIndex in: $desc"
-            )
+
+            else -> {
+                throw IllegalArgumentException(
+                    "Unknown type descriptor '${desc[startIndex]}' at pos $startIndex in: $desc",
+                )
+            }
         }
     }
 
@@ -68,13 +107,17 @@ internal object DexDescriptor {
      * @param desc Dex 类型描述符
      * @param classLoader 用于解析对象类型的 `ClassLoader`
      */
-    fun parseType(desc: String, classLoader: ClassLoader): Class<*> {
-        val parsed = parseTypeAt(desc, 0, classLoader, allowVoid = true)
-        if (parsed.endIndex != desc.length) {
-            throw IllegalArgumentException("Trailing content in type descriptor at pos ${parsed.endIndex}: $desc")
+    fun parseType(
+        desc: String,
+        classLoader: ClassLoader,
+    ): Class<*> =
+        EzReflect.withQuery(classLoader) { classLoader ->
+            val parsed = parseTypeAt(desc, 0, classLoader, allowVoid = true)
+            if (parsed.endIndex != desc.length) {
+                throw IllegalArgumentException("Trailing content in type descriptor at pos ${parsed.endIndex}: $desc")
+            }
+            parsed.type
         }
-        return parsed.type
-    }
 
     /**
      * Parse parameter types from a method descriptor's parameter section.
@@ -83,17 +126,21 @@ internal object DexDescriptor {
      * @param paramDesc 方法描述符中 `(` 与 `)` 之间的参数片段
      * @param classLoader 用于解析对象类型的 `ClassLoader`
      */
-    fun parseParamTypes(paramDesc: String, classLoader: ClassLoader): Array<Class<*>> {
-        if (paramDesc.isEmpty()) return emptyArray()
-        val types = mutableListOf<Class<*>>()
-        var i = 0
-        while (i < paramDesc.length) {
-            val parsed = parseTypeAt(paramDesc, i, classLoader, allowVoid = false)
-            types += parsed.type
-            i = parsed.endIndex
+    fun parseParamTypes(
+        paramDesc: String,
+        classLoader: ClassLoader,
+    ): Array<Class<*>> =
+        EzReflect.withQuery(classLoader) { classLoader ->
+            if (paramDesc.isEmpty()) return@withQuery emptyArray()
+            val types = mutableListOf<Class<*>>()
+            var i = 0
+            while (i < paramDesc.length) {
+                val parsed = parseTypeAt(paramDesc, i, classLoader, allowVoid = false)
+                types += parsed.type
+                i = parsed.endIndex
+            }
+            types.toTypedArray()
         }
-        return types.toTypedArray()
-    }
 
     data class MethodDesc(
         val className: String,
@@ -114,33 +161,39 @@ internal object DexDescriptor {
      * @param desc 完整方法 Dex/Smali 描述符
      * @param classLoader 用于解析类名和参数类型的 `ClassLoader`
      */
-    fun parseMethodDesc(desc: String, classLoader: ClassLoader): MethodDesc {
-        val arrowIdx = desc.indexOf("->")
-        if (arrowIdx == -1) throw IllegalArgumentException("Invalid method descriptor (no '->'): $desc")
+    fun parseMethodDesc(
+        desc: String,
+        classLoader: ClassLoader,
+    ): MethodDesc =
+        EzReflect.withQuery(classLoader) { classLoader ->
+            val arrowIdx = desc.indexOf("->")
+            if (arrowIdx == -1) throw IllegalArgumentException("Invalid method descriptor (no '->'): $desc")
 
-        val classDesc = desc.substring(0, arrowIdx)
-        if (!classDesc.startsWith("L") || !classDesc.endsWith(";"))
-            throw IllegalArgumentException("Invalid class in descriptor: $classDesc")
-        val className = classDesc.substring(1, classDesc.length - 1).replace('/', '.')
+            val classDesc = desc.substring(0, arrowIdx)
+            if (!classDesc.startsWith("L") || !classDesc.endsWith(";")) {
+                throw IllegalArgumentException("Invalid class in descriptor: $classDesc")
+            }
+            val className = classDesc.substring(1, classDesc.length - 1).replace('/', '.')
 
-        val rest = desc.substring(arrowIdx + 2)
-        val parenOpen = rest.indexOf('(')
-        val parenClose = rest.indexOf(')')
-        if (parenOpen <= 0 || parenClose <= parenOpen || rest.indexOf('(', parenOpen + 1) != -1 ||
-            rest.indexOf(')', parenClose + 1) != -1
-        )
-            throw IllegalArgumentException("Invalid method descriptor (no parentheses): $desc")
+            val rest = desc.substring(arrowIdx + 2)
+            val parenOpen = rest.indexOf('(')
+            val parenClose = rest.indexOf(')')
+            if (parenOpen <= 0 || parenClose <= parenOpen || rest.indexOf('(', parenOpen + 1) != -1 ||
+                rest.indexOf(')', parenClose + 1) != -1
+            ) {
+                throw IllegalArgumentException("Invalid method descriptor (no parentheses): $desc")
+            }
 
-        val methodName = rest.substring(0, parenOpen)
-        val paramSection = rest.substring(parenOpen + 1, parenClose)
-        val returnSection = rest.substring(parenClose + 1)
-        if (returnSection.isEmpty()) throw IllegalArgumentException("Missing return type in method descriptor: $desc")
+            val methodName = rest.substring(0, parenOpen)
+            val paramSection = rest.substring(parenOpen + 1, parenClose)
+            val returnSection = rest.substring(parenClose + 1)
+            if (returnSection.isEmpty()) throw IllegalArgumentException("Missing return type in method descriptor: $desc")
 
-        val paramTypes = parseParamTypes(paramSection, classLoader)
-        val returnType = parseType(returnSection, classLoader)
+            val paramTypes = parseParamTypes(paramSection, classLoader)
+            val returnType = parseType(returnSection, classLoader)
 
-        return MethodDesc(className, methodName, paramTypes, returnType)
-    }
+            MethodDesc(className, methodName, paramTypes, returnType)
+        }
 
     /**
      * Parse: `Lcom/example/Foo;->name:Ljava/lang/String;`
@@ -148,28 +201,33 @@ internal object DexDescriptor {
      * @param desc 完整字段 Dex/Smali 描述符
      * @param classLoader 用于解析类名和字段类型的 `ClassLoader`
      */
-    fun parseFieldDesc(desc: String, classLoader: ClassLoader): FieldDesc {
-        val arrowIdx = desc.indexOf("->")
-        if (arrowIdx == -1) throw IllegalArgumentException("Invalid field descriptor (no '->'): $desc")
+    fun parseFieldDesc(
+        desc: String,
+        classLoader: ClassLoader,
+    ): FieldDesc =
+        EzReflect.withQuery(classLoader) { classLoader ->
+            val arrowIdx = desc.indexOf("->")
+            if (arrowIdx == -1) throw IllegalArgumentException("Invalid field descriptor (no '->'): $desc")
 
-        val classDesc = desc.substring(0, arrowIdx)
-        if (!classDesc.startsWith("L") || !classDesc.endsWith(";"))
-            throw IllegalArgumentException("Invalid class in descriptor: $classDesc")
-        val className = classDesc.substring(1, classDesc.length - 1).replace('/', '.')
+            val classDesc = desc.substring(0, arrowIdx)
+            if (!classDesc.startsWith("L") || !classDesc.endsWith(";")) {
+                throw IllegalArgumentException("Invalid class in descriptor: $classDesc")
+            }
+            val className = classDesc.substring(1, classDesc.length - 1).replace('/', '.')
 
-        val rest = desc.substring(arrowIdx + 2)
-        val colonIdx = rest.indexOf(':')
-        if (colonIdx == -1) throw IllegalArgumentException("Invalid field descriptor (no ':'): $desc")
+            val rest = desc.substring(arrowIdx + 2)
+            val colonIdx = rest.indexOf(':')
+            if (colonIdx == -1) throw IllegalArgumentException("Invalid field descriptor (no ':'): $desc")
 
-        val fieldName = rest.substring(0, colonIdx)
-        val typeSection = rest.substring(colonIdx + 1)
-        if (fieldName.isEmpty()) throw IllegalArgumentException("Missing field name in descriptor: $desc")
-        if (typeSection.isEmpty()) throw IllegalArgumentException("Missing field type in descriptor: $desc")
-        val fieldType = parseType(typeSection, classLoader)
-        if (fieldType == Void.TYPE) throw IllegalArgumentException("Field type cannot be void: $desc")
+            val fieldName = rest.substring(0, colonIdx)
+            val typeSection = rest.substring(colonIdx + 1)
+            if (fieldName.isEmpty()) throw IllegalArgumentException("Missing field name in descriptor: $desc")
+            if (typeSection.isEmpty()) throw IllegalArgumentException("Missing field type in descriptor: $desc")
+            val fieldType = parseType(typeSection, classLoader)
+            if (fieldType == Void.TYPE) throw IllegalArgumentException("Field type cannot be void: $desc")
 
-        return FieldDesc(className, fieldName, fieldType)
-    }
+            FieldDesc(className, fieldName, fieldType)
+        }
 }
 
 // ═══════════════════════ Public API ═══════════════════════
@@ -189,15 +247,19 @@ internal object DexDescriptor {
  * @param desc 方法的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
  */
-fun getMethodByDesc(desc: String, classLoader: ClassLoader = EzReflect.classLoader): Method {
-    return getMethodByDescOrNull(desc, classLoader)
-        ?: throw MemberNotFoundException(
-            memberType = MemberType.METHOD,
-            targetClass = desc,
-            searchedSuper = false,
-            conditionDesc = "Dex descriptor: $desc"
-        )
-}
+fun getMethodByDesc(
+    desc: String,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+): Method =
+    EzReflect.withQuery(classLoader) { classLoader ->
+        getMethodByDescOrNull(desc, classLoader)
+            ?: throw MemberNotFoundException(
+                memberType = MemberType.METHOD,
+                targetClass = desc,
+                searchedSuper = false,
+                conditionDesc = "Dex descriptor: $desc",
+            )
+    }
 
 /**
  * 通过 Dex/Smali 签名获取方法，找不到返回 null。
@@ -208,32 +270,37 @@ fun getMethodByDesc(desc: String, classLoader: ClassLoader = EzReflect.classLoad
  * @param desc 方法的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
  */
-fun getMethodByDescOrNull(desc: String, classLoader: ClassLoader = EzReflect.classLoader): Method? {
-    val parsed = try {
-        DexDescriptor.parseMethodDesc(desc, classLoader)
-    } catch (_: ClassNotFoundError) {
-        return null
-    } catch (_: ClassNotFoundException) {
-        return null
-    } catch (_: NoClassDefFoundError) {
-        return null
+fun getMethodByDescOrNull(
+    desc: String,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+): Method? =
+    EzReflect.withQuery(classLoader) { classLoader ->
+        val parsed =
+            try {
+                DexDescriptor.parseMethodDesc(desc, classLoader)
+            } catch (_: ClassNotFoundError) {
+                return@withQuery null
+            } catch (_: ClassNotFoundException) {
+                return@withQuery null
+            } catch (_: NoClassDefFoundError) {
+                return@withQuery null
+            }
+        try {
+            val clz = loadClass(parsed.className, classLoader)
+            val method = clz.getDeclaredMethod(parsed.methodName, *parsed.paramTypes)
+            if (method.returnType != parsed.returnType) return@withQuery null
+            method.isAccessible = true
+            method
+        } catch (_: NoSuchMethodException) {
+            null
+        } catch (_: ClassNotFoundError) {
+            null
+        } catch (_: ClassNotFoundException) {
+            null
+        } catch (_: NoClassDefFoundError) {
+            null
+        }
     }
-    return try {
-        val clz = loadClass(parsed.className, classLoader)
-        val method = clz.getDeclaredMethod(parsed.methodName, *parsed.paramTypes)
-        if (method.returnType != parsed.returnType) return null
-        method.isAccessible = true
-        method
-    } catch (_: NoSuchMethodException) {
-        null
-    } catch (_: ClassNotFoundError) {
-        null
-    } catch (_: ClassNotFoundException) {
-        null
-    } catch (_: NoClassDefFoundError) {
-        null
-    }
-}
 
 /**
  * 通过 Dex/Smali 签名获取字段。
@@ -249,15 +316,19 @@ fun getMethodByDescOrNull(desc: String, classLoader: ClassLoader = EzReflect.cla
  * @param desc 字段的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
  */
-fun getFieldByDesc(desc: String, classLoader: ClassLoader = EzReflect.classLoader): Field {
-    return getFieldByDescOrNull(desc, classLoader)
-        ?: throw MemberNotFoundException(
-            memberType = MemberType.FIELD,
-            targetClass = desc,
-            searchedSuper = false,
-            conditionDesc = "Dex descriptor: $desc"
-        )
-}
+fun getFieldByDesc(
+    desc: String,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+): Field =
+    EzReflect.withQuery(classLoader) { classLoader ->
+        getFieldByDescOrNull(desc, classLoader)
+            ?: throw MemberNotFoundException(
+                memberType = MemberType.FIELD,
+                targetClass = desc,
+                searchedSuper = false,
+                conditionDesc = "Dex descriptor: $desc",
+            )
+    }
 
 /**
  * 通过 Dex/Smali 签名获取字段，找不到返回 null。
@@ -268,32 +339,37 @@ fun getFieldByDesc(desc: String, classLoader: ClassLoader = EzReflect.classLoade
  * @param desc 字段的 Dex/Smali 描述符
  * @param classLoader 用于解析描述符和加载目标类的 `ClassLoader`
  */
-fun getFieldByDescOrNull(desc: String, classLoader: ClassLoader = EzReflect.classLoader): Field? {
-    val parsed = try {
-        DexDescriptor.parseFieldDesc(desc, classLoader)
-    } catch (_: ClassNotFoundError) {
-        return null
-    } catch (_: ClassNotFoundException) {
-        return null
-    } catch (_: NoClassDefFoundError) {
-        return null
+fun getFieldByDescOrNull(
+    desc: String,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+): Field? =
+    EzReflect.withQuery(classLoader) { classLoader ->
+        val parsed =
+            try {
+                DexDescriptor.parseFieldDesc(desc, classLoader)
+            } catch (_: ClassNotFoundError) {
+                return@withQuery null
+            } catch (_: ClassNotFoundException) {
+                return@withQuery null
+            } catch (_: NoClassDefFoundError) {
+                return@withQuery null
+            }
+        try {
+            val clz = loadClass(parsed.className, classLoader)
+            val field = clz.getDeclaredField(parsed.fieldName)
+            if (field.type != parsed.fieldType) return@withQuery null
+            field.isAccessible = true
+            field
+        } catch (_: NoSuchFieldException) {
+            null
+        } catch (_: ClassNotFoundError) {
+            null
+        } catch (_: ClassNotFoundException) {
+            null
+        } catch (_: NoClassDefFoundError) {
+            null
+        }
     }
-    return try {
-        val clz = loadClass(parsed.className, classLoader)
-        val field = clz.getDeclaredField(parsed.fieldName)
-        if (field.type != parsed.fieldType) return null
-        field.isAccessible = true
-        field
-    } catch (_: NoSuchFieldException) {
-        null
-    } catch (_: ClassNotFoundError) {
-        null
-    } catch (_: ClassNotFoundException) {
-        null
-    } catch (_: NoClassDefFoundError) {
-        null
-    }
-}
 
 // ═══════════════════════ ClassLoader 扩展 ═══════════════════════
 

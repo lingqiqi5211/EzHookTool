@@ -151,10 +151,16 @@ class ReflectScope internal constructor(
  * @param block 在 [ReflectScope] 上执行的 DSL 代码块
  */
 fun <T> reflect(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     block: ReflectScope.() -> T,
-): T = ReflectScope(classLoader).block()
+): T =
+    EzReflect.withQuery(classLoader) { loader ->
+        ReflectScope(loader).block()
+    }
 
 /** 使用当前 [ClassLoader] 作为默认加载器打开反射作用域。 */
 @JvmName("reflectByClassLoader")
-fun <T> ClassLoader.reflect(block: ReflectScope.() -> T): T = ReflectScope(this).block()
+fun <T> ClassLoader.reflect(block: ReflectScope.() -> T): T {
+    val loader = this
+    return EzReflect.withQuery { ReflectScope(loader).block() }
+}

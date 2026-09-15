@@ -3,10 +3,10 @@
 package io.github.lingqiqi5211.ezhooktool.core
 
 import io.github.lingqiqi5211.ezhooktool.core.query.MethodQuery
-import io.github.lingqiqi5211.ezhooktool.core.query.methodCondition
-import io.github.lingqiqi5211.ezhooktool.core.query.methodExactCacheKeys
-import io.github.lingqiqi5211.ezhooktool.core.query.methodQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryPlan
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryResultMode
+import io.github.lingqiqi5211.ezhooktool.core.query.methodQuery
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 
@@ -82,16 +82,17 @@ private fun searchMethods(
                 }
                 // 对于 collectAll=false (findMethod)，如果当前类没找到就继续向上
                 // 对于 collectAll=true (findAllMethods, null mode)，只搜到找到为止
-                current = if (!collectAll && results.isEmpty()) {
-                    current.superclass
-                } else if (collectAll && results.isNotEmpty()) {
-                    // null mode + collectAll: 当前类有结果就停
-                    return results
-                } else if (collectAll) {
-                    current.superclass
-                } else {
-                    break
-                }
+                current =
+                    if (!collectAll && results.isEmpty()) {
+                        current.superclass
+                    } else if (collectAll && results.isNotEmpty()) {
+                        // null mode + collectAll: 当前类有结果就停
+                        return results
+                    } else if (collectAll) {
+                        current.superclass
+                    } else {
+                        break
+                    }
             }
         }
     }
@@ -108,58 +109,11 @@ private fun getCandidates(clz: Class<*>): List<String> {
 
 // ═══════════════════════ Cache Key ═══════════════════════
 
-private data class MethodCacheKey(
-    val queryKey: List<Any>,
-    val findSuper: Boolean?,
-    val resultMode: String = "first",
-)
-
 private data class MethodNameCacheKey(
     val name: String,
     val argTypes: List<Class<*>>,
     val returnType: Class<*>?,
 )
-
-private data class DeclaringMethodCacheKey(
-    val owner: Class<*>,
-    val key: MethodCacheKey,
-)
-
-private data class AllMethodsCacheKey(
-    val queryKey: List<Any>,
-    val findSuper: Boolean?,
-)
-
-private fun cacheExactMethods(
-    searchClass: Class<*>,
-    findSuper: Boolean?,
-    methods: List<Method>,
-    cacheSearchClass: Boolean,
-) {
-    if (!EzReflect.cacheEnabled) return
-    val searchKeys = HashSet<MethodCacheKey>()
-    val declaringKeys = HashSet<DeclaringMethodCacheKey>()
-
-    for (method in methods) {
-        for (queryKey in methodExactCacheKeys(method)) {
-            if (cacheSearchClass) {
-                val key = MethodCacheKey(queryKey, findSuper)
-                if (searchKeys.add(key)) {
-                    EzReflect.cachePut(searchClass, ReflectCacheBucket.METHOD, key, method)
-                }
-            }
-
-            val currentClassKey = MethodCacheKey(queryKey, false)
-            val smartKey = MethodCacheKey(queryKey, null)
-            if (declaringKeys.add(DeclaringMethodCacheKey(method.declaringClass, currentClassKey))) {
-                EzReflect.cachePut(method.declaringClass, ReflectCacheBucket.METHOD, currentClassKey, method)
-            }
-            if (declaringKeys.add(DeclaringMethodCacheKey(method.declaringClass, smartKey))) {
-                EzReflect.cachePut(method.declaringClass, ReflectCacheBucket.METHOD, smartKey, method)
-            }
-        }
-    }
-}
 
 // ═══════════════════════ 按条件查找 (Class) ═══════════════════════
 
@@ -192,19 +146,19 @@ private fun cacheExactMethods(
 fun findMethod(
     clz: Class<*>,
     query: MethodQuery.() -> Unit,
-): Method {
-    QueryFilterContext.warnNestedFind("findMethod")
-    val builtQuery = methodQuery(query)
-    val effectiveFindSuper = builtQuery.effectiveFindSuper(null)
-    return findMethodOrNull(clz, null, builtQuery)
-        ?: throw MemberNotFoundException(
-            memberType = MemberType.METHOD,
-            targetClass = clz.name,
-            searchedSuper = effectiveFindSuper != false,
-            conditionDesc = builtQuery.describe(),
-            candidates = getCandidates(clz)
-        )
-}
+): Method =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findMethod")
+        val plan = methodQuery(query).freeze(QueryResultMode.FIRST)
+        findMethodOrNull(clz, plan)
+            ?: throw MemberNotFoundException(
+                memberType = MemberType.METHOD,
+                targetClass = clz.name,
+                searchedSuper = plan.findSuper != false,
+                conditionDesc = plan.description,
+                candidates = getCandidates(clz),
+            )
+    }
 
 /**
  * 按查询条件查找方法，找不到返回 null。
@@ -212,56 +166,49 @@ fun findMethod(
 fun findMethodOrNull(
     clz: Class<*>,
     query: MethodQuery.() -> Unit,
-): Method? {
-    QueryFilterContext.warnNestedFind("findMethodOrNull")
-    return findMethodOrNull(clz, null, methodQuery(query))
-}
+): Method? =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findMethodOrNull")
+        findMethodOrNull(clz, methodQuery(query).freeze(QueryResultMode.FIRST))
+    }
 
 private fun findMethodOrNull(
     clz: Class<*>,
-    findSuper: Boolean?,
-    query: MethodQuery,
+    plan: QueryPlan<Method>,
 ): Method? {
-    val effectiveFindSuper = query.effectiveFindSuper(findSuper)
-    val condition = methodCondition(query)
-    val queryKey = query.cacheKeyOrNull()
+    val queryKey = plan.cacheKey
     if (EzReflect.cacheEnabled && queryKey != null) {
-        val key = MethodCacheKey(
-            queryKey = queryKey,
-            findSuper = effectiveFindSuper,
-            resultMode = if (query.requiresSingleResult) "single" else "first",
-        )
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, key)
-        if (cached is Method) return cached
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, queryKey)
+        if (cached is Method) {
+            cached.isAccessible = true
+            return cached
+        }
     }
-    val results = searchMethods(
-        clz = clz,
-        findSuper = effectiveFindSuper,
-        collectAll = query.requiresSingleResult,
-        condition = condition,
-        maxResults = if (query.requiresSingleResult) 2 else null,
-    )
-    if (query.requiresSingleResult && results.size > 1) {
+    val results = findMethodsMatching(clz, plan)
+    if (plan.requiresSingleResult && results.size > 1) {
         throw SingleResultExpectedException(
             target = "method in ${clz.name}",
-            conditionDesc = query.describe(),
+            conditionDesc = plan.description,
         )
     }
     val result = results.firstOrNull()
     if (result != null && EzReflect.cacheEnabled && queryKey != null) {
-        EzReflect.cachePut(
-            clz,
-            ReflectCacheBucket.METHOD,
-            MethodCacheKey(
-                queryKey = queryKey,
-                findSuper = effectiveFindSuper,
-                resultMode = if (query.requiresSingleResult) "single" else "first",
-            ),
-            result,
-        )
+        EzReflect.cachePut(clz, ReflectCacheBucket.METHOD, queryKey, result)
     }
     return result
 }
+
+internal fun findMethodsMatching(
+    clz: Class<*>,
+    plan: QueryPlan<Method>,
+): List<Method> =
+    searchMethods(
+        clz = clz,
+        findSuper = plan.findSuper,
+        collectAll = plan.collectAll,
+        condition = { plan.matches(this) },
+        maxResults = plan.maxResults,
+    )
 
 /**
  * 按类名查找方法。
@@ -272,21 +219,25 @@ private fun findMethodOrNull(
  */
 fun findMethod(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: MethodQuery.() -> Unit,
-): Method = findMethod(loadClass(className, classLoader), query)
+): Method =
+    EzReflect.withQuery(classLoader) { loader ->
+        findMethod(loadClass(className, loader), query)
+    }
 
 /**
  * 按类名查找方法，找不到返回 null。
  */
 fun findMethodOrNull(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: MethodQuery.() -> Unit,
-): Method? {
-    val clz = loadClassOrNull(className, classLoader) ?: return null
-    return findMethodOrNull(clz, query)
-}
+): Method? =
+    EzReflect.withQuery(classLoader) { loader ->
+        val clz = loadClassOrNull(className, loader) ?: return@withQuery null
+        findMethodOrNull(clz, query)
+    }
 
 private fun findAllMethodsMatching(
     clz: Class<*>,
@@ -297,12 +248,11 @@ private fun findAllMethodsMatching(
 /**
  * 查找全部方法。
  */
-fun findAllMethods(
-    clz: Class<*>,
-): List<Method> {
-    QueryFilterContext.warnNestedFind("findAllMethods")
-    return findAllMethodsMatching(clz, null) { true }
-}
+fun findAllMethods(clz: Class<*>): List<Method> =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findAllMethods")
+        findAllMethodsMatching(clz, null) { true }
+    }
 
 /**
  * 按查询条件查找方法。
@@ -310,47 +260,49 @@ fun findAllMethods(
 fun findAllMethods(
     clz: Class<*>,
     query: MethodQuery.() -> Unit,
-): List<Method> {
-    QueryFilterContext.warnNestedFind("findAllMethods")
-    val builtQuery = methodQuery(query)
-    val effectiveFindSuper = builtQuery.effectiveFindSuper(null)
-    val queryKey = builtQuery.cacheKeyOrNull()
-    if (EzReflect.cacheEnabled && queryKey != null) {
-        val key = AllMethodsCacheKey(queryKey, effectiveFindSuper)
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, key)
-        if (cached is List<*>) {
-            @Suppress("UNCHECKED_CAST")
-            return cached as List<Method>
+): List<Method> =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findAllMethods")
+        val plan = methodQuery(query).freeze(QueryResultMode.ALL)
+        val queryKey = plan.cacheKey
+        if (EzReflect.cacheEnabled && queryKey != null) {
+            val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, queryKey)
+            if (cached is List<*>) {
+                @Suppress("UNCHECKED_CAST")
+                val methods = cached as List<Method>
+                methods.forEach { it.isAccessible = true }
+                return@withQuery ArrayList(methods)
+            }
         }
+        val results = findMethodsMatching(clz, plan)
+        if (EzReflect.cacheEnabled && queryKey != null) {
+            EzReflect.cachePut(clz, ReflectCacheBucket.METHOD, queryKey, ArrayList(results))
+        }
+        results
     }
-    val results = findAllMethodsMatching(
-        clz = clz,
-        findSuper = effectiveFindSuper,
-        condition = methodCondition(builtQuery),
-    )
-    if (EzReflect.cacheEnabled && queryKey != null) {
-        EzReflect.cachePut(clz, ReflectCacheBucket.METHOD, AllMethodsCacheKey(queryKey, effectiveFindSuper), results)
-    }
-    cacheExactMethods(clz, effectiveFindSuper, results, queryKey != null)
-    return results
-}
 
 /**
  * 按类名查找全部方法。
  */
 fun findAllMethods(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
-): List<Method> = findAllMethods(loadClass(className, classLoader))
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+): List<Method> =
+    EzReflect.withQuery(classLoader) { loader ->
+        findAllMethods(loadClass(className, loader))
+    }
 
 /**
  * 按类名和查询条件查找方法。
  */
 fun findAllMethods(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: MethodQuery.() -> Unit,
-): List<Method> = findAllMethods(loadClass(className, classLoader), query)
+): List<Method> =
+    EzReflect.withQuery(classLoader) { loader ->
+        findAllMethods(loadClass(className, loader), query)
+    }
 
 // ═══════════════════════ 按名称直接获取 ═══════════════════════
 
@@ -365,17 +317,19 @@ fun Class<*>.method(
     name: String,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Method {
-    return methodOrNull(name, argTypes, returnType)
-        ?: throw MemberNotFoundException(
-            memberType = MemberType.METHOD,
-            targetClass = this.name,
-            searchedSuper = false,
-            conditionDesc = "name=$name, argTypes=${argTypes.types.map { it.simpleName }}" +
-                    (if (returnType != null) ", returnType=${returnType.simpleName}" else ""),
-            candidates = getCandidates(this)
-        )
-}
+): Method =
+    EzReflect.withQuery {
+        methodOrNull(name, argTypes, returnType)
+            ?: throw MemberNotFoundException(
+                memberType = MemberType.METHOD,
+                targetClass = this.name,
+                searchedSuper = false,
+                conditionDesc =
+                    "name=$name, argTypes=${argTypes.types.map { it.simpleName }}" +
+                        (if (returnType != null) ", returnType=${returnType.simpleName}" else ""),
+                candidates = getCandidates(this),
+            )
+    }
 
 /**
  * 按名称获取方法，找不到返回 null。
@@ -385,46 +339,56 @@ fun Class<*>.methodOrNull(
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
 ): Method? {
-    if (EzReflect.cacheEnabled) {
-        val key = MethodNameCacheKey(name, argTypes.types.toList(), returnType)
-        val cached = EzReflect.cacheGet(this, ReflectCacheBucket.METHOD, key)
-        if (cached is Method) return cached
-    }
-    val method = try {
-        val m = getDeclaredMethod(name, *argTypes.types)
-        if (returnType != null && m.returnType != returnType) null
-        else {
-            m.isAccessible = true
-            m
+    val owner = this
+    return EzReflect.withQuery {
+        if (EzReflect.cacheEnabled) {
+            val key = MethodNameCacheKey(name, argTypes.types.toList(), returnType)
+            val cached = EzReflect.cacheGet(owner, ReflectCacheBucket.METHOD, key)
+            if (cached is Method) {
+                cached.isAccessible = true
+                return@withQuery cached
+            }
         }
-    } catch (_: NoSuchMethodException) {
-        // Fallback: search superclasses
-        var current: Class<*>? = superclass
-        var found: Method? = null
-        while (current != null && found == null) {
-            found = try {
-                val m = current.getDeclaredMethod(name, *argTypes.types)
-                if (returnType != null && m.returnType != returnType) null
-                else {
+        val method =
+            try {
+                val m = owner.getDeclaredMethod(name, *argTypes.types)
+                if (returnType != null && m.returnType != returnType) {
+                    null
+                } else {
                     m.isAccessible = true
                     m
                 }
             } catch (_: NoSuchMethodException) {
-                null
+                // Fallback: search superclasses
+                var current: Class<*>? = owner.superclass
+                var found: Method? = null
+                while (current != null && found == null) {
+                    found =
+                        try {
+                            val m = current.getDeclaredMethod(name, *argTypes.types)
+                            if (returnType != null && m.returnType != returnType) {
+                                null
+                            } else {
+                                m.isAccessible = true
+                                m
+                            }
+                        } catch (_: NoSuchMethodException) {
+                            null
+                        }
+                    current = current.superclass
+                }
+                found
             }
-            current = current.superclass
+        if (method != null && EzReflect.cacheEnabled) {
+            EzReflect.cachePut(
+                owner,
+                ReflectCacheBucket.METHOD,
+                MethodNameCacheKey(name, argTypes.types.toList(), returnType),
+                method,
+            )
         }
-        found
+        method
     }
-    if (method != null && EzReflect.cacheEnabled) {
-        EzReflect.cachePut(
-            this,
-            ReflectCacheBucket.METHOD,
-            MethodNameCacheKey(name, argTypes.types.toList(), returnType),
-            method,
-        )
-    }
-    return method
 }
 
 // ═══════════════════════ 组合态链式 (String 出发) ═══════════════════════
@@ -439,38 +403,34 @@ fun Class<*>.methodOrNull(
  */
 @JvmName("findMethodFromString")
 fun String.findMethod(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: MethodQuery.() -> Unit,
-): Method = findMethod(loadClass(this, classLoader), query)
+): Method = findMethod(this, classLoader, query)
 
 /**
  * 从类名直接查找方法，找不到返回 null。
  */
 @JvmName("findMethodOrNullFromString")
 fun String.findMethodOrNull(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: MethodQuery.() -> Unit,
-): Method? {
-    val clz = loadClassOrNull(this, classLoader) ?: return null
-    return findMethodOrNull(clz, query)
-}
+): Method? = findMethodOrNull(this, classLoader, query)
 
 /**
  * 从类名查找全部方法。
  */
 @JvmName("findAllMethodsFromString")
-fun String.findAllMethods(
-    classLoader: ClassLoader = EzReflect.classLoader,
-): List<Method> = findAllMethods(loadClass(this, classLoader))
+fun String.findAllMethods(classLoader: ClassLoader = EzReflect.defaultLoaderMarker): List<Method> =
+    findAllMethods(this, classLoader)
 
 /**
  * 从类名按查询条件查找方法。
  */
 @JvmName("findAllMethodsFromStringWithQuery")
 fun String.findAllMethods(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: MethodQuery.() -> Unit,
-): List<Method> = findAllMethods(loadClass(this, classLoader), query)
+): List<Method> = findAllMethods(this, classLoader, query)
 
 // ═══════════════════════ 组合态链式 (Class 出发) ═══════════════════════
 
@@ -485,32 +445,25 @@ fun String.findAllMethods(
  * ```
  */
 @JvmName("findMethodFromClass")
-fun Class<*>.findMethod(
-    query: MethodQuery.() -> Unit,
-): Method = findMethod(this, query)
+fun Class<*>.findMethod(query: MethodQuery.() -> Unit): Method = findMethod(this, query)
 
 /**
  * 从 Class 对象查找方法，找不到返回 null。
  */
 @JvmName("findMethodOrNullFromClass")
-fun Class<*>.findMethodOrNull(
-    query: MethodQuery.() -> Unit,
-): Method? = findMethodOrNull(this, query)
+fun Class<*>.findMethodOrNull(query: MethodQuery.() -> Unit): Method? = findMethodOrNull(this, query)
 
 /**
  * 从 Class 对象查找全部方法。
  */
 @JvmName("findAllMethodsFromClass")
-fun Class<*>.findAllMethods(
-): List<Method> = findAllMethods(this)
+fun Class<*>.findAllMethods(): List<Method> = findAllMethods(this)
 
 /**
  * 从 Class 对象按查询条件查找方法。
  */
 @JvmName("findAllMethodsFromClassWithQuery")
-fun Class<*>.findAllMethods(
-    query: MethodQuery.() -> Unit,
-): List<Method> = findAllMethods(this, query)
+fun Class<*>.findAllMethods(query: MethodQuery.() -> Unit): List<Method> = findAllMethods(this, query)
 
 // ═══════════════════════ 实例方法调用 ═══════════════════════
 
@@ -521,19 +474,20 @@ fun Class<*>.findAllMethods(
  * 参数不匹配、无权限访问时返回 null"，不代表"目标方法内部抛出的业务异常也会被吞掉"——那类异常应该让
  * 调用方看到，否则会掩盖真实的崩溃原因。
  */
-private inline fun <T> callCatchingLookupFailure(block: () -> T): T? = try {
-    block()
-} catch (e: InvocationTargetException) {
-    throw e.targetException ?: e
-} catch (_: MemberNotFoundException) {
-    null
-} catch (_: SingleResultExpectedException) {
-    null
-} catch (_: IllegalAccessException) {
-    null
-} catch (_: IllegalArgumentException) {
-    null
-}
+private inline fun <T> callCatchingLookupFailure(block: () -> T): T? =
+    try {
+        block()
+    } catch (e: InvocationTargetException) {
+        throw e.targetException ?: e
+    } catch (_: MemberNotFoundException) {
+        null
+    } catch (_: SingleResultExpectedException) {
+        null
+    } catch (_: IllegalAccessException) {
+        null
+    } catch (_: IllegalArgumentException) {
+        null
+    }
 
 /**
  * 按名称调用实例方法。
@@ -565,9 +519,10 @@ fun Any.callMethodOrNull(
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Any? = callCatchingLookupFailure {
-    callMethod(methodName, args, argTypes, returnType)
-}
+): Any? =
+    callCatchingLookupFailure {
+        callMethod(methodName, args, argTypes, returnType)
+    }
 
 /**
  * 类型安全的方法调用。
@@ -585,9 +540,10 @@ fun <T> Any.callMethodAs(
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): T = checkNotNull(callMethod(methodName, args, argTypes, returnType)) {
-    "Method \"$methodName\" returned null; use callMethodAsOrNull for nullable results."
-} as T
+): T =
+    checkNotNull(callMethod(methodName, args, argTypes, returnType)) {
+        "Method \"$methodName\" returned null; use callMethodAsOrNull for nullable results."
+    } as T
 
 /**
  * 类型安全的方法调用，类型不匹配时返回 null。
@@ -607,17 +563,23 @@ inline fun <reified T> Any.callMethodAsOrNull(
  * val name = instance.callMethodAsOrNull<String>("getName")
  * ```
  */
-fun Any.callMethod(methodName: String, vararg args: Any?): Any? =
-    invokeAutoMatchedMethod(javaClass, this, methodName, args)
+fun Any.callMethod(
+    methodName: String,
+    vararg args: Any?,
+): Any? = invokeAutoMatchedMethod(javaClass, this, methodName, args)
 
 /**
  * 自动匹配参数并调用实例方法，方法找不到、参数不匹配或无权限访问时返回 `null`。
  *
  * 目标方法自身抛出的异常会原样重新抛出，不会被吞掉。失败被静默吞掉的部分不打印日志。
  */
-fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? = callCatchingLookupFailure {
-    callMethod(methodName, *args)
-}
+fun Any.callMethodOrNull(
+    methodName: String,
+    vararg args: Any?,
+): Any? =
+    callCatchingLookupFailure {
+        callMethod(methodName, *args)
+    }
 
 /**
  * 自动匹配参数并调用实例方法。
@@ -626,7 +588,10 @@ fun Any.callMethodOrNull(methodName: String, vararg args: Any?): Any? = callCatc
  * 期望 `null` 结果请改用 [callMethodAsOrNull]。
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Any.callMethodAs(methodName: String, vararg args: Any?): T =
+fun <T> Any.callMethodAs(
+    methodName: String,
+    vararg args: Any?,
+): T =
     checkNotNull(callMethod(methodName, *args)) {
         "Method \"$methodName\" returned null; use callMethodAsOrNull for nullable results."
     } as T
@@ -634,8 +599,10 @@ fun <T> Any.callMethodAs(methodName: String, vararg args: Any?): T =
 /**
  * 自动匹配参数并调用实例方法，类型不匹配时返回 null。
  */
-inline fun <reified T> Any.callMethodAsOrNull(methodName: String, vararg args: Any?): T? =
-    callMethod(methodName, *args) as? T
+inline fun <reified T> Any.callMethodAsOrNull(
+    methodName: String,
+    vararg args: Any?,
+): T? = callMethod(methodName, *args) as? T
 
 /**
  * 按查询条件查找并调用。
@@ -664,9 +631,10 @@ fun Any.callMethodBy(
 fun <T> Any.callMethodByAs(
     args: Array<out Any?> = emptyArray(),
     query: MethodQuery.() -> Unit,
-): T = checkNotNull(callMethodBy(args, query)) {
-    "callMethodByAs returned null; use a nullable T or a dedicated OrNull helper for nullable results."
-} as T
+): T =
+    checkNotNull(callMethodBy(args, query)) {
+        "callMethodByAs returned null; use a nullable T or a dedicated OrNull helper for nullable results."
+    } as T
 
 // ═══════════════════════ 静态方法调用 ═══════════════════════
 
@@ -698,9 +666,10 @@ fun Class<*>.callStaticMethodOrNull(
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): Any? = callCatchingLookupFailure {
-    callStaticMethod(methodName, args, argTypes, returnType)
-}
+): Any? =
+    callCatchingLookupFailure {
+        callStaticMethod(methodName, args, argTypes, returnType)
+    }
 
 /**
  * 静态方法调用。
@@ -714,9 +683,10 @@ fun <T> Class<*>.callStaticMethodAs(
     args: Args,
     argTypes: ArgTypes = argTypes(),
     returnType: Class<*>? = null,
-): T = checkNotNull(callStaticMethod(methodName, args, argTypes, returnType)) {
-    "Static method \"$methodName\" returned null; use callStaticMethodAsOrNull for nullable results."
-} as T
+): T =
+    checkNotNull(callStaticMethod(methodName, args, argTypes, returnType)) {
+        "Static method \"$methodName\" returned null; use callStaticMethodAsOrNull for nullable results."
+    } as T
 
 /**
  * 静态方法调用，类型不匹配时返回 null。
@@ -735,17 +705,23 @@ inline fun <reified T> Class<*>.callStaticMethodAsOrNull(
  * val result = targetClass.callStaticMethod("getInstance")
  * ```
  */
-fun Class<*>.callStaticMethod(methodName: String, vararg args: Any?): Any? =
-    invokeAutoMatchedMethod(this, null, methodName, args)
+fun Class<*>.callStaticMethod(
+    methodName: String,
+    vararg args: Any?,
+): Any? = invokeAutoMatchedMethod(this, null, methodName, args)
 
 /**
  * 自动匹配参数并调用静态方法，方法找不到、参数不匹配或无权限访问时返回 `null`。
  *
  * 目标方法自身抛出的异常会原样重新抛出，不会被吞掉。
  */
-fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any? = callCatchingLookupFailure {
-    callStaticMethod(methodName, *args)
-}
+fun Class<*>.callStaticMethodOrNull(
+    methodName: String,
+    vararg args: Any?,
+): Any? =
+    callCatchingLookupFailure {
+        callStaticMethod(methodName, *args)
+    }
 
 /**
  * 自动匹配参数并调用静态方法。
@@ -754,7 +730,10 @@ fun Class<*>.callStaticMethodOrNull(methodName: String, vararg args: Any?): Any?
  * 期望 `null` 结果请改用 [callStaticMethodAsOrNull]。
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Class<*>.callStaticMethodAs(methodName: String, vararg args: Any?): T =
+fun <T> Class<*>.callStaticMethodAs(
+    methodName: String,
+    vararg args: Any?,
+): T =
     checkNotNull(callStaticMethod(methodName, *args)) {
         "Static method \"$methodName\" returned null; use callStaticMethodAsOrNull for nullable results."
     } as T
@@ -762,8 +741,10 @@ fun <T> Class<*>.callStaticMethodAs(methodName: String, vararg args: Any?): T =
 /**
  * 自动匹配参数并调用静态方法，类型不匹配时返回 null。
  */
-inline fun <reified T> Class<*>.callStaticMethodAsOrNull(methodName: String, vararg args: Any?): T? =
-    callStaticMethod(methodName, *args) as? T
+inline fun <reified T> Class<*>.callStaticMethodAsOrNull(
+    methodName: String,
+    vararg args: Any?,
+): T? = callStaticMethod(methodName, *args) as? T
 
 // ═══════════════════════ Method 扩展 ═══════════════════════
 
@@ -775,7 +756,10 @@ inline fun <reified T> Class<*>.callStaticMethodAsOrNull(methodName: String, var
  * ```
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Method.invokeAs(obj: Any?, vararg args: Any?): T? {
+fun <T> Method.invokeAs(
+    obj: Any?,
+    vararg args: Any?,
+): T? {
     isAccessible = true
     return invoke(obj, *args) as T?
 }

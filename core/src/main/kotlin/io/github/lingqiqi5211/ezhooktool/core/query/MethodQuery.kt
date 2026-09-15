@@ -10,6 +10,7 @@ import io.github.lingqiqi5211.ezhooktool.core.paramCount
 import io.github.lingqiqi5211.ezhooktool.core.toReadableTypeName
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
+import java.util.Collections
 import java.util.function.Predicate
 
 private enum class MethodCachePart {
@@ -28,41 +29,11 @@ private enum class MethodCachePart {
     FLAGS,
 }
 
-private data class MethodTextMatchKey(val value: String, val ignoreCase: Boolean)
-
-private data class MethodIntRangeKey(val start: Int, val end: Int)
-
-private val methodCachePartOrder = listOf(
-    MethodCachePart.NAME,
-    MethodCachePart.NAME_CONTAINS,
-    MethodCachePart.NAME_STARTS_WITH,
-    MethodCachePart.NAME_ENDS_WITH,
-    MethodCachePart.PARAM_COUNT,
-    MethodCachePart.PARAM_COUNT_RANGE,
-    MethodCachePart.RETURN_TYPE,
-    MethodCachePart.RETURN_TYPE_EXTENDS_FROM,
-    MethodCachePart.PARAMETER_TYPES,
-    MethodCachePart.ASSIGNABLE_PARAMETER_TYPES,
-    MethodCachePart.VAGUE_PARAMETER_TYPES,
-    MethodCachePart.EXCEPTION_TYPES,
-    MethodCachePart.FLAGS,
-)
-
-private fun methodCacheKeyOf(parts: Map<MethodCachePart, Any>): List<Any> {
-    val result = ArrayList<Any>(parts.size * 2)
-    for (part in methodCachePartOrder) {
-        val value = parts[part] ?: continue
-        result += part
-        result += value
-    }
-    return result
-}
-
 private fun Method.isDefaultMethod(): Boolean =
     declaringClass.isInterface &&
-            Modifier.isPublic(modifiers) &&
-            !Modifier.isAbstract(modifiers) &&
-            !Modifier.isStatic(modifiers)
+        Modifier.isPublic(modifiers) &&
+        !Modifier.isAbstract(modifiers) &&
+        !Modifier.isStatic(modifiers)
 
 /**
  * 方法查询条件。
@@ -79,54 +50,56 @@ private fun Method.isDefaultMethod(): Boolean =
  * ```
  */
 class MethodQuery internal constructor() : BaseQuery<Method>() {
-    private val conditions = mutableListOf<MethodCondition>()
-    private val cacheParts = mutableMapOf<MethodCachePart, Any>()
-    private val descriptions = mutableListOf<String>()
-    private val flags = mutableMapOf<String, Boolean>()
-    private var cacheable = true
-    private var searchSuperSet = false
-    private var searchSuperValue: Boolean? = null
+    init {
+        searchScope = QueryScope.FIRST_MATCHING_CLASS
+    }
 
     /** 限定方法名。 */
     fun name(value: String) {
-        conditions += { name == value }
-        cacheParts[MethodCachePart.NAME] = value
-        descriptions += "name=$value"
+        addCondition(MethodCachePart.NAME to value, "name=$value") { name == value }
     }
 
     /** 限定方法名包含指定文本。 */
-    fun nameContains(value: String, ignoreCase: Boolean = false) {
-        conditions += { name.contains(value, ignoreCase) }
-        cacheParts[MethodCachePart.NAME_CONTAINS] = MethodTextMatchKey(value, ignoreCase)
-        descriptions += "name contains \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
+    fun nameContains(
+        value: String,
+        ignoreCase: Boolean = false,
+    ) {
+        addCondition(
+            MethodCachePart.NAME_CONTAINS to (value to ignoreCase),
+            "name contains \"$value\"" + (if (ignoreCase) " ignoreCase" else ""),
+        ) { name.contains(value, ignoreCase) }
     }
 
     /** 限定方法名以指定文本开头。 */
-    fun nameStartsWith(value: String, ignoreCase: Boolean = false) {
-        conditions += { name.startsWith(value, ignoreCase) }
-        cacheParts[MethodCachePart.NAME_STARTS_WITH] = MethodTextMatchKey(value, ignoreCase)
-        descriptions += "name startsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
+    fun nameStartsWith(
+        value: String,
+        ignoreCase: Boolean = false,
+    ) {
+        addCondition(
+            MethodCachePart.NAME_STARTS_WITH to (value to ignoreCase),
+            "name startsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else ""),
+        ) { name.startsWith(value, ignoreCase) }
     }
 
     /** 限定方法名以指定文本结尾。 */
-    fun nameEndsWith(value: String, ignoreCase: Boolean = false) {
-        conditions += { name.endsWith(value, ignoreCase) }
-        cacheParts[MethodCachePart.NAME_ENDS_WITH] = MethodTextMatchKey(value, ignoreCase)
-        descriptions += "name endsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
+    fun nameEndsWith(
+        value: String,
+        ignoreCase: Boolean = false,
+    ) {
+        addCondition(
+            MethodCachePart.NAME_ENDS_WITH to (value to ignoreCase),
+            "name endsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else ""),
+        ) { name.endsWith(value, ignoreCase) }
     }
 
     /** 限定参数数量。 */
     fun paramCount(value: Int) {
-        conditions += { paramCount == value }
-        cacheParts[MethodCachePart.PARAM_COUNT] = value
-        descriptions += "paramCount=$value"
+        addCondition(MethodCachePart.PARAM_COUNT to value, "paramCount=$value") { paramCount == value }
     }
 
     /** 限定参数数量范围。 */
     fun paramCountIn(range: IntRange) {
-        conditions += { paramCount in range }
-        cacheParts[MethodCachePart.PARAM_COUNT_RANGE] = MethodIntRangeKey(range.first, range.last)
-        descriptions += "paramCount=${range.first}..${range.last}"
+        addCondition(MethodCachePart.PARAM_COUNT_RANGE to range, "paramCount=${range.first}..${range.last}") { paramCount in range }
     }
 
     /** 限定为无参数方法。 */
@@ -136,23 +109,19 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
 
     /** 限定为有参数方法。 */
     fun hasParams() {
-        conditions += { paramCount > 0 }
-        cacheParts[MethodCachePart.PARAM_COUNT_RANGE] = MethodIntRangeKey(1, Int.MAX_VALUE)
-        descriptions += "paramCount>=1"
+        addCondition(MethodCachePart.PARAM_COUNT_RANGE to (1..Int.MAX_VALUE), "paramCount>=1") { paramCount > 0 }
     }
 
     /** 限定返回值类型。 */
     fun returnType(value: Class<*>) {
-        conditions += { returnType == value }
-        cacheParts[MethodCachePart.RETURN_TYPE] = value
-        descriptions += "returnType=${value.toReadableTypeName()}"
+        addCondition(MethodCachePart.RETURN_TYPE to value, "returnType=${value.toReadableTypeName()}") { returnType == value }
     }
 
     /** 限定返回值类型是 [value] 本身或子类。 */
     fun returnTypeExtendsFrom(value: Class<*>) {
-        conditions += { isTypeMatch(returnType, value) }
-        cacheParts[MethodCachePart.RETURN_TYPE_EXTENDS_FROM] = value
-        descriptions += "returnType extends ${value.toReadableTypeName()}"
+        addCondition(MethodCachePart.RETURN_TYPE_EXTENDS_FROM to value, "returnType extends ${value.toReadableTypeName()}") {
+            isTypeMatch(returnType, value)
+        }
     }
 
     /** 限定返回值为 void。 */
@@ -168,9 +137,13 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
      * 如果需要让 primitive 与 wrapper 互相匹配（或允许子类）请改用 [parameterTypesAssignableFrom]。
      */
     fun parameterTypes(vararg types: Class<*>) {
-        conditions += { parameterTypes.contentEquals(types) }
-        cacheParts[MethodCachePart.PARAMETER_TYPES] = types.toList()
-        descriptions += "params=${types.describeTypes()}"
+        val snapshot = types.copyOf()
+        addCondition(
+            MethodCachePart.PARAMETER_TYPES to Collections.unmodifiableList(snapshot.toList()),
+            "params=${snapshot.describeTypes()}",
+        ) {
+            parameterTypes.contentEquals(snapshot)
+        }
     }
 
     /** [parameterTypes] 的短名称。 */
@@ -184,9 +157,11 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
      * 例如方法参数是 `CharSequence`，传入 `String::class.java` 时会匹配。
      */
     fun parameterTypesAssignableFrom(vararg types: Class<*>) {
-        conditions += { parameterTypes.canAcceptAll(types) }
-        cacheParts[MethodCachePart.ASSIGNABLE_PARAMETER_TYPES] = types.toList()
-        descriptions += "paramsAssignableFrom=${types.describeTypes()}"
+        val snapshot = types.copyOf()
+        addCondition(
+            MethodCachePart.ASSIGNABLE_PARAMETER_TYPES to Collections.unmodifiableList(snapshot.toList()),
+            "paramsAssignableFrom=${snapshot.describeTypes()}",
+        ) { parameterTypes.canAcceptAll(snapshot) }
     }
 
     /** [parameterTypesAssignableFrom] 的短名称。 */
@@ -208,11 +183,11 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
      * ```
      */
     fun parameterTypesVague(vararg types: Any) {
-        val expected = types.map { if (it === VagueType) null else it as Class<*> }
-        conditions += { parameterTypesMatchVague(parameterTypes, expected) }
-        cacheParts[MethodCachePart.VAGUE_PARAMETER_TYPES] = expected
-        val described = types.joinToString(", ") { if (it === VagueType) "*" else (it as Class<*>).toReadableTypeName() }
-        descriptions += "paramsVague=[$described]"
+        val expected = Collections.unmodifiableList(types.map { if (it === VagueType) null else it as Class<*> })
+        val described = expected.joinToString(", ") { it?.toReadableTypeName() ?: "*" }
+        addCondition(MethodCachePart.VAGUE_PARAMETER_TYPES to expected, "paramsVague=[$described]") {
+            parameterTypesMatchVague(parameterTypes, expected)
+        }
     }
 
     /**
@@ -226,9 +201,7 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
      */
     fun genericParameterTypes(vararg matchers: GenericTypeMatcher) {
         val snapshot = matchers.toList()
-        conditions += { matchesGenericTypes(genericParameterTypes, snapshot) }
-        cacheable = false
-        descriptions += "genericParams=[${snapshot.joinToString(", ")}]"
+        addCondition(null, "genericParams=[${snapshot.joinToString(", ")}]") { matchesGenericTypes(genericParameterTypes, snapshot) }
     }
 
     /**
@@ -236,16 +209,18 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
      * 此条件禁用查询缓存。
      */
     fun genericReturnType(matcher: GenericTypeMatcher) {
-        conditions += { matcher.matches(genericReturnType) }
-        cacheable = false
-        descriptions += "genericReturnType=$matcher"
+        addCondition(null, "genericReturnType=$matcher") { matcher.matches(genericReturnType) }
     }
 
     /** 限定声明的异常类型。 */
     fun exceptionTypes(vararg types: Class<*>) {
-        conditions += { exceptionTypes.contentEquals(types) }
-        cacheParts[MethodCachePart.EXCEPTION_TYPES] = types.toList()
-        descriptions += "exceptions=${types.describeTypes()}"
+        val snapshot = types.copyOf()
+        addCondition(
+            MethodCachePart.EXCEPTION_TYPES to Collections.unmodifiableList(snapshot.toList()),
+            "exceptions=${snapshot.describeTypes()}",
+        ) {
+            exceptionTypes.contentEquals(snapshot)
+        }
     }
 
     /** 限定为 static 方法。 */
@@ -377,16 +352,14 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
      * 只在当前类中查找。
      */
     fun findOnlyClass() {
-        searchSuperSet = true
-        searchSuperValue = false
+        searchScope = QueryScope.DECLARED
     }
 
     /**
      * 查找当前类和全部父类。
      */
     fun findAndSuper() {
-        searchSuperSet = true
-        searchSuperValue = true
+        searchScope = QueryScope.HIERARCHY
     }
 
     /** [findOnlyClass] 的旧名称。 */
@@ -409,58 +382,21 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
 
     /** 添加自定义 Kotlin 条件。 */
     fun filter(condition: MethodCondition) {
-        conditions += { QueryFilterContext.run { condition(this) } }
-        cacheable = false
-        descriptions += "customFilter"
+        addCondition(null, "customFilter") { QueryFilterContext.run { condition(this) } }
     }
 
     /** 添加 Java `Predicate` 条件。 */
     fun filter(predicate: Predicate<Method>) {
-        conditions += { predicate.test(this) }
-        cacheable = false
-        descriptions += "customFilter"
+        filter { predicate.test(this) }
     }
 
-    private fun flag(name: String, value: Boolean, condition: Method.() -> Boolean) {
-        conditions += { condition(this) == value }
-        flags[name] = value
-        cacheParts[MethodCachePart.FLAGS] = flags.toSortedMap().toList()
-        descriptions += "$name=$value"
+    private fun flag(
+        name: String,
+        value: Boolean,
+        condition: Method.() -> Boolean,
+    ) {
+        addCondition(MethodCachePart.FLAGS to (name to value), "$name=$value") { condition(this) == value }
     }
-
-    internal fun effectiveFindSuper(defaultValue: Boolean?): Boolean? =
-        if (searchSuperSet) searchSuperValue else defaultValue
-
-    internal fun cacheKeyOrNull(): List<Any>? =
-        cacheKeyOrManual(methodCacheKeyOf(cacheParts), cacheable)
-
-    internal fun describe(): String? =
-        descriptions.distinct().takeIf { it.isNotEmpty() }?.joinToString(", ")
-
-    internal fun matches(method: Method): Boolean = conditions.all { it(method) }
 }
 
-internal fun methodExactCacheKeys(method: Method): List<List<Any>> {
-    val parameterTypes = method.parameterTypes.toList()
-    val paramCount = parameterTypes.size
-    val exact = mapOf(
-        MethodCachePart.NAME to method.name,
-        MethodCachePart.RETURN_TYPE to method.returnType,
-        MethodCachePart.PARAMETER_TYPES to parameterTypes,
-    )
-    val exactWithParamCount = exact + (MethodCachePart.PARAM_COUNT to paramCount)
-
-    return listOf(
-        methodCacheKeyOf(exact),
-        methodCacheKeyOf(exactWithParamCount),
-    )
-}
-
-internal fun methodQuery(block: MethodQuery.() -> Unit): MethodQuery =
-    MethodQuery().apply(block)
-
-internal fun methodCondition(query: MethodQuery): MethodCondition =
-    { query.matches(this) }
-
-internal fun methodCondition(block: MethodQuery.() -> Unit): MethodCondition =
-    methodCondition(methodQuery(block))
+internal fun methodQuery(block: MethodQuery.() -> Unit): MethodQuery = MethodQuery().apply(block)

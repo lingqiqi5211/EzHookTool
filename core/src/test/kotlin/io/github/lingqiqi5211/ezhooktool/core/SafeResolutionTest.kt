@@ -1,9 +1,9 @@
 package io.github.lingqiqi5211.ezhooktool.core
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 private class SafeMemberTarget {
@@ -21,8 +21,13 @@ private class SafeMemberTarget {
 
 private class SafeResolveMethodTarget
 
-private class BrokenClassLoader(parent: ClassLoader?) : ClassLoader(parent) {
-    override fun loadClass(name: String, resolve: Boolean): Class<*> {
+private class BrokenClassLoader(
+    parent: ClassLoader?,
+) : ClassLoader(parent) {
+    override fun loadClass(
+        name: String,
+        resolve: Boolean,
+    ): Class<*> {
         if (name == "broken.BaseLauncher") {
             throw NoClassDefFoundError("Failed resolution of: Lcom/miui/newhome/view/gestureview/NewHomeView;")
         }
@@ -35,41 +40,54 @@ class SafeResolutionTest {
 
     @Test
     fun `declared methods fallback returns hidden method list when direct access fails`() {
-        val methods = resolveDeclaredMembersFallback(
-            directAccess = {
-                throw NoClassDefFoundError("Failed resolution of: Lcom/miui/newhome/view/gestureview/NewHomeView;")
-            },
-            hiddenAccess = { SafeMemberTarget::class.java.declaredMethods },
-            emptyAccess = { emptyArray() },
-        )
+        val methods =
+            resolveDeclaredMembersFallback(
+                directAccess = {
+                    throw NoClassDefFoundError("Failed resolution of: Lcom/miui/newhome/view/gestureview/NewHomeView;")
+                },
+                hiddenAccess = { SafeMemberTarget::class.java.declaredMethods },
+            )
 
         assertTrue(methods.any { it.name == "setupViews" })
     }
 
     @Test
     fun `declared fields fallback returns hidden field list when direct access fails`() {
-        val fields = resolveDeclaredMembersFallback(
-            directAccess = {
-                throw LinkageError("field linkage failed")
-            },
-            hiddenAccess = { SafeMemberTarget::class.java.declaredFields },
-            emptyAccess = { emptyArray() },
-        )
+        val fields =
+            resolveDeclaredMembersFallback(
+                directAccess = {
+                    throw LinkageError("field linkage failed")
+                },
+                hiddenAccess = { SafeMemberTarget::class.java.declaredFields },
+            )
 
         assertTrue(fields.any { it.name == "launcherTag" })
     }
 
     @Test
     fun `declared constructors fallback returns hidden constructor list when direct access fails`() {
-        val constructors = resolveDeclaredMembersFallback(
-            directAccess = {
-                throw NoClassDefFoundError("constructor linkage failed")
-            },
-            hiddenAccess = { SafeMemberTarget::class.java.declaredConstructors },
-            emptyAccess = { emptyArray() },
-        )
+        val constructors =
+            resolveDeclaredMembersFallback(
+                directAccess = {
+                    throw NoClassDefFoundError("constructor linkage failed")
+                },
+                hiddenAccess = { SafeMemberTarget::class.java.declaredConstructors },
+            )
 
         assertTrue(constructors.any { it.parameterCount == 1 })
+    }
+
+    @Test
+    fun `unavailable fallback preserves failure rather than caching empty enumeration`() {
+        val failure = NoClassDefFoundError("missing dependency")
+        val thrown =
+            assertThrows(NoClassDefFoundError::class.java) {
+                resolveDeclaredMembersFallback<Any>(directAccess = { throw failure })
+            }
+        org.junit.jupiter.api.Assertions
+            .assertSame(failure, thrown)
+        assertTrue(resolveDeclaredMembersFallback(directAccess = { emptyArray<Any>() }).isEmpty())
+        assertTrue(resolveDeclaredMembersFallback(directAccess = { throw failure }, hiddenAccess = { emptyArray<Any>() }).isEmpty())
     }
 
     @Test
@@ -111,12 +129,13 @@ class SafeResolutionTest {
 
     @Test
     fun `member not found message includes query conditions`() {
-        val error = assertThrows(MemberNotFoundException::class.java) {
-            SafeMemberTarget::class.java.findMethod {
-                name("missingMethod")
-                params(String::class.java)
+        val error =
+            assertThrows(MemberNotFoundException::class.java) {
+                SafeMemberTarget::class.java.findMethod {
+                    name("missingMethod")
+                    params(String::class.java)
+                }
             }
-        }
 
         val message = error.message.orEmpty()
         assertTrue(message.contains("Condition: name=missingMethod, params=[java.lang.String]"))
@@ -125,10 +144,10 @@ class SafeResolutionTest {
 
     @Test
     fun `best match failure message includes lookup condition`() {
-        val error = assertThrows(MemberNotFoundException::class.java) {
-            findMethodBestMatch(SafeMemberTarget::class.java, "missingBestMatch", String::class.java)
-        }
+        val error =
+            assertThrows(MemberNotFoundException::class.java) {
+                findMethodBestMatch(SafeMemberTarget::class.java, "missingBestMatch", String::class.java)
+            }
         assertTrue(error.message.orEmpty().contains("bestMatch name=missingBestMatch"))
     }
-
 }

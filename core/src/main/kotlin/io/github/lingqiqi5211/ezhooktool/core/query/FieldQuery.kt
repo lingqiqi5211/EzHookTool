@@ -20,29 +20,6 @@ private enum class FieldCachePart {
     FLAGS,
 }
 
-private data class FieldTextMatchKey(val value: String, val ignoreCase: Boolean)
-
-private val fieldCachePartOrder = listOf(
-    FieldCachePart.NAME,
-    FieldCachePart.NAME_CONTAINS,
-    FieldCachePart.NAME_STARTS_WITH,
-    FieldCachePart.NAME_ENDS_WITH,
-    FieldCachePart.TYPE,
-    FieldCachePart.TYPE_EXTENDS_FROM,
-    FieldCachePart.IS_STATIC,
-    FieldCachePart.FLAGS,
-)
-
-private fun fieldCacheKeyOf(parts: Map<FieldCachePart, Any>): List<Any> {
-    val result = ArrayList<Any>(parts.size * 2)
-    for (part in fieldCachePartOrder) {
-        val value = parts[part] ?: continue
-        result += part
-        result += value
-    }
-    return result
-}
-
 /**
  * 字段查询条件。
  *
@@ -57,54 +34,56 @@ private fun fieldCacheKeyOf(parts: Map<FieldCachePart, Any>): List<Any> {
  * ```
  */
 class FieldQuery internal constructor() : BaseQuery<Field>() {
-    private val conditions = mutableListOf<FieldCondition>()
-    private val cacheParts = mutableMapOf<FieldCachePart, Any>()
-    private val descriptions = mutableListOf<String>()
-    private val flags = mutableMapOf<String, Boolean>()
-    private var cacheable = true
-    private var searchSuperSet = false
-    private var searchSuperValue: Boolean? = null
+    init {
+        searchScope = QueryScope.FIRST_MATCHING_CLASS
+    }
 
     /** 限定字段名。 */
     fun name(value: String) {
-        conditions += { name == value }
-        cacheParts[FieldCachePart.NAME] = value
-        descriptions += "name=$value"
+        addCondition(FieldCachePart.NAME to value, "name=$value") { name == value }
     }
 
     /** 限定字段名包含指定文本。 */
-    fun nameContains(value: String, ignoreCase: Boolean = false) {
-        conditions += { name.contains(value, ignoreCase) }
-        cacheParts[FieldCachePart.NAME_CONTAINS] = FieldTextMatchKey(value, ignoreCase)
-        descriptions += "name contains \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
+    fun nameContains(
+        value: String,
+        ignoreCase: Boolean = false,
+    ) {
+        addCondition(
+            FieldCachePart.NAME_CONTAINS to (value to ignoreCase),
+            "name contains \"$value\"" + (if (ignoreCase) " ignoreCase" else ""),
+        ) { name.contains(value, ignoreCase) }
     }
 
     /** 限定字段名以指定文本开头。 */
-    fun nameStartsWith(value: String, ignoreCase: Boolean = false) {
-        conditions += { name.startsWith(value, ignoreCase) }
-        cacheParts[FieldCachePart.NAME_STARTS_WITH] = FieldTextMatchKey(value, ignoreCase)
-        descriptions += "name startsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
+    fun nameStartsWith(
+        value: String,
+        ignoreCase: Boolean = false,
+    ) {
+        addCondition(
+            FieldCachePart.NAME_STARTS_WITH to (value to ignoreCase),
+            "name startsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else ""),
+        ) { name.startsWith(value, ignoreCase) }
     }
 
     /** 限定字段名以指定文本结尾。 */
-    fun nameEndsWith(value: String, ignoreCase: Boolean = false) {
-        conditions += { name.endsWith(value, ignoreCase) }
-        cacheParts[FieldCachePart.NAME_ENDS_WITH] = FieldTextMatchKey(value, ignoreCase)
-        descriptions += "name endsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else "")
+    fun nameEndsWith(
+        value: String,
+        ignoreCase: Boolean = false,
+    ) {
+        addCondition(
+            FieldCachePart.NAME_ENDS_WITH to (value to ignoreCase),
+            "name endsWith \"$value\"" + (if (ignoreCase) " ignoreCase" else ""),
+        ) { name.endsWith(value, ignoreCase) }
     }
 
     /** 限定字段类型。 */
     fun type(value: Class<*>) {
-        conditions += { type == value }
-        cacheParts[FieldCachePart.TYPE] = value
-        descriptions += "type=${value.toReadableTypeName()}"
+        addCondition(FieldCachePart.TYPE to value, "type=${value.toReadableTypeName()}") { type == value }
     }
 
     /** 限定字段类型是 [value] 本身或子类。 */
     fun typeExtendsFrom(value: Class<*>) {
-        conditions += { isTypeMatch(type, value) }
-        cacheParts[FieldCachePart.TYPE_EXTENDS_FROM] = value
-        descriptions += "type extends ${value.toReadableTypeName()}"
+        addCondition(FieldCachePart.TYPE_EXTENDS_FROM to value, "type extends ${value.toReadableTypeName()}") { isTypeMatch(type, value) }
     }
 
     /** 限定为 static 字段。 */
@@ -114,9 +93,7 @@ class FieldQuery internal constructor() : BaseQuery<Field>() {
 
     /** 限定是否为 static 字段。 */
     fun isStatic(value: Boolean) {
-        conditions += { this.isStatic == value }
-        cacheParts[FieldCachePart.IS_STATIC] = value
-        descriptions += "static=$value"
+        addCondition(FieldCachePart.IS_STATIC to value, "static=$value") { this.isStatic == value }
     }
 
     /** 限定为非 static 字段。 */
@@ -208,16 +185,14 @@ class FieldQuery internal constructor() : BaseQuery<Field>() {
      * 只在当前类中查找。
      */
     fun findOnlyClass() {
-        searchSuperSet = true
-        searchSuperValue = false
+        searchScope = QueryScope.DECLARED
     }
 
     /**
      * 查找当前类和全部父类。
      */
     fun findAndSuper() {
-        searchSuperSet = true
-        searchSuperValue = true
+        searchScope = QueryScope.HIERARCHY
     }
 
     /** [findOnlyClass] 的旧名称。 */
@@ -240,52 +215,21 @@ class FieldQuery internal constructor() : BaseQuery<Field>() {
 
     /** 添加自定义 Kotlin 条件。 */
     fun filter(condition: FieldCondition) {
-        conditions += { QueryFilterContext.run { condition(this) } }
-        cacheable = false
-        descriptions += "customFilter"
+        addCondition(null, "customFilter") { QueryFilterContext.run { condition(this) } }
     }
 
     /** 添加 Java `Predicate` 条件。 */
     fun filter(predicate: Predicate<Field>) {
-        conditions += { predicate.test(this) }
-        cacheable = false
-        descriptions += "customFilter"
+        filter { predicate.test(this) }
     }
 
-    private fun flag(name: String, value: Boolean, condition: Field.() -> Boolean) {
-        conditions += { condition(this) == value }
-        flags[name] = value
-        cacheParts[FieldCachePart.FLAGS] = flags.toSortedMap().toList()
-        descriptions += "$name=$value"
+    private fun flag(
+        name: String,
+        value: Boolean,
+        condition: Field.() -> Boolean,
+    ) {
+        addCondition(FieldCachePart.FLAGS to (name to value), "$name=$value") { condition(this) == value }
     }
-
-    internal fun effectiveFindSuper(defaultValue: Boolean?): Boolean? =
-        if (searchSuperSet) searchSuperValue else defaultValue
-
-    internal fun cacheKeyOrNull(): List<Any>? =
-        cacheKeyOrManual(fieldCacheKeyOf(cacheParts), cacheable)
-
-    internal fun describe(): String? =
-        descriptions.distinct().takeIf { it.isNotEmpty() }?.joinToString(", ")
-
-    internal fun matches(field: Field): Boolean = conditions.all { it(field) }
 }
 
-internal fun fieldExactCacheKeys(field: Field): List<List<Any>> {
-    val exact = mapOf(
-        FieldCachePart.NAME to field.name,
-        FieldCachePart.TYPE to field.type,
-        FieldCachePart.IS_STATIC to field.isStatic,
-    )
-
-    return listOf(fieldCacheKeyOf(exact))
-}
-
-internal fun fieldQuery(block: FieldQuery.() -> Unit): FieldQuery =
-    FieldQuery().apply(block)
-
-internal fun fieldCondition(query: FieldQuery): FieldCondition =
-    { query.matches(this) }
-
-internal fun fieldCondition(block: FieldQuery.() -> Unit): FieldCondition =
-    fieldCondition(fieldQuery(block))
+internal fun fieldQuery(block: FieldQuery.() -> Unit): FieldQuery = FieldQuery().apply(block)

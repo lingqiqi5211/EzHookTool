@@ -15,11 +15,12 @@ internal const val EZHOOKTOOL_TAG = "EzHookTool"
  * val result = tryOrNull { riskyOperation() }
  * ```
  */
-inline fun <T> tryOrNull(block: () -> T?): T? = try {
-    block()
-} catch (_: Throwable) {
-    null
-}
+inline fun <T> tryOrNull(block: () -> T?): T? =
+    try {
+        block()
+    } catch (_: Throwable) {
+        null
+    }
 
 /**
  * 执行代码块，异常时返回 false。
@@ -28,11 +29,12 @@ inline fun <T> tryOrNull(block: () -> T?): T? = try {
  * val success = tryOrFalse { riskyOperation(); true }
  * ```
  */
-inline fun tryOrFalse(block: () -> Boolean): Boolean = try {
-    block()
-} catch (_: Throwable) {
-    false
-}
+inline fun tryOrFalse(block: () -> Boolean): Boolean =
+    try {
+        block()
+    } catch (_: Throwable) {
+        false
+    }
 
 /**
  * 执行代码块，异常时通过 [EzReflect.logger] 打日志。
@@ -42,7 +44,10 @@ inline fun tryOrFalse(block: () -> Boolean): Boolean = try {
  * tryOrLog("MyTag") { riskyOperation() }
  * ```
  */
-inline fun tryOrLog(tag: String = EZHOOKTOOL_TAG, block: () -> Unit) {
+inline fun tryOrLog(
+    tag: String = EZHOOKTOOL_TAG,
+    block: () -> Unit,
+) {
     try {
         block()
     } catch (t: Throwable) {
@@ -57,27 +62,32 @@ inline fun tryOrLog(tag: String = EZHOOKTOOL_TAG, block: () -> Unit) {
  * val result = tryOrLogNull { riskyOperation() }
  * ```
  */
-inline fun <T> tryOrLogNull(tag: String = EZHOOKTOOL_TAG, block: () -> T?): T? = try {
-    block()
-} catch (t: Throwable) {
-    EzReflect.logger.error(tag, "Exception caught: ${t.message}", t)
-    null
-}
+inline fun <T> tryOrLogNull(
+    tag: String = EZHOOKTOOL_TAG,
+    block: () -> T?,
+): T? =
+    try {
+        block()
+    } catch (t: Throwable) {
+        EzReflect.logger.error(tag, "Exception caught: ${t.message}", t)
+        null
+    }
 
 /**
  * Primitive 类型到 Wrapper 类型的映射。
  */
-private val PRIMITIVE_TO_WRAPPER: Map<Class<*>, Class<*>> = mapOf(
-    Boolean::class.javaPrimitiveType!! to Boolean::class.javaObjectType,
-    Byte::class.javaPrimitiveType!! to Byte::class.javaObjectType,
-    Char::class.javaPrimitiveType!! to Char::class.javaObjectType,
-    Short::class.javaPrimitiveType!! to Short::class.javaObjectType,
-    Int::class.javaPrimitiveType!! to Int::class.javaObjectType,
-    Long::class.javaPrimitiveType!! to Long::class.javaObjectType,
-    Float::class.javaPrimitiveType!! to Float::class.javaObjectType,
-    Double::class.javaPrimitiveType!! to Double::class.javaObjectType,
-    Void::class.javaPrimitiveType!! to Void::class.javaObjectType,
-)
+private val PRIMITIVE_TO_WRAPPER: Map<Class<*>, Class<*>> =
+    mapOf(
+        Boolean::class.javaPrimitiveType!! to Boolean::class.javaObjectType,
+        Byte::class.javaPrimitiveType!! to Byte::class.javaObjectType,
+        Char::class.javaPrimitiveType!! to Char::class.javaObjectType,
+        Short::class.javaPrimitiveType!! to Short::class.javaObjectType,
+        Int::class.javaPrimitiveType!! to Int::class.javaObjectType,
+        Long::class.javaPrimitiveType!! to Long::class.javaObjectType,
+        Float::class.javaPrimitiveType!! to Float::class.javaObjectType,
+        Double::class.javaPrimitiveType!! to Double::class.javaObjectType,
+        Void::class.javaPrimitiveType!! to Void::class.javaObjectType,
+    )
 
 /**
  * 判断两个参数类型数组是否匹配（支持 primitive/wrapper 自动匹配）。
@@ -89,7 +99,10 @@ private val PRIMITIVE_TO_WRAPPER: Map<Class<*>, Class<*>> = mapOf(
  * ) // true
  * ```
  */
-fun paramTypesMatch(actual: Array<Class<*>>, expected: Array<Class<*>>): Boolean {
+fun paramTypesMatch(
+    actual: Array<Class<*>>,
+    expected: Array<Class<*>>,
+): Boolean {
     if (actual.size != expected.size) return false
     for (i in actual.indices) {
         if (!isTypeMatch(actual[i], expected[i])) return false
@@ -100,7 +113,10 @@ fun paramTypesMatch(actual: Array<Class<*>>, expected: Array<Class<*>>): Boolean
 /**
  * 判断两个类型是否匹配（考虑 primitive/wrapper 互转和继承关系）。
  */
-internal fun isTypeMatch(actual: Class<*>, expected: Class<*>): Boolean {
+internal fun isTypeMatch(
+    actual: Class<*>,
+    expected: Class<*>,
+): Boolean {
     if (actual == expected) return true
     // primitive <-> wrapper
     val actualWrapped = PRIMITIVE_TO_WRAPPER[actual] ?: actual
@@ -124,8 +140,7 @@ internal fun Array<Class<*>>.canAcceptAll(types: Array<out Class<*>>): Boolean {
 }
 
 /** 把类型数组格式化成 `[a, b]` 形式，用于查询条件描述。 */
-internal fun Array<out Class<*>>.describeTypes(): String =
-    joinToString(prefix = "[", postfix = "]") { it.toReadableTypeName() }
+internal fun Array<out Class<*>>.describeTypes(): String = joinToString(prefix = "[", postfix = "]") { it.toReadableTypeName() }
 
 /**
  * 根据实参推断参数类型数组。
@@ -137,7 +152,7 @@ internal fun inferArgTypes(args: Array<out Any?>): Array<Class<*>> =
     Array(args.size) { i ->
         args[i]?.javaClass ?: throw IllegalArgumentException(
             "Cannot infer parameter type for null argument at index $i. " +
-                    "Pass argTypes(...) explicitly so the right overload can be resolved."
+                "Pass argTypes(...) explicitly so the right overload can be resolved.",
         )
     }
 
@@ -145,7 +160,11 @@ internal fun inferArgTypes(args: Array<out Any?>): Array<Class<*>> =
 internal fun Any.ownerClass(): Class<*> = if (this is Class<*>) this else javaClass
 
 @PublishedApi
-internal fun findFirstFieldByType(owner: Any, type: Class<*>, isStatic: Boolean): Field? {
+internal fun findFirstFieldByType(
+    owner: Any,
+    type: Class<*>,
+    isStatic: Boolean,
+): Field? {
     val clz = owner.ownerClass()
     return findFieldOrNull(clz) {
         this.type(type)
@@ -154,13 +173,20 @@ internal fun findFirstFieldByType(owner: Any, type: Class<*>, isStatic: Boolean)
 }
 
 @PublishedApi
-internal fun readFieldValue(field: Field, receiver: Any?): Any? {
+internal fun readFieldValue(
+    field: Field,
+    receiver: Any?,
+): Any? {
     field.isAccessible = true
     return field.get(receiver)
 }
 
 @PublishedApi
-internal fun writeFieldValue(field: Field, receiver: Any?, value: Any?) {
+internal fun writeFieldValue(
+    field: Field,
+    receiver: Any?,
+    value: Any?,
+) {
     field.isAccessible = true
     field.set(receiver, value)
 }
@@ -172,30 +198,15 @@ internal fun invokeAutoMatchedMethod(
     methodName: String,
     args: Array<out Any?>,
 ): Any? {
-    val method: Method = if (args.any { it == null }) {
-        findMethodBestMatch(owner, methodName, *args)
-    } else {
-        val types = inferArgTypes(args)
-        owner.methodOrNull(methodName, argTypes(*types))
-            ?: findMethodBestMatch(owner, methodName, *types)
-    }
+    val method = findMethodBestMatchForCall(owner, methodName, args, staticOnly = receiver == null)
     return method.invoke(receiver, *args)
 }
 
 @PublishedApi
-internal fun constructAutoMatchedInstance(owner: Class<*>, args: Array<out Any?>): Any {
-    if (args.isEmpty()) {
-        return owner.getDeclaredConstructor().also { it.isAccessible = true }.newInstance()
-    }
-    val constructor = if (args.any { it == null }) {
-        findConstructorBestMatch(owner, *args)
-    } else {
-        val types = inferArgTypes(args)
-        runCatching { owner.getDeclaredConstructor(*types).also { it.isAccessible = true } }.getOrNull()
-            ?: findConstructorBestMatch(owner, *types)
-    }
-    return constructor.newInstance(*args)
-}
+internal fun constructAutoMatchedInstance(
+    owner: Class<*>,
+    args: Array<out Any?>,
+): Any = findConstructorBestMatch(owner, *args).newInstance(*args)
 
 /**
  * 浅拷贝字段值：将 [src] 的所有字段值复制到 [dst]。
@@ -214,20 +225,33 @@ internal fun constructAutoMatchedInstance(owner: Class<*>, args: Array<out Any?>
  * @param dst       目标对象（必须与 src 是同一类型或其子类）
  * @param findSuper 是否拷贝父类字段，默认 true
  */
-fun fieldCpy(src: Any, dst: Any, findSuper: Boolean = true) {
+fun fieldCpy(
+    src: Any,
+    dst: Any,
+    findSuper: Boolean = true,
+) {
     var clz: Class<*>? = src.javaClass
     while (clz != null && clz != Any::class.java) {
         val currentClass: Class<*> = clz
         for (field in currentClass.declaredFields) {
             val modifiers = field.modifiers
-            if (java.lang.reflect.Modifier.isStatic(modifiers)) continue
-            if (java.lang.reflect.Modifier.isFinal(modifiers)) continue
+            if (java.lang.reflect.Modifier
+                    .isStatic(modifiers)
+            ) {
+                continue
+            }
+            if (java.lang.reflect.Modifier
+                    .isFinal(modifiers)
+            ) {
+                continue
+            }
             field.isAccessible = true
             try {
                 field.set(dst, field.get(src))
             } catch (t: Throwable) {
                 throw IllegalArgumentException(
-                    "fieldCpy failed on ${currentClass.name}.${field.name}: ${t.message}", t
+                    "fieldCpy failed on ${currentClass.name}.${field.name}: ${t.message}",
+                    t,
                 )
             }
         }

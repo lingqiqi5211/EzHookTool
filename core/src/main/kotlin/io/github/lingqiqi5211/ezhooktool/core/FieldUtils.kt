@@ -3,10 +3,10 @@
 package io.github.lingqiqi5211.ezhooktool.core
 
 import io.github.lingqiqi5211.ezhooktool.core.query.FieldQuery
-import io.github.lingqiqi5211.ezhooktool.core.query.fieldCondition
-import io.github.lingqiqi5211.ezhooktool.core.query.fieldExactCacheKeys
-import io.github.lingqiqi5211.ezhooktool.core.query.fieldQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryPlan
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryResultMode
+import io.github.lingqiqi5211.ezhooktool.core.query.fieldQuery
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 
@@ -93,58 +93,11 @@ private fun getFieldCandidates(clz: Class<*>): List<String> {
 
 // ═══════════════════════ Cache Keys ═══════════════════════
 
-private data class FieldCacheKey(
-    val queryKey: List<Any>,
-    val findSuper: Boolean?,
-    val resultMode: String = "first",
-)
-
 private data class FieldNameCacheKey(
     val name: String,
     val isStatic: Boolean?,
     val fieldType: Class<*>?,
 )
-
-private data class DeclaringFieldCacheKey(
-    val owner: Class<*>,
-    val key: FieldCacheKey,
-)
-
-private data class AllFieldsCacheKey(
-    val queryKey: List<Any>,
-    val findSuper: Boolean?,
-)
-
-private fun cacheExactFields(
-    searchClass: Class<*>,
-    findSuper: Boolean?,
-    fields: List<Field>,
-    cacheSearchClass: Boolean,
-) {
-    if (!EzReflect.cacheEnabled) return
-    val searchKeys = HashSet<FieldCacheKey>()
-    val declaringKeys = HashSet<DeclaringFieldCacheKey>()
-
-    for (field in fields) {
-        for (queryKey in fieldExactCacheKeys(field)) {
-            if (cacheSearchClass) {
-                val key = FieldCacheKey(queryKey, findSuper)
-                if (searchKeys.add(key)) {
-                    EzReflect.cachePut(searchClass, ReflectCacheBucket.FIELD, key, field)
-                }
-            }
-
-            val currentClassKey = FieldCacheKey(queryKey, false)
-            val smartKey = FieldCacheKey(queryKey, null)
-            if (declaringKeys.add(DeclaringFieldCacheKey(field.declaringClass, currentClassKey))) {
-                EzReflect.cachePut(field.declaringClass, ReflectCacheBucket.FIELD, currentClassKey, field)
-            }
-            if (declaringKeys.add(DeclaringFieldCacheKey(field.declaringClass, smartKey))) {
-                EzReflect.cachePut(field.declaringClass, ReflectCacheBucket.FIELD, smartKey, field)
-            }
-        }
-    }
-}
 
 // ═══════════════════════ 按查询条件查找 (Class) ═══════════════════════
 
@@ -166,19 +119,19 @@ private fun cacheExactFields(
 fun findField(
     clz: Class<*>,
     query: FieldQuery.() -> Unit,
-): Field {
-    QueryFilterContext.warnNestedFind("findField")
-    val builtQuery = fieldQuery(query)
-    val effectiveFindSuper = builtQuery.effectiveFindSuper(null)
-    return findFieldOrNull(clz, null, builtQuery)
-        ?: throw MemberNotFoundException(
-            memberType = MemberType.FIELD,
-            targetClass = clz.name,
-            searchedSuper = effectiveFindSuper != false,
-            conditionDesc = builtQuery.describe(),
-            candidates = getFieldCandidates(clz)
-        )
-}
+): Field =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findField")
+        val plan = fieldQuery(query).freeze(QueryResultMode.FIRST)
+        findFieldOrNull(clz, plan)
+            ?: throw MemberNotFoundException(
+                memberType = MemberType.FIELD,
+                targetClass = clz.name,
+                searchedSuper = plan.findSuper != false,
+                conditionDesc = plan.description,
+                candidates = getFieldCandidates(clz),
+            )
+    }
 
 /**
  * 按查询条件查找字段，找不到返回 null。
@@ -189,56 +142,49 @@ fun findField(
 fun findFieldOrNull(
     clz: Class<*>,
     query: FieldQuery.() -> Unit,
-): Field? {
-    QueryFilterContext.warnNestedFind("findFieldOrNull")
-    return findFieldOrNull(clz, null, fieldQuery(query))
-}
+): Field? =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findFieldOrNull")
+        findFieldOrNull(clz, fieldQuery(query).freeze(QueryResultMode.FIRST))
+    }
 
 private fun findFieldOrNull(
     clz: Class<*>,
-    findSuper: Boolean?,
-    query: FieldQuery,
+    plan: QueryPlan<Field>,
 ): Field? {
-    val effectiveFindSuper = query.effectiveFindSuper(findSuper)
-    val condition = fieldCondition(query)
-    val queryKey = query.cacheKeyOrNull()
+    val queryKey = plan.cacheKey
     if (EzReflect.cacheEnabled && queryKey != null) {
-        val key = FieldCacheKey(
-            queryKey = queryKey,
-            findSuper = effectiveFindSuper,
-            resultMode = if (query.requiresSingleResult) "single" else "first",
-        )
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.FIELD, key)
-        if (cached is Field) return cached
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.FIELD, queryKey)
+        if (cached is Field) {
+            cached.isAccessible = true
+            return cached
+        }
     }
-    val results = searchFields(
-        clz = clz,
-        findSuper = effectiveFindSuper,
-        collectAll = query.requiresSingleResult,
-        condition = condition,
-        maxResults = if (query.requiresSingleResult) 2 else null,
-    )
-    if (query.requiresSingleResult && results.size > 1) {
+    val results = findFieldsMatching(clz, plan)
+    if (plan.requiresSingleResult && results.size > 1) {
         throw SingleResultExpectedException(
             target = "field in ${clz.name}",
-            conditionDesc = query.describe(),
+            conditionDesc = plan.description,
         )
     }
     val result = results.firstOrNull()
     if (result != null && EzReflect.cacheEnabled && queryKey != null) {
-        EzReflect.cachePut(
-            clz,
-            ReflectCacheBucket.FIELD,
-            FieldCacheKey(
-                queryKey = queryKey,
-                findSuper = effectiveFindSuper,
-                resultMode = if (query.requiresSingleResult) "single" else "first",
-            ),
-            result,
-        )
+        EzReflect.cachePut(clz, ReflectCacheBucket.FIELD, queryKey, result)
     }
     return result
 }
+
+internal fun findFieldsMatching(
+    clz: Class<*>,
+    plan: QueryPlan<Field>,
+): List<Field> =
+    searchFields(
+        clz = clz,
+        findSuper = plan.findSuper,
+        collectAll = plan.collectAll,
+        condition = { plan.matches(this) },
+        maxResults = plan.maxResults,
+    )
 
 /**
  * 按类名查找字段。
@@ -249,9 +195,12 @@ private fun findFieldOrNull(
  */
 fun findField(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: FieldQuery.() -> Unit,
-): Field = findField(loadClass(className, classLoader), query)
+): Field =
+    EzReflect.withQuery(classLoader) { loader ->
+        findField(loadClass(className, loader), query)
+    }
 
 /**
  * 按类名查找字段，找不到返回 null。
@@ -262,12 +211,13 @@ fun findField(
  */
 fun findFieldOrNull(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: FieldQuery.() -> Unit,
-): Field? {
-    val clz = loadClassOrNull(className, classLoader) ?: return null
-    return findFieldOrNull(clz, query)
-}
+): Field? =
+    EzReflect.withQuery(classLoader) { loader ->
+        val clz = loadClassOrNull(className, loader) ?: return@withQuery null
+        findFieldOrNull(clz, query)
+    }
 
 private fun findAllFieldsMatching(
     clz: Class<*>,
@@ -280,12 +230,11 @@ private fun findAllFieldsMatching(
  *
  * @param clz 目标类
  */
-fun findAllFields(
-    clz: Class<*>,
-): List<Field> {
-    QueryFilterContext.warnNestedFind("findAllFields")
-    return findAllFieldsMatching(clz, null) { true }
-}
+fun findAllFields(clz: Class<*>): List<Field> =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findAllFields")
+        findAllFieldsMatching(clz, null) { true }
+    }
 
 /**
  * 按查询条件查找字段。
@@ -296,30 +245,26 @@ fun findAllFields(
 fun findAllFields(
     clz: Class<*>,
     query: FieldQuery.() -> Unit,
-): List<Field> {
-    QueryFilterContext.warnNestedFind("findAllFields")
-    val builtQuery = fieldQuery(query)
-    val effectiveFindSuper = builtQuery.effectiveFindSuper(null)
-    val queryKey = builtQuery.cacheKeyOrNull()
-    if (EzReflect.cacheEnabled && queryKey != null) {
-        val key = AllFieldsCacheKey(queryKey, effectiveFindSuper)
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.FIELD, key)
-        if (cached is List<*>) {
-            @Suppress("UNCHECKED_CAST")
-            return cached as List<Field>
+): List<Field> =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findAllFields")
+        val plan = fieldQuery(query).freeze(QueryResultMode.ALL)
+        val queryKey = plan.cacheKey
+        if (EzReflect.cacheEnabled && queryKey != null) {
+            val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.FIELD, queryKey)
+            if (cached is List<*>) {
+                @Suppress("UNCHECKED_CAST")
+                val fields = cached as List<Field>
+                fields.forEach { it.isAccessible = true }
+                return@withQuery ArrayList(fields)
+            }
         }
+        val results = findFieldsMatching(clz, plan)
+        if (EzReflect.cacheEnabled && queryKey != null) {
+            EzReflect.cachePut(clz, ReflectCacheBucket.FIELD, queryKey, ArrayList(results))
+        }
+        results
     }
-    val results = findAllFieldsMatching(
-        clz = clz,
-        findSuper = effectiveFindSuper,
-        condition = fieldCondition(builtQuery),
-    )
-    if (EzReflect.cacheEnabled && queryKey != null) {
-        EzReflect.cachePut(clz, ReflectCacheBucket.FIELD, AllFieldsCacheKey(queryKey, effectiveFindSuper), results)
-    }
-    cacheExactFields(clz, effectiveFindSuper, results, queryKey != null)
-    return results
-}
 
 /**
  * 按类名查找全部字段。
@@ -329,8 +274,11 @@ fun findAllFields(
  */
 fun findAllFields(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
-): List<Field> = findAllFields(loadClass(className, classLoader))
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+): List<Field> =
+    EzReflect.withQuery(classLoader) { loader ->
+        findAllFields(loadClass(className, loader))
+    }
 
 /**
  * 按类名和查询条件查找字段。
@@ -341,9 +289,12 @@ fun findAllFields(
  */
 fun findAllFields(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: FieldQuery.() -> Unit,
-): List<Field> = findAllFields(loadClass(className, classLoader), query)
+): List<Field> =
+    EzReflect.withQuery(classLoader) { loader ->
+        findAllFields(loadClass(className, loader), query)
+    }
 
 // ═══════════════════════ 按名称获取 ═══════════════════════
 
@@ -362,17 +313,19 @@ fun Any.field(
     fieldName: String,
     isStatic: Boolean = false,
     fieldType: Class<*>? = null,
-): Field {
-    return fieldOrNull(fieldName, isStatic, fieldType)
-        ?: throw MemberNotFoundException(
-            memberType = MemberType.FIELD,
-            targetClass = javaClass.name,
-            searchedSuper = true,
-            conditionDesc = "name=$fieldName" +
-                    (if (fieldType != null) ", type=${fieldType.simpleName}" else ""),
-            candidates = getFieldCandidates(javaClass)
-        )
-}
+): Field =
+    EzReflect.withQuery {
+        fieldOrNull(fieldName, isStatic, fieldType)
+            ?: throw MemberNotFoundException(
+                memberType = MemberType.FIELD,
+                targetClass = javaClass.name,
+                searchedSuper = true,
+                conditionDesc =
+                    "name=$fieldName" +
+                        (if (fieldType != null) ", type=${fieldType.simpleName}" else ""),
+                candidates = getFieldCandidates(javaClass),
+            )
+    }
 
 /**
  * 按名称获取字段，找不到返回 null。
@@ -385,42 +338,46 @@ fun Any.fieldOrNull(
     fieldName: String,
     isStatic: Boolean = false,
     fieldType: Class<*>? = null,
-): Field? {
-    val clz = if (this is Class<*>) this else javaClass
-    if (EzReflect.cacheEnabled) {
-        val key = FieldNameCacheKey(fieldName, isStatic, fieldType)
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.FIELD, key)
-        if (cached is Field) return cached
-    }
-    var current: Class<*>? = clz
-    while (current != null) {
-        try {
-            val f = current.getDeclaredField(fieldName)
-            if (fieldType != null && f.type != fieldType) {
-                current = current.superclass
-                continue
+): Field? =
+    EzReflect.withQuery {
+        val clz = if (this is Class<*>) this else javaClass
+        if (EzReflect.cacheEnabled) {
+            val key = FieldNameCacheKey(fieldName, isStatic, fieldType)
+            val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.FIELD, key)
+            if (cached is Field) {
+                cached.isAccessible = true
+                return@withQuery cached
             }
-            if (isStatic != Modifier.isStatic(f.modifiers)) {
-                // 名字命中但 static 修饰符不符；继续向上找同名字段。
-                current = current.superclass
-                continue
-            }
-            f.isAccessible = true
-            if (EzReflect.cacheEnabled) {
-                EzReflect.cachePut(
-                    clz,
-                    ReflectCacheBucket.FIELD,
-                    FieldNameCacheKey(fieldName, isStatic, fieldType),
-                    f,
-                )
-            }
-            return f
-        } catch (_: NoSuchFieldException) {
-            current = current.superclass
         }
+        var current: Class<*>? = clz
+        while (current != null) {
+            try {
+                val f = current.getDeclaredField(fieldName)
+                if (fieldType != null && f.type != fieldType) {
+                    current = current.superclass
+                    continue
+                }
+                if (isStatic != Modifier.isStatic(f.modifiers)) {
+                    // 名字命中但 static 修饰符不符；继续向上找同名字段。
+                    current = current.superclass
+                    continue
+                }
+                f.isAccessible = true
+                if (EzReflect.cacheEnabled) {
+                    EzReflect.cachePut(
+                        clz,
+                        ReflectCacheBucket.FIELD,
+                        FieldNameCacheKey(fieldName, isStatic, fieldType),
+                        f,
+                    )
+                }
+                return@withQuery f
+            } catch (_: NoSuchFieldException) {
+                current = current.superclass
+            }
+        }
+        null
     }
-    return null
-}
 
 /**
  * 获取静态字段。
@@ -432,8 +389,10 @@ fun Any.fieldOrNull(
  * @param name 字段名
  * @param type 可选字段类型，用于进一步约束匹配结果
  */
-fun Class<*>.staticField(name: String, type: Class<*>? = null): Field =
-    this.field(name, isStatic = true, fieldType = type)
+fun Class<*>.staticField(
+    name: String,
+    type: Class<*>? = null,
+): Field = this.field(name, isStatic = true, fieldType = type)
 
 /**
  * 获取静态字段，找不到返回 null。
@@ -441,8 +400,10 @@ fun Class<*>.staticField(name: String, type: Class<*>? = null): Field =
  * @param name 字段名
  * @param type 可选字段类型，用于进一步约束匹配结果
  */
-fun Class<*>.staticFieldOrNull(name: String, type: Class<*>? = null): Field? =
-    this.fieldOrNull(name, isStatic = true, fieldType = type)
+fun Class<*>.staticFieldOrNull(
+    name: String,
+    type: Class<*>? = null,
+): Field? = this.fieldOrNull(name, isStatic = true, fieldType = type)
 
 // ═══════════════════════ 组合态链式 (String 出发) ═══════════════════════
 
@@ -459,9 +420,9 @@ fun Class<*>.staticFieldOrNull(name: String, type: Class<*>? = null): Field? =
  */
 @JvmName("findFieldFromString")
 fun String.findField(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: FieldQuery.() -> Unit,
-): Field = findField(loadClass(this, classLoader), query)
+): Field = findField(this, classLoader, query)
 
 /**
  * 从类名查找字段，找不到返回 null。
@@ -471,12 +432,9 @@ fun String.findField(
  */
 @JvmName("findFieldOrNullFromString")
 fun String.findFieldOrNull(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: FieldQuery.() -> Unit,
-): Field? {
-    val clz = loadClassOrNull(this, classLoader) ?: return null
-    return findFieldOrNull(clz, query)
-}
+): Field? = findFieldOrNull(this, classLoader, query)
 
 /**
  * 从类名查找全部字段。
@@ -484,9 +442,8 @@ fun String.findFieldOrNull(
  * @param classLoader 用于加载当前类名的 `ClassLoader`
  */
 @JvmName("findAllFieldsFromString")
-fun String.findAllFields(
-    classLoader: ClassLoader = EzReflect.classLoader,
-): List<Field> = findAllFields(loadClass(this, classLoader))
+fun String.findAllFields(classLoader: ClassLoader = EzReflect.defaultLoaderMarker): List<Field> =
+    findAllFields(this, classLoader)
 
 /**
  * 从类名按查询条件查找字段。
@@ -496,9 +453,9 @@ fun String.findAllFields(
  */
 @JvmName("findAllFieldsFromStringWithQuery")
 fun String.findAllFields(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: FieldQuery.() -> Unit,
-): List<Field> = findAllFields(loadClass(this, classLoader), query)
+): List<Field> = findAllFields(this, classLoader, query)
 
 // ═══════════════════════ 组合态链式 (Class 出发) ═══════════════════════
 
@@ -515,9 +472,7 @@ fun String.findAllFields(
  * @param query 查询条件块
  */
 @JvmName("findFieldFromClass")
-fun Class<*>.findField(
-    query: FieldQuery.() -> Unit,
-): Field = findField(this, query)
+fun Class<*>.findField(query: FieldQuery.() -> Unit): Field = findField(this, query)
 
 /**
  * 从 Class 对象查找字段，找不到返回 null。
@@ -525,17 +480,14 @@ fun Class<*>.findField(
  * @param query 查询条件块
  */
 @JvmName("findFieldOrNullFromClass")
-fun Class<*>.findFieldOrNull(
-    query: FieldQuery.() -> Unit,
-): Field? = findFieldOrNull(this, query)
+fun Class<*>.findFieldOrNull(query: FieldQuery.() -> Unit): Field? = findFieldOrNull(this, query)
 
 /**
  * 从 Class 对象查找全部字段。
  *
  */
 @JvmName("findAllFieldsFromClass")
-fun Class<*>.findAllFields(
-): List<Field> = findAllFields(this)
+fun Class<*>.findAllFields(): List<Field> = findAllFields(this)
 
 /**
  * 从 Class 对象按查询条件查找字段。
@@ -543,9 +495,7 @@ fun Class<*>.findAllFields(
  * @param query 查询条件块
  */
 @JvmName("findAllFieldsFromClassWithQuery")
-fun Class<*>.findAllFields(
-    query: FieldQuery.() -> Unit,
-): List<Field> = findAllFields(this, query)
+fun Class<*>.findAllFields(query: FieldQuery.() -> Unit): List<Field> = findAllFields(this, query)
 
 // ═══════════════════════ 实例字段读取 ═══════════════════════
 
@@ -559,9 +509,10 @@ fun Class<*>.findAllFields(
  * @param fieldName 字段名
  * @param type 可选字段类型，用于进一步约束匹配结果
  */
-fun Any.getField(fieldName: String, type: Class<*>? = null): Any? {
-    return readFieldValue(field(fieldName, fieldType = type), this)
-}
+fun Any.getField(
+    fieldName: String,
+    type: Class<*>? = null,
+): Any? = readFieldValue(field(fieldName, fieldType = type), this)
 
 /**
  * 类型安全的字段读取。
@@ -574,8 +525,10 @@ fun Any.getField(fieldName: String, type: Class<*>? = null): Any? {
  * @param type 可选字段类型，用于进一步约束匹配结果
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Any.getFieldAs(fieldName: String, type: Class<*>? = null): T? =
-    getField(fieldName, type) as T?
+fun <T> Any.getFieldAs(
+    fieldName: String,
+    type: Class<*>? = null,
+): T? = getField(fieldName, type) as T?
 
 /**
  * 按名称读取字段值，找不到返回 null（不抛异常）。
@@ -583,7 +536,10 @@ fun <T> Any.getFieldAs(fieldName: String, type: Class<*>? = null): T? =
  * @param fieldName 字段名
  * @param type 可选字段类型，用于进一步约束匹配结果
  */
-fun Any.getFieldOrNull(fieldName: String, type: Class<*>? = null): Any? {
+fun Any.getFieldOrNull(
+    fieldName: String,
+    type: Class<*>? = null,
+): Any? {
     val f = fieldOrNull(fieldName, fieldType = type) ?: return null
     return readFieldValue(f, this)
 }
@@ -595,8 +551,10 @@ fun Any.getFieldOrNull(fieldName: String, type: Class<*>? = null): Any? {
  * @param type 可选字段类型，用于进一步约束匹配结果
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Any.getFieldOrNullAs(fieldName: String, type: Class<*>? = null): T? =
-    getFieldOrNull(fieldName, type) as T?
+fun <T> Any.getFieldOrNullAs(
+    fieldName: String,
+    type: Class<*>? = null,
+): T? = getFieldOrNull(fieldName, type) as T?
 
 /**
  * 按字段类型获取值。
@@ -609,15 +567,19 @@ fun <T> Any.getFieldOrNullAs(fieldName: String, type: Class<*>? = null): T? =
  * @param isStatic 是否按静态字段处理
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Any.getFieldByType(type: Class<*>, isStatic: Boolean = false): T? {
-    val f = findFirstFieldByType(this, type, isStatic)
-        ?: throw MemberNotFoundException(
-            memberType = MemberType.FIELD,
-            targetClass = ownerClass().name,
-            searchedSuper = true,
-            conditionDesc = "type=${type.simpleName}, isStatic=$isStatic",
-            candidates = getFieldCandidates(ownerClass()),
-        )
+fun <T> Any.getFieldByType(
+    type: Class<*>,
+    isStatic: Boolean = false,
+): T? {
+    val f =
+        findFirstFieldByType(this, type, isStatic)
+            ?: throw MemberNotFoundException(
+                memberType = MemberType.FIELD,
+                targetClass = ownerClass().name,
+                searchedSuper = true,
+                conditionDesc = "type=${type.simpleName}, isStatic=$isStatic",
+                candidates = getFieldCandidates(ownerClass()),
+            )
     return readFieldValue(f, if (isStatic) null else this) as T?
 }
 
@@ -628,7 +590,10 @@ fun <T> Any.getFieldByType(type: Class<*>, isStatic: Boolean = false): T? {
  * @param isStatic 是否按静态字段处理
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Any.getFieldByTypeOrNull(type: Class<*>, isStatic: Boolean = false): T? {
+fun <T> Any.getFieldByTypeOrNull(
+    type: Class<*>,
+    isStatic: Boolean = false,
+): T? {
     val f = findFirstFieldByType(this, type, isStatic) ?: return null
     return readFieldValue(f, if (isStatic) null else this) as T?
 }
@@ -645,9 +610,8 @@ fun <T> Any.getFieldByTypeOrNull(type: Class<*>, isStatic: Boolean = false): T? 
  *
  * @param query 查询条件块
  */
-fun Any.findFieldValue(query: FieldQuery.() -> Unit): Any? {
-    return readFieldValue(findField(ownerClass(), query), if (this is Class<*>) null else this)
-}
+fun Any.findFieldValue(query: FieldQuery.() -> Unit): Any? =
+    readFieldValue(findField(ownerClass(), query), if (this is Class<*>) null else this)
 
 /**
  * 类型安全的查询条件查找字段值。
@@ -655,8 +619,7 @@ fun Any.findFieldValue(query: FieldQuery.() -> Unit): Any? {
  * @param query 查询条件块
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Any.findFieldValueAs(query: FieldQuery.() -> Unit): T? =
-    findFieldValue(query) as T?
+fun <T> Any.findFieldValueAs(query: FieldQuery.() -> Unit): T? = findFieldValue(query) as T?
 
 // ═══════════════════════ 静态字段读取 ═══════════════════════
 
@@ -670,9 +633,10 @@ fun <T> Any.findFieldValueAs(query: FieldQuery.() -> Unit): T? =
  * @param fieldName 字段名
  * @param type 可选字段类型，用于进一步约束匹配结果
  */
-fun Class<*>.getStaticField(fieldName: String, type: Class<*>? = null): Any? {
-    return readFieldValue(staticField(fieldName, type), null)
-}
+fun Class<*>.getStaticField(
+    fieldName: String,
+    type: Class<*>? = null,
+): Any? = readFieldValue(staticField(fieldName, type), null)
 
 /**
  * 类型安全的静态字段读取。
@@ -681,8 +645,10 @@ fun Class<*>.getStaticField(fieldName: String, type: Class<*>? = null): Any? {
  * @param type 可选字段类型，用于进一步约束匹配结果
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Class<*>.getStaticFieldAs(fieldName: String, type: Class<*>? = null): T? =
-    getStaticField(fieldName, type) as T?
+fun <T> Class<*>.getStaticFieldAs(
+    fieldName: String,
+    type: Class<*>? = null,
+): T? = getStaticField(fieldName, type) as T?
 
 /**
  * 读取静态字段值，找不到返回 null。
@@ -690,7 +656,10 @@ fun <T> Class<*>.getStaticFieldAs(fieldName: String, type: Class<*>? = null): T?
  * @param fieldName 字段名
  * @param type 可选字段类型，用于进一步约束匹配结果
  */
-fun Class<*>.getStaticFieldOrNull(fieldName: String, type: Class<*>? = null): Any? {
+fun Class<*>.getStaticFieldOrNull(
+    fieldName: String,
+    type: Class<*>? = null,
+): Any? {
     val f = staticFieldOrNull(fieldName, type) ?: return null
     return readFieldValue(f, null)
 }
@@ -702,8 +671,10 @@ fun Class<*>.getStaticFieldOrNull(fieldName: String, type: Class<*>? = null): An
  * @param type 可选字段类型，用于进一步约束匹配结果
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Class<*>.getStaticFieldOrNullAs(fieldName: String, type: Class<*>? = null): T? =
-    getStaticFieldOrNull(fieldName, type) as T?
+fun <T> Class<*>.getStaticFieldOrNullAs(
+    fieldName: String,
+    type: Class<*>? = null,
+): T? = getStaticFieldOrNull(fieldName, type) as T?
 
 // ═══════════════════════ Field 扩展 ═══════════════════════
 
@@ -734,7 +705,11 @@ fun <T> Field.getStaticAs(): T? {
  * @param value 要写入的值
  * @param fieldType 可选字段类型，用于进一步约束匹配结果
  */
-fun Any.putField(fieldName: String, value: Any?, fieldType: Class<*>? = null) {
+fun Any.putField(
+    fieldName: String,
+    value: Any?,
+    fieldType: Class<*>? = null,
+) {
     writeFieldValue(field(fieldName, fieldType = fieldType), this, value)
 }
 
@@ -744,7 +719,10 @@ fun Any.putField(fieldName: String, value: Any?, fieldType: Class<*>? = null) {
  * @param field 要写入的字段
  * @param value 要写入的值
  */
-fun Any.putField(field: Field, value: Any?) {
+fun Any.putField(
+    field: Field,
+    value: Any?,
+) {
     writeFieldValue(field, this, value)
 }
 
@@ -761,7 +739,11 @@ fun Any.putField(field: Field, value: Any?) {
  * @param value 要写入的值
  * @param fieldType 可选字段类型，用于进一步约束匹配结果
  */
-fun Class<*>.putStaticField(fieldName: String, value: Any?, fieldType: Class<*>? = null) {
+fun Class<*>.putStaticField(
+    fieldName: String,
+    value: Any?,
+    fieldType: Class<*>? = null,
+) {
     writeFieldValue(staticField(fieldName, fieldType), null, value)
 }
 
@@ -771,7 +753,10 @@ fun Class<*>.putStaticField(fieldName: String, value: Any?, fieldType: Class<*>?
  * @param field 要写入的字段
  * @param value 要写入的值
  */
-fun Class<*>.putStaticField(field: Field, value: Any?) {
+fun Class<*>.putStaticField(
+    field: Field,
+    value: Any?,
+) {
     writeFieldValue(field, null, value)
 }
 

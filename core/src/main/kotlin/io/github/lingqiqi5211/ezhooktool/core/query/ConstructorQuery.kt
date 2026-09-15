@@ -8,6 +8,7 @@ import io.github.lingqiqi5211.ezhooktool.core.paramCount
 import io.github.lingqiqi5211.ezhooktool.core.toReadableTypeName
 import java.lang.reflect.Constructor
 import java.lang.reflect.Modifier
+import java.util.Collections
 import java.util.function.Predicate
 
 private enum class ConstructorCachePart {
@@ -18,28 +19,6 @@ private enum class ConstructorCachePart {
     VAGUE_PARAMETER_TYPES,
     EXCEPTION_TYPES,
     FLAGS,
-}
-
-private data class ConstructorIntRangeKey(val start: Int, val end: Int)
-
-private val constructorCachePartOrder = listOf(
-    ConstructorCachePart.PARAM_COUNT,
-    ConstructorCachePart.PARAM_COUNT_RANGE,
-    ConstructorCachePart.PARAMETER_TYPES,
-    ConstructorCachePart.ASSIGNABLE_PARAMETER_TYPES,
-    ConstructorCachePart.VAGUE_PARAMETER_TYPES,
-    ConstructorCachePart.EXCEPTION_TYPES,
-    ConstructorCachePart.FLAGS,
-)
-
-private fun constructorCacheKeyOf(parts: Map<ConstructorCachePart, Any>): List<Any> {
-    val result = ArrayList<Any>(parts.size * 2)
-    for (part in constructorCachePartOrder) {
-        val value = parts[part] ?: continue
-        result += part
-        result += value
-    }
-    return result
 }
 
 /**
@@ -56,24 +35,14 @@ private fun constructorCacheKeyOf(parts: Map<ConstructorCachePart, Any>): List<A
  * ```
  */
 class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
-    private val conditions = mutableListOf<ConstructorCondition>()
-    private val cacheParts = mutableMapOf<ConstructorCachePart, Any>()
-    private val descriptions = mutableListOf<String>()
-    private val flags = mutableMapOf<String, Boolean>()
-    private var cacheable = true
-
     /** 限定参数数量。 */
     fun paramCount(value: Int) {
-        conditions += { paramCount == value }
-        cacheParts[ConstructorCachePart.PARAM_COUNT] = value
-        descriptions += "paramCount=$value"
+        addCondition(ConstructorCachePart.PARAM_COUNT to value, "paramCount=$value") { paramCount == value }
     }
 
     /** 限定参数数量范围。 */
     fun paramCountIn(range: IntRange) {
-        conditions += { paramCount in range }
-        cacheParts[ConstructorCachePart.PARAM_COUNT_RANGE] = ConstructorIntRangeKey(range.first, range.last)
-        descriptions += "paramCount=${range.first}..${range.last}"
+        addCondition(ConstructorCachePart.PARAM_COUNT_RANGE to range, "paramCount=${range.first}..${range.last}") { paramCount in range }
     }
 
     /** 限定为无参数构造器。 */
@@ -83,9 +52,7 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
 
     /** 限定为有参数构造器。 */
     fun hasParams() {
-        conditions += { paramCount > 0 }
-        cacheParts[ConstructorCachePart.PARAM_COUNT_RANGE] = ConstructorIntRangeKey(1, Int.MAX_VALUE)
-        descriptions += "paramCount>=1"
+        addCondition(ConstructorCachePart.PARAM_COUNT_RANGE to (1..Int.MAX_VALUE), "paramCount>=1") { paramCount > 0 }
     }
 
     /**
@@ -96,9 +63,11 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
      * 如果需要让 primitive 与 wrapper 互相匹配（或允许子类）请改用 [parameterTypesAssignableFrom]。
      */
     fun parameterTypes(vararg types: Class<*>) {
-        conditions += { parameterTypes.contentEquals(types) }
-        cacheParts[ConstructorCachePart.PARAMETER_TYPES] = types.toList()
-        descriptions += "params=${types.describeTypes()}"
+        val snapshot = types.copyOf()
+        addCondition(
+            ConstructorCachePart.PARAMETER_TYPES to Collections.unmodifiableList(snapshot.toList()),
+            "params=${snapshot.describeTypes()}",
+        ) { parameterTypes.contentEquals(snapshot) }
     }
 
     /** [parameterTypes] 的短名称。 */
@@ -112,9 +81,11 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
      * 例如构造器参数是 `CharSequence`，传入 `String::class.java` 时会匹配。
      */
     fun parameterTypesAssignableFrom(vararg types: Class<*>) {
-        conditions += { parameterTypes.canAcceptAll(types) }
-        cacheParts[ConstructorCachePart.ASSIGNABLE_PARAMETER_TYPES] = types.toList()
-        descriptions += "paramsAssignableFrom=${types.describeTypes()}"
+        val snapshot = types.copyOf()
+        addCondition(
+            ConstructorCachePart.ASSIGNABLE_PARAMETER_TYPES to Collections.unmodifiableList(snapshot.toList()),
+            "paramsAssignableFrom=${snapshot.describeTypes()}",
+        ) { parameterTypes.canAcceptAll(snapshot) }
     }
 
     /** [parameterTypesAssignableFrom] 的短名称。 */
@@ -128,11 +99,11 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
      * 参数数量仍必须与 [types] 长度一致；非 [VagueType] 的位置按 [parameterTypes] 语义要求完全相等。
      */
     fun parameterTypesVague(vararg types: Any) {
-        val expected = types.map { if (it === VagueType) null else it as Class<*> }
-        conditions += { parameterTypesMatchVague(parameterTypes, expected) }
-        cacheParts[ConstructorCachePart.VAGUE_PARAMETER_TYPES] = expected
-        val described = types.joinToString(", ") { if (it === VagueType) "*" else (it as Class<*>).toReadableTypeName() }
-        descriptions += "paramsVague=[$described]"
+        val expected = Collections.unmodifiableList(types.map { if (it === VagueType) null else it as Class<*> })
+        val described = expected.joinToString(", ") { it?.toReadableTypeName() ?: "*" }
+        addCondition(ConstructorCachePart.VAGUE_PARAMETER_TYPES to expected, "paramsVague=[$described]") {
+            parameterTypesMatchVague(parameterTypes, expected)
+        }
     }
 
     /**
@@ -143,16 +114,16 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
      */
     fun genericParameterTypes(vararg matchers: GenericTypeMatcher) {
         val snapshot = matchers.toList()
-        conditions += { matchesGenericTypes(genericParameterTypes, snapshot) }
-        cacheable = false
-        descriptions += "genericParams=[${snapshot.joinToString(", ")}]"
+        addCondition(null, "genericParams=[${snapshot.joinToString(", ")}]") { matchesGenericTypes(genericParameterTypes, snapshot) }
     }
 
     /** 限定声明的异常类型。 */
     fun exceptionTypes(vararg types: Class<*>) {
-        conditions += { exceptionTypes.contentEquals(types) }
-        cacheParts[ConstructorCachePart.EXCEPTION_TYPES] = types.toList()
-        descriptions += "exceptions=${types.describeTypes()}"
+        val snapshot = types.copyOf()
+        addCondition(
+            ConstructorCachePart.EXCEPTION_TYPES to Collections.unmodifiableList(snapshot.toList()),
+            "exceptions=${snapshot.describeTypes()}",
+        ) { exceptionTypes.contentEquals(snapshot) }
     }
 
     /** 限定为 public 构造器。 */
@@ -207,51 +178,21 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
 
     /** 添加自定义 Kotlin 条件。 */
     fun filter(condition: ConstructorCondition) {
-        conditions += { QueryFilterContext.run { condition(this) } }
-        cacheable = false
-        descriptions += "customFilter"
+        addCondition(null, "customFilter") { QueryFilterContext.run { condition(this) } }
     }
 
     /** 添加 Java `Predicate` 条件。 */
     fun filter(predicate: Predicate<Constructor<*>>) {
-        conditions += { predicate.test(this) }
-        cacheable = false
-        descriptions += "customFilter"
+        filter { predicate.test(this) }
     }
 
-    private fun flag(name: String, value: Boolean, condition: Constructor<*>.() -> Boolean) {
-        conditions += { condition(this) == value }
-        flags[name] = value
-        cacheParts[ConstructorCachePart.FLAGS] = flags.toSortedMap().toList()
-        descriptions += "$name=$value"
+    private fun flag(
+        name: String,
+        value: Boolean,
+        condition: Constructor<*>.() -> Boolean,
+    ) {
+        addCondition(ConstructorCachePart.FLAGS to (name to value), "$name=$value") { condition(this) == value }
     }
-
-    internal fun cacheKeyOrNull(): List<Any>? =
-        cacheKeyOrManual(constructorCacheKeyOf(cacheParts), cacheable)
-
-    internal fun describe(): String? =
-        descriptions.distinct().takeIf { it.isNotEmpty() }?.joinToString(", ")
-
-    internal fun matches(constructor: Constructor<*>): Boolean =
-        conditions.all { it(constructor) }
 }
 
-internal fun constructorExactCacheKeys(constructor: Constructor<*>): List<List<Any>> {
-    val parameterTypes = constructor.parameterTypes.toList()
-    val base = mapOf(ConstructorCachePart.PARAMETER_TYPES to parameterTypes)
-    val withParamCount = base + (ConstructorCachePart.PARAM_COUNT to parameterTypes.size)
-
-    return listOf(
-        constructorCacheKeyOf(base),
-        constructorCacheKeyOf(withParamCount),
-    )
-}
-
-internal fun constructorQuery(block: ConstructorQuery.() -> Unit): ConstructorQuery =
-    ConstructorQuery().apply(block)
-
-internal fun constructorCondition(query: ConstructorQuery): ConstructorCondition =
-    { query.matches(this) }
-
-internal fun constructorCondition(block: ConstructorQuery.() -> Unit): ConstructorCondition =
-    constructorCondition(constructorQuery(block))
+internal fun constructorQuery(block: ConstructorQuery.() -> Unit): ConstructorQuery = ConstructorQuery().apply(block)

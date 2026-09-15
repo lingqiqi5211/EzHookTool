@@ -16,8 +16,12 @@ object Classes {
      */
     @JvmStatic
     @JvmOverloads
-    fun loadClass(name: String, classLoader: ClassLoader = EzReflect.classLoader): Class<*> =
-        io.github.lingqiqi5211.ezhooktool.core.loadClass(name, classLoader)
+    fun loadClass(
+        name: String,
+        classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+    ): Class<*> =
+        io.github.lingqiqi5211.ezhooktool.core
+            .loadClass(name, classLoader)
 
     /**
      * 按完整类名加载类，找不到时返回 `null`。
@@ -27,8 +31,12 @@ object Classes {
      */
     @JvmStatic
     @JvmOverloads
-    fun loadClassOrNull(name: String, classLoader: ClassLoader = EzReflect.classLoader): Class<*>? =
-        io.github.lingqiqi5211.ezhooktool.core.loadClassOrNull(name, classLoader)
+    fun loadClassOrNull(
+        name: String,
+        classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+    ): Class<*>? =
+        io.github.lingqiqi5211.ezhooktool.core
+            .loadClassOrNull(name, classLoader)
 
     /**
      * 按顺序尝试多个类名，返回第一个能加载的类。
@@ -37,7 +45,8 @@ object Classes {
      */
     @JvmStatic
     fun loadClassFirst(vararg names: String): Class<*> =
-        io.github.lingqiqi5211.ezhooktool.core.loadClassFirst(*names)
+        io.github.lingqiqi5211.ezhooktool.core
+            .loadClassFirst(*names)
 
     /**
      * 使用指定 `ClassLoader` 按顺序尝试多个类名，返回第一个能加载的类。
@@ -46,8 +55,12 @@ object Classes {
      * @param names 候选类名，越靠前优先级越高
      */
     @JvmStatic
-    fun loadClassFirst(classLoader: ClassLoader, vararg names: String): Class<*> =
-        io.github.lingqiqi5211.ezhooktool.core.loadClassFirst(*names, classLoader = classLoader)
+    fun loadClassFirst(
+        classLoader: ClassLoader,
+        vararg names: String,
+    ): Class<*> =
+        io.github.lingqiqi5211.ezhooktool.core
+            .loadClassFirst(*names, classLoader = classLoader)
 
     /**
      * 按顺序尝试多个类名，全部找不到时返回 `null`。
@@ -56,7 +69,8 @@ object Classes {
      */
     @JvmStatic
     fun loadClassFirstOrNull(vararg names: String): Class<*>? =
-        io.github.lingqiqi5211.ezhooktool.core.loadClassFirstOrNull(*names)
+        io.github.lingqiqi5211.ezhooktool.core
+            .loadClassFirstOrNull(*names)
 
     /**
      * 使用指定 `ClassLoader` 按顺序尝试多个类名，全部找不到时返回 `null`。
@@ -65,6 +79,10 @@ object Classes {
      * @param names 候选类名，越靠前优先级越高
      */
     @JvmStatic
-    fun loadClassFirstOrNull(classLoader: ClassLoader, vararg names: String): Class<*>? =
-        io.github.lingqiqi5211.ezhooktool.core.loadClassFirstOrNull(*names, classLoader = classLoader)
+    fun loadClassFirstOrNull(
+        classLoader: ClassLoader,
+        vararg names: String,
+    ): Class<*>? =
+        io.github.lingqiqi5211.ezhooktool.core
+            .loadClassFirstOrNull(*names, classLoader = classLoader)
 }

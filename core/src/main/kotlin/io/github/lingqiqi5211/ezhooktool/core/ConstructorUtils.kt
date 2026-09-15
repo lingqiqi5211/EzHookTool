@@ -3,10 +3,10 @@
 package io.github.lingqiqi5211.ezhooktool.core
 
 import io.github.lingqiqi5211.ezhooktool.core.query.ConstructorQuery
-import io.github.lingqiqi5211.ezhooktool.core.query.constructorCondition
-import io.github.lingqiqi5211.ezhooktool.core.query.constructorExactCacheKeys
-import io.github.lingqiqi5211.ezhooktool.core.query.constructorQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryPlan
+import io.github.lingqiqi5211.ezhooktool.core.query.QueryResultMode
+import io.github.lingqiqi5211.ezhooktool.core.query.constructorQuery
 import java.lang.reflect.Constructor
 
 /**
@@ -17,28 +17,6 @@ typealias ConstructorCondition = Constructor<*>.() -> Boolean
 private fun getConstructorCandidates(clz: Class<*>): List<String> {
     if (!EzReflect.debugMode) return emptyList()
     return EzReflect.memberResolver.constructorsOf(clz).map { it.toReadableString() }
-}
-
-private data class ConstructorCacheKey(
-    val queryKey: List<Any>,
-    val resultMode: String = "first",
-)
-
-private data class AllConstructorsCacheKey(
-    val queryKey: List<Any>,
-)
-
-private fun cacheExactConstructors(clz: Class<*>, constructors: List<Constructor<*>>) {
-    if (!EzReflect.cacheEnabled) return
-    val seenKeys = HashSet<ConstructorCacheKey>()
-    for (constructor in constructors) {
-        for (queryKey in constructorExactCacheKeys(constructor)) {
-            val key = ConstructorCacheKey(queryKey)
-            if (seenKeys.add(key)) {
-                EzReflect.cachePut(clz, ReflectCacheBucket.CONSTRUCTOR, key, constructor)
-            }
-        }
-    }
 }
 
 private fun findAllConstructorsMatching(
@@ -75,18 +53,19 @@ private fun findAllConstructorsMatching(
 fun findConstructor(
     clz: Class<*>,
     query: ConstructorQuery.() -> Unit,
-): Constructor<*> {
-    QueryFilterContext.warnNestedFind("findConstructor")
-    val builtQuery = constructorQuery(query)
-    return findConstructorOrNull(clz, builtQuery)
-        ?: throw MemberNotFoundException(
-            memberType = MemberType.CONSTRUCTOR,
-            targetClass = clz.name,
-            searchedSuper = false,
-            conditionDesc = builtQuery.describe(),
-            candidates = getConstructorCandidates(clz)
-        )
-}
+): Constructor<*> =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findConstructor")
+        val plan = constructorQuery(query).freeze(QueryResultMode.FIRST)
+        findConstructorOrNull(clz, plan)
+            ?: throw MemberNotFoundException(
+                memberType = MemberType.CONSTRUCTOR,
+                targetClass = clz.name,
+                searchedSuper = false,
+                conditionDesc = plan.description,
+                candidates = getConstructorCandidates(clz),
+            )
+    }
 
 /**
  * 按查询条件查找构造器，找不到返回 null。
@@ -94,51 +73,48 @@ fun findConstructor(
 fun findConstructorOrNull(
     clz: Class<*>,
     query: ConstructorQuery.() -> Unit,
-): Constructor<*>? {
-    QueryFilterContext.warnNestedFind("findConstructorOrNull")
-    return findConstructorOrNull(clz, constructorQuery(query))
-}
+): Constructor<*>? =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findConstructorOrNull")
+        findConstructorOrNull(clz, constructorQuery(query).freeze(QueryResultMode.FIRST))
+    }
 
 private fun findConstructorOrNull(
     clz: Class<*>,
-    query: ConstructorQuery,
+    plan: QueryPlan<Constructor<*>>,
 ): Constructor<*>? {
-    val condition = constructorCondition(query)
-    val queryKey = query.cacheKeyOrNull()
+    val queryKey = plan.cacheKey
     if (EzReflect.cacheEnabled && queryKey != null) {
-        val key = ConstructorCacheKey(
-            queryKey = queryKey,
-            resultMode = if (query.requiresSingleResult) "single" else "first",
-        )
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, key)
-        if (cached is Constructor<*>) return cached
+        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, queryKey)
+        if (cached is Constructor<*>) {
+            cached.isAccessible = true
+            return cached
+        }
     }
-    val results = findAllConstructorsMatching(
-        clz = clz,
-        condition = condition,
-        collectAll = query.requiresSingleResult,
-        maxResults = if (query.requiresSingleResult) 2 else null,
-    )
-    if (query.requiresSingleResult && results.size > 1) {
+    val results = findConstructorsMatching(clz, plan)
+    if (plan.requiresSingleResult && results.size > 1) {
         throw SingleResultExpectedException(
             target = "constructor in ${clz.name}",
-            conditionDesc = query.describe(),
+            conditionDesc = plan.description,
         )
     }
     val result = results.firstOrNull()
     if (result != null && EzReflect.cacheEnabled && queryKey != null) {
-        EzReflect.cachePut(
-            clz,
-            ReflectCacheBucket.CONSTRUCTOR,
-            ConstructorCacheKey(
-                queryKey = queryKey,
-                resultMode = if (query.requiresSingleResult) "single" else "first",
-            ),
-            result,
-        )
+        EzReflect.cachePut(clz, ReflectCacheBucket.CONSTRUCTOR, queryKey, result)
     }
     return result
 }
+
+internal fun findConstructorsMatching(
+    clz: Class<*>,
+    plan: QueryPlan<Constructor<*>>,
+): List<Constructor<*>> =
+    findAllConstructorsMatching(
+        clz = clz,
+        condition = { plan.matches(this) },
+        collectAll = plan.collectAll,
+        maxResults = plan.maxResults,
+    )
 
 /**
  * 按类名查找构造器。
@@ -149,27 +125,31 @@ private fun findConstructorOrNull(
  */
 fun findConstructor(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: ConstructorQuery.() -> Unit,
-): Constructor<*> = findConstructor(loadClass(className, classLoader), query)
+): Constructor<*> =
+    EzReflect.withQuery(classLoader) { loader ->
+        findConstructor(loadClass(className, loader), query)
+    }
 
 /**
  * 按类名查找构造器，找不到返回 null。
  */
 fun findConstructorOrNull(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: ConstructorQuery.() -> Unit,
-): Constructor<*>? {
-    val clz = loadClassOrNull(className, classLoader) ?: return null
-    return findConstructorOrNull(clz, query)
-}
+): Constructor<*>? =
+    EzReflect.withQuery(classLoader) { loader ->
+        val clz = loadClassOrNull(className, loader) ?: return@withQuery null
+        findConstructorOrNull(clz, query)
+    }
 
 /**
  * 查找全部构造器。
  */
 fun findAllConstructors(clz: Class<*>): List<Constructor<*>> =
-    run {
+    EzReflect.withQuery {
         QueryFilterContext.warnNestedFind("findAllConstructors")
         findAllConstructorsMatching(clz, condition = { true })
     }
@@ -180,108 +160,107 @@ fun findAllConstructors(clz: Class<*>): List<Constructor<*>> =
 fun findAllConstructors(
     clz: Class<*>,
     query: ConstructorQuery.() -> Unit,
-): List<Constructor<*>> {
-    QueryFilterContext.warnNestedFind("findAllConstructors")
-    val builtQuery = constructorQuery(query)
-    val queryKey = builtQuery.cacheKeyOrNull()
-    if (EzReflect.cacheEnabled && queryKey != null) {
-        val key = AllConstructorsCacheKey(queryKey)
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, key)
-        if (cached is List<*>) {
-            @Suppress("UNCHECKED_CAST")
-            return cached as List<Constructor<*>>
+): List<Constructor<*>> =
+    EzReflect.withQuery {
+        QueryFilterContext.warnNestedFind("findAllConstructors")
+        val plan = constructorQuery(query).freeze(QueryResultMode.ALL)
+        val queryKey = plan.cacheKey
+        if (EzReflect.cacheEnabled && queryKey != null) {
+            val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, queryKey)
+            if (cached is List<*>) {
+                @Suppress("UNCHECKED_CAST")
+                val constructors = cached as List<Constructor<*>>
+                constructors.forEach { it.isAccessible = true }
+                return@withQuery ArrayList(constructors)
+            }
         }
+        val results = findConstructorsMatching(clz, plan)
+        if (EzReflect.cacheEnabled && queryKey != null) {
+            EzReflect.cachePut(clz, ReflectCacheBucket.CONSTRUCTOR, queryKey, ArrayList(results))
+        }
+        results
     }
-    val results = findAllConstructorsMatching(clz, constructorCondition(builtQuery))
-    if (EzReflect.cacheEnabled && queryKey != null) {
-        EzReflect.cachePut(clz, ReflectCacheBucket.CONSTRUCTOR, AllConstructorsCacheKey(queryKey), results)
-    }
-    cacheExactConstructors(clz, results)
-    return results
-}
 
 /**
  * 按类名查找全部构造器。
  */
 fun findAllConstructors(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
-): List<Constructor<*>> = findAllConstructors(loadClass(className, classLoader))
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+): List<Constructor<*>> =
+    EzReflect.withQuery(classLoader) { loader ->
+        findAllConstructors(loadClass(className, loader))
+    }
 
 /**
  * 按类名和查询条件查找构造器。
  */
 fun findAllConstructors(
     className: String,
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: ConstructorQuery.() -> Unit,
-): List<Constructor<*>> = findAllConstructors(loadClass(className, classLoader), query)
+): List<Constructor<*>> =
+    EzReflect.withQuery(classLoader) { loader ->
+        findAllConstructors(loadClass(className, loader), query)
+    }
 
 /**
  * 从类名直接查找构造器。
  */
 @JvmName("findConstructorByString")
 fun String.findConstructor(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: ConstructorQuery.() -> Unit,
-): Constructor<*> = findConstructor(loadClass(this, classLoader), query)
+): Constructor<*> = findConstructor(this, classLoader, query)
 
 /**
  * 从类名查找构造器，找不到返回 null。
  */
 @JvmName("findConstructorOrNullByString")
 fun String.findConstructorOrNull(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: ConstructorQuery.() -> Unit,
-): Constructor<*>? {
-    val clz = loadClassOrNull(this, classLoader) ?: return null
-    return findConstructorOrNull(clz, query)
-}
+): Constructor<*>? = findConstructorOrNull(this, classLoader, query)
 
 /**
  * 从类名查找全部构造器。
  */
 @JvmName("findAllConstructorsFromString")
-fun String.findAllConstructors(
-    classLoader: ClassLoader = EzReflect.classLoader,
-): List<Constructor<*>> = findAllConstructors(loadClass(this, classLoader))
+fun String.findAllConstructors(classLoader: ClassLoader = EzReflect.defaultLoaderMarker): List<Constructor<*>> =
+    findAllConstructors(this, classLoader)
 
 /**
  * 从类名按查询条件查找构造器。
  */
 @JvmName("findAllConstructorsFromStringWithQuery")
 fun String.findAllConstructors(
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
     query: ConstructorQuery.() -> Unit,
-): List<Constructor<*>> = findAllConstructors(loadClass(this, classLoader), query)
+): List<Constructor<*>> = findAllConstructors(this, classLoader, query)
 
 /**
  * 从 Class 对象直接查找构造器。
  */
 @JvmName("findConstructorByClass")
-fun Class<*>.findConstructor(query: ConstructorQuery.() -> Unit): Constructor<*> =
-    findConstructor(this, query)
+fun Class<*>.findConstructor(query: ConstructorQuery.() -> Unit): Constructor<*> = findConstructor(this, query)
 
 /**
  * 从 Class 对象查找构造器，找不到返回 null。
  */
 @JvmName("findConstructorOrNullByClass")
-fun Class<*>.findConstructorOrNull(query: ConstructorQuery.() -> Unit): Constructor<*>? =
-    findConstructorOrNull(this, query)
+fun Class<*>.findConstructorOrNull(query: ConstructorQuery.() -> Unit): Constructor<*>? = findConstructorOrNull(this, query)
 
 /**
  * 从 Class 对象查找全部构造器。
  */
 @JvmName("findAllConstructorsFromClass")
-fun Class<*>.findAllConstructors(): List<Constructor<*>> =
-    findAllConstructors(this)
+fun Class<*>.findAllConstructors(): List<Constructor<*>> = findAllConstructors(this)
 
 /**
  * 从 Class 对象按查询条件查找构造器。
  */
 @JvmName("findAllConstructorsFromClassWithQuery")
-fun Class<*>.findAllConstructors(query: ConstructorQuery.() -> Unit): List<Constructor<*>> =
-    findAllConstructors(this, query)
+fun Class<*>.findAllConstructors(query: ConstructorQuery.() -> Unit): List<Constructor<*>> = findAllConstructors(this, query)
 
 /**
  * 创建实例（精确参数类型）。
@@ -298,10 +277,18 @@ fun Class<*>.findAllConstructors(query: ConstructorQuery.() -> Unit): List<Const
  * @param args 构造器参数值包装
  * @param argTypes 构造器参数类型；为空时会根据 [args] 自动推断
  */
-fun Class<*>.instantiate(args: Args = args(), argTypes: ArgTypes = argTypes()): Any {
-    val types = if (argTypes.types.isNotEmpty()) argTypes.types
-    else if (args.args.isEmpty()) emptyArray()
-    else inferArgTypes(args.args)
+fun Class<*>.instantiate(
+    args: Args = args(),
+    argTypes: ArgTypes = argTypes(),
+): Any {
+    val types =
+        if (argTypes.types.isNotEmpty()) {
+            argTypes.types
+        } else if (args.args.isEmpty()) {
+            emptyArray()
+        } else {
+            inferArgTypes(args.args)
+        }
     val ctor = getDeclaredConstructor(*types)
     ctor.isAccessible = true
     return ctor.newInstance(*args.args)
@@ -315,8 +302,10 @@ fun Class<*>.instantiate(args: Args = args(), argTypes: ArgTypes = argTypes()): 
     replaceWith = ReplaceWith("instantiate(args, argTypes)"),
     level = DeprecationLevel.WARNING,
 )
-fun Class<*>.newInstance(args: Args = args(), argTypes: ArgTypes = argTypes()): Any =
-    instantiate(args, argTypes)
+fun Class<*>.newInstance(
+    args: Args = args(),
+    argTypes: ArgTypes = argTypes(),
+): Any = instantiate(args, argTypes)
 
 /**
  * 类型安全的实例创建。
@@ -325,8 +314,10 @@ fun Class<*>.newInstance(args: Args = args(), argTypes: ArgTypes = argTypes()): 
  * @param argTypes 构造器参数类型；为空时会根据 [args] 自动推断
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Class<*>.instantiateAs(args: Args = args(), argTypes: ArgTypes = argTypes()): T =
-    instantiate(args, argTypes) as T
+fun <T> Class<*>.instantiateAs(
+    args: Args = args(),
+    argTypes: ArgTypes = argTypes(),
+): T = instantiate(args, argTypes) as T
 
 /**
  * [instantiateAs] 的旧名字。
@@ -337,17 +328,17 @@ fun <T> Class<*>.instantiateAs(args: Args = args(), argTypes: ArgTypes = argType
     level = DeprecationLevel.WARNING,
 )
 @Suppress("UNCHECKED_CAST")
-fun <T> Class<*>.newInstanceAs(args: Args = args(), argTypes: ArgTypes = argTypes()): T =
-    instantiate(args, argTypes) as T
+fun <T> Class<*>.newInstanceAs(
+    args: Args = args(),
+    argTypes: ArgTypes = argTypes(),
+): T = instantiate(args, argTypes) as T
 
 /**
  * 自动匹配构造器参数类型。
  *
  * @param args 用于匹配构造器的运行时参数
  */
-fun Class<*>.newInstanceAuto(vararg args: Any?): Any {
-    return constructAutoMatchedInstance(this, args)
-}
+fun Class<*>.newInstanceAuto(vararg args: Any?): Any = constructAutoMatchedInstance(this, args)
 
 /**
  * 类型安全的自动匹配实例创建。
@@ -355,8 +346,7 @@ fun Class<*>.newInstanceAuto(vararg args: Any?): Any {
  * @param args 用于匹配构造器的运行时参数
  */
 @Suppress("UNCHECKED_CAST")
-fun <T> Class<*>.newInstanceAutoAs(vararg args: Any?): T =
-    newInstanceAuto(*args) as T
+fun <T> Class<*>.newInstanceAutoAs(vararg args: Any?): T = newInstanceAuto(*args) as T
 
 /**
  * 按类名创建实例。
@@ -370,8 +360,11 @@ fun newInstance(
     className: String,
     args: Args = args(),
     argTypes: ArgTypes = argTypes(),
-    classLoader: ClassLoader = EzReflect.classLoader,
-): Any = loadClass(className, classLoader).instantiate(args, argTypes)
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
+): Any =
+    EzReflect.withQuery(classLoader) { loader ->
+        loadClass(className, loader).instantiate(args, argTypes)
+    }
 
 /**
  * 按类名创建实例（类型安全）。
@@ -386,5 +379,5 @@ fun <T> newInstanceAs(
     className: String,
     args: Args = args(),
     argTypes: ArgTypes = argTypes(),
-    classLoader: ClassLoader = EzReflect.classLoader,
+    classLoader: ClassLoader = EzReflect.defaultLoaderMarker,
 ): T = newInstance(className, args, argTypes, classLoader) as T

@@ -3,344 +3,179 @@
 package io.github.lingqiqi5211.ezhooktool.core
 
 import java.lang.reflect.Constructor
+import java.lang.reflect.Executable
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 
+private enum class CallMode { ANY, INSTANCE, STATIC }
+
 private data class BestMethodCacheKey(
     val name: String,
-    val types: List<Class<*>>,
-    val nullMask: List<Boolean> = List(types.size) { false },
+    val types: List<Class<*>?>,
+    val mode: CallMode,
 )
 
 private data class BestConstructorCacheKey(
-    val types: List<Class<*>>,
-    val nullMask: List<Boolean>,
+    val types: List<Class<*>?>,
 )
 
-private data class BestMethodArg(val type: Class<*>?, val isNull: Boolean)
+private fun matchRank(
+    actual: Class<*>?,
+    expected: Class<*>,
+): Int =
+    when {
+        actual == null -> if (expected.isPrimitive) -1 else 2
+        actual == expected -> 0
+        !isTypeMatch(actual, expected) -> -1
+        actual.isPrimitive || expected.isPrimitive -> 1
+        else -> 2
+    }
 
-private fun inferBestMatchArgs(args: Array<out Any?>): Array<BestMethodArg> = Array(args.size) { index ->
-    val arg = args[index]
-    if (arg == null) BestMethodArg(type = null, isNull = true) else BestMethodArg(arg.javaClass, isNull = false)
-}
-
-private fun paramTypesMatch(actual: Array<BestMethodArg>, expected: Array<Class<*>>): Boolean {
-    if (actual.size != expected.size) return false
-    for (i in actual.indices) {
-        val current = actual[i]
-        if (current.isNull) {
-            if (expected[i].isPrimitive) return false
-            continue
+private fun moreSpecific(
+    candidate: Executable,
+    other: Executable,
+    actual: List<Class<*>?>,
+): Boolean {
+    val left = candidate.parameterTypes
+    val right = other.parameterTypes
+    var narrower = false
+    for (index in actual.indices) {
+        val leftRank = matchRank(actual[index], left[index])
+        val rightRank = matchRank(actual[index], right[index])
+        if (leftRank > rightRank) return false
+        if (leftRank < rightRank) {
+            narrower = true
+        } else if (left[index] != right[index]) {
+            if (!right[index].isAssignableFrom(left[index])) return false
+            narrower = true
         }
-        if (!isTypeMatch(current.type!!, expected[i])) return false
     }
-    return true
+    if (narrower) return true
+    if (candidate.declaringClass != other.declaringClass) {
+        return other.declaringClass.isAssignableFrom(candidate.declaringClass)
+    }
+    if (candidate is Method && other is Method) {
+        if (candidate.isBridge != other.isBridge) return !candidate.isBridge
+        return candidate.returnType != other.returnType && other.returnType.isAssignableFrom(candidate.returnType)
+    }
+    return false
 }
 
-private fun scoreMatch(actual: Array<BestMethodArg>, expected: Array<Class<*>>): Int {
-    var score = 0
-    for (i in actual.indices) {
-        val current = actual[i]
-        if (current.isNull) {
-            score += 1
-            continue
+private fun <T : Executable> selectBest(
+    candidates: List<T>,
+    actual: List<Class<*>?>,
+    owner: Class<*>,
+    type: MemberType,
+    condition: String,
+): T {
+    val applicable =
+        candidates.distinct().filter { member ->
+            val params = member.parameterTypes
+            params.size == actual.size && params.indices.all { matchRank(actual[it], params[it]) >= 0 }
         }
-        if (current.type == expected[i]) continue
-        score += 1
-        if (!isTypeMatch(current.type!!, expected[i])) score += 10
+    if (applicable.isEmpty()) {
+        throw MemberNotFoundException(
+            type,
+            owner.name,
+            type == MemberType.METHOD,
+            condition,
+            if (EzReflect.debugMode) candidates.map { it.toString() } else emptyList(),
+        )
     }
-    return score
-}
-
-private fun scoreMatch(actual: Array<Class<*>>, expected: Array<Class<*>>): Int {
-    var score = 0
-    for (i in actual.indices) {
-        if (actual[i] == expected[i]) continue
-        score += 1
-        if (!isTypeMatch(actual[i], expected[i])) score += 10
-    }
-    return score
-}
-
-private fun bestMatchMethodCandidates(clz: Class<*>, methodName: String): List<String> {
-    if (!EzReflect.debugMode) return emptyList()
-    val candidates = mutableListOf<String>()
-    var current: Class<*>? = clz
-    var considerPrivate = true
-    while (current != null) {
-        for (method in EzReflect.memberResolver.methodsOf(current)) {
-            if (method.name != methodName) continue
-            if (!considerPrivate && Modifier.isPrivate(method.modifiers)) continue
-            candidates += "${method.declaringClass.toReadableTypeName()}#${method.toReadableString()}"
+    val best =
+        applicable.filter { candidate ->
+            applicable.none { other -> other != candidate && moreSpecific(other, candidate, actual) }
         }
-        current = current.superclass
-        considerPrivate = false
+    if (best.size != 1) {
+        throw SingleResultExpectedException(owner.name, "$condition; ambiguous candidates=${best.map { it.toString() }.sorted()}")
     }
-    return candidates
+    return best.single().also { it.isAccessible = true }
 }
 
-private fun bestMatchConstructorCandidates(clz: Class<*>): List<String> {
-    if (!EzReflect.debugMode) return emptyList()
-    return EzReflect.memberResolver.constructorsOf(clz).map {
-        "${it.declaringClass.toReadableTypeName()}#${it.toReadableString()}"
+private fun bestMethod(
+    clz: Class<*>,
+    methodName: String,
+    types: List<Class<*>?>,
+    mode: CallMode = CallMode.ANY,
+): Method =
+    EzReflect.withQuery {
+        val key = BestMethodCacheKey(methodName, types, mode)
+        (EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, key) as? Method)?.let {
+            it.isAccessible = true
+            return@withQuery it
+        }
+        val resolver = EzReflect.memberResolver
+        val candidates = mutableListOf<Method>()
+        var current: Class<*>? = clz
+        while (current != null) {
+            for (method in resolver.methodsOf(current)) {
+                if (method.name != methodName) continue
+                if (current != clz && Modifier.isPrivate(method.modifiers)) continue
+                if (mode != CallMode.ANY && Modifier.isStatic(method.modifiers) != (mode == CallMode.STATIC)) continue
+                candidates += method
+            }
+            current = current.superclass
+        }
+        selectBest(candidates, types, clz, MemberType.METHOD, "bestMatch name=$methodName, argTypes=$types, mode=$mode")
+            .also { EzReflect.cachePut(clz, ReflectCacheBucket.METHOD, key, it) }
     }
-}
+
+private fun bestConstructor(
+    clz: Class<*>,
+    types: List<Class<*>?>,
+): Constructor<*> =
+    EzReflect.withQuery {
+        val key = BestConstructorCacheKey(types)
+        (EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, key) as? Constructor<*>)?.let {
+            it.isAccessible = true
+            return@withQuery it
+        }
+        selectBest(
+            EzReflect.memberResolver.constructorsOf(clz).toList(),
+            types,
+            clz,
+            MemberType.CONSTRUCTOR,
+            "bestMatch argTypes=$types",
+        ).also { EzReflect.cachePut(clz, ReflectCacheBucket.CONSTRUCTOR, key, it) }
+    }
 
 /**
- * 按参数类型查找最合适的方法。
- *
- * 优先尝试精确匹配，失败后再按 primitive/wrapper 兼容和继承关系选出最接近的候选。
- *
- * 与 `findMethodBestMatch(clz, methodName, vararg args: Any?)` 重载共存；Kotlin 按 vararg 元素类型自动选择。
- * Java 调用方需用 `Class<?>...` 数组显式选中此版本，否则可能落到 `Object...` 重载。
- *
- * @param clz 目标类
- * @param methodName 目标方法名
- * @param parameterTypes 用于匹配的参数类型列表
+ * 按类型选择方法：精确类型优先于 primitive/wrapper 对应，其次选择更具体的引用类型。
+ * 多参数必须逐位不劣于其它候选；无法唯一选择时抛 [SingleResultExpectedException]，不依赖枚举顺序。
+ * 不自动做数值拓宽或打包 vararg；可变参数需显式提供数组类型。
+ * Java 调用方用 `Class<?>...` 数组选择此重载；此入口不限制 static/instance。
  */
 fun findMethodBestMatch(
     clz: Class<*>,
     methodName: String,
     vararg parameterTypes: Class<*>,
-): Method {
-    if (EzReflect.cacheEnabled) {
-        val key = BestMethodCacheKey(methodName, parameterTypes.toList())
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, key)
-        if (cached is Method) return cached
-    }
-
-    val exact = clz.methodOrNull(methodName, argTypes(*parameterTypes))
-    if (exact != null) {
-        if (EzReflect.cacheEnabled) {
-            EzReflect.cachePut(
-                clz,
-                ReflectCacheBucket.METHOD,
-                BestMethodCacheKey(methodName, parameterTypes.toList()),
-                exact,
-            )
-        }
-        return exact
-    }
-
-    val expected: Array<Class<*>> = parameterTypes.toList().toTypedArray()
-    var best: Method? = null
-    var bestScore = Int.MAX_VALUE
-    var current: Class<*>? = clz
-    var considerPrivate = true
-    while (current != null) {
-        for (method in EzReflect.memberResolver.methodsOf(current)) {
-            if (method.name != methodName) continue
-            if (!considerPrivate && Modifier.isPrivate(method.modifiers)) continue
-            if (!paramTypesMatch(expected, method.parameterTypes)) continue
-            val score = scoreMatch(expected, method.parameterTypes)
-            if (score < bestScore) {
-                method.isAccessible = true
-                best = method
-                bestScore = score
-            }
-        }
-        current = current.superclass
-        considerPrivate = false
-    }
-
-    return best?.also {
-        if (EzReflect.cacheEnabled) {
-            EzReflect.cachePut(
-                clz,
-                ReflectCacheBucket.METHOD,
-                BestMethodCacheKey(methodName, parameterTypes.toList()),
-                it,
-            )
-        }
-    } ?: throw MemberNotFoundException(
-        memberType = MemberType.METHOD,
-        targetClass = clz.name,
-        searchedSuper = true,
-        conditionDesc = "bestMatch name=$methodName, argTypes=${parameterTypes.map { it.simpleName }}",
-        candidates = bestMatchMethodCandidates(clz, methodName),
-    )
-}
+): Method = bestMethod(clz, methodName, parameterTypes.toList())
 
 /**
- * 按实参数值推断最合适的方法。
- *
- * 与参数类型重载相比，此版本会根据运行时参数类型自动推断，`null` 参数会参与模糊匹配。
- *
- * @param clz 目标类
- * @param methodName 目标方法名
- * @param args 用于推断签名的运行时实参
+ * 按运行时实参类型选择方法，规则同类型重载；null 只匹配引用类型，并选其最具体候选。
+ * 不相关的 null 候选会报告歧义；vararg 数组必须作为单个实参传入。
  */
 fun findMethodBestMatch(
     clz: Class<*>,
     methodName: String,
     vararg args: Any?,
-): Method {
-    val actual = inferBestMatchArgs(args)
-    if (EzReflect.cacheEnabled) {
-        val key = BestMethodCacheKey(
-            name = methodName,
-            types = actual.map { it.type ?: Any::class.java },
-            nullMask = actual.map { it.isNull },
-        )
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.METHOD, key)
-        if (cached is Method) return cached
-    }
+): Method = bestMethod(clz, methodName, args.map { it?.javaClass })
 
-    var best: Method? = null
-    var bestScore = Int.MAX_VALUE
-    var current: Class<*>? = clz
-    var considerPrivate = true
-    while (current != null) {
-        for (method in EzReflect.memberResolver.methodsOf(current)) {
-            if (method.name != methodName) continue
-            if (!considerPrivate && Modifier.isPrivate(method.modifiers)) continue
-            if (!paramTypesMatch(actual, method.parameterTypes)) continue
-            val score = scoreMatch(actual, method.parameterTypes)
-            if (score < bestScore) {
-                method.isAccessible = true
-                best = method
-                bestScore = score
-            }
-        }
-        current = current.superclass
-        considerPrivate = false
-    }
-    return best?.also {
-        if (EzReflect.cacheEnabled) {
-            EzReflect.cachePut(
-                clz,
-                ReflectCacheBucket.METHOD,
-                BestMethodCacheKey(
-                    name = methodName,
-                    types = actual.map { it.type ?: Any::class.java },
-                    nullMask = actual.map { it.isNull },
-                ),
-                it,
-            )
-        }
-    } ?: throw MemberNotFoundException(
-        memberType = MemberType.METHOD,
-        targetClass = clz.name,
-        searchedSuper = true,
-        conditionDesc = "bestMatch name=$methodName, args=${args.map { it?.javaClass?.simpleName ?: "null" }}",
-        candidates = bestMatchMethodCandidates(clz, methodName),
-    )
-}
-
-/**
- * 按参数类型查找最合适的构造器。
- *
- * 优先尝试精确匹配，失败后再按 primitive/wrapper 兼容和继承关系选出最接近的候选。
- *
- * @param clz 目标类
- * @param parameterTypes 用于匹配的构造器参数类型列表
- */
+/** 按参数类型选择构造器；兼容、歧义及 vararg 规则与 [findMethodBestMatch] 相同。 */
 fun findConstructorBestMatch(
     clz: Class<*>,
     vararg parameterTypes: Class<*>,
-): Constructor<*> {
-    if (EzReflect.cacheEnabled) {
-        val key = BestConstructorCacheKey(parameterTypes.toList(), List(parameterTypes.size) { false })
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, key)
-        if (cached is Constructor<*>) return cached
-    }
+): Constructor<*> = bestConstructor(clz, parameterTypes.toList())
 
-    val exact = try {
-        clz.getDeclaredConstructor(*parameterTypes).also { it.isAccessible = true }
-    } catch (_: NoSuchMethodException) {
-        null
-    }
-    if (exact != null) {
-        if (EzReflect.cacheEnabled) {
-            EzReflect.cachePut(
-                clz,
-                ReflectCacheBucket.CONSTRUCTOR,
-                BestConstructorCacheKey(parameterTypes.toList(), List(parameterTypes.size) { false }),
-                exact,
-            )
-        }
-        return exact
-    }
-
-    val expected: Array<Class<*>> = parameterTypes.toList().toTypedArray()
-    var best: Constructor<*>? = null
-    var bestScore = Int.MAX_VALUE
-    for (constructor in EzReflect.memberResolver.constructorsOf(clz)) {
-        if (!paramTypesMatch(expected, constructor.parameterTypes)) continue
-        val score = scoreMatch(expected, constructor.parameterTypes)
-        if (score < bestScore) {
-            constructor.isAccessible = true
-            best = constructor
-            bestScore = score
-        }
-    }
-
-    return best?.also {
-        if (EzReflect.cacheEnabled) {
-            EzReflect.cachePut(
-                clz,
-                ReflectCacheBucket.CONSTRUCTOR,
-                BestConstructorCacheKey(parameterTypes.toList(), List(parameterTypes.size) { false }),
-                it,
-            )
-        }
-    } ?: throw MemberNotFoundException(
-        memberType = MemberType.CONSTRUCTOR,
-        targetClass = clz.name,
-        searchedSuper = false,
-        conditionDesc = "bestMatch argTypes=${parameterTypes.map { it.simpleName }}",
-        candidates = bestMatchConstructorCandidates(clz),
-    )
-}
-
-/**
- * 按实参数值推断最合适的构造器。
- *
- * 与参数类型重载相比，此版本会根据运行时参数类型自动推断，`null` 参数会参与模糊匹配。
- *
- * @param clz 目标类
- * @param args 用于推断签名的运行时实参
- */
+/** 按运行时实参选择构造器；null 和歧义规则与 [findMethodBestMatch] 相同。 */
 fun findConstructorBestMatch(
     clz: Class<*>,
     vararg args: Any?,
-): Constructor<*> {
-    val actual = inferBestMatchArgs(args)
-    if (EzReflect.cacheEnabled) {
-        val key = BestConstructorCacheKey(
-            actual.map { it.type ?: Any::class.java },
-            actual.map { it.isNull },
-        )
-        val cached = EzReflect.cacheGet(clz, ReflectCacheBucket.CONSTRUCTOR, key)
-        if (cached is Constructor<*>) return cached
-    }
+): Constructor<*> = bestConstructor(clz, args.map { it?.javaClass })
 
-    var best: Constructor<*>? = null
-    var bestScore = Int.MAX_VALUE
-    for (constructor in EzReflect.memberResolver.constructorsOf(clz)) {
-        if (!paramTypesMatch(actual, constructor.parameterTypes)) continue
-        val score = scoreMatch(actual, constructor.parameterTypes)
-        if (score < bestScore) {
-            constructor.isAccessible = true
-            best = constructor
-            bestScore = score
-        }
-    }
-
-    return best?.also {
-        if (EzReflect.cacheEnabled) {
-            EzReflect.cachePut(
-                clz,
-                ReflectCacheBucket.CONSTRUCTOR,
-                BestConstructorCacheKey(actual.map { it.type ?: Any::class.java }, actual.map { it.isNull }),
-                it,
-            )
-        }
-    } ?: throw MemberNotFoundException(
-        memberType = MemberType.CONSTRUCTOR,
-        targetClass = clz.name,
-        searchedSuper = false,
-        conditionDesc = "bestMatch args=${args.map { it?.javaClass?.simpleName ?: "null" }}",
-        candidates = bestMatchConstructorCandidates(clz),
-    )
-}
+internal fun findMethodBestMatchForCall(
+    clz: Class<*>,
+    methodName: String,
+    args: Array<out Any?>,
+    staticOnly: Boolean,
+): Method = bestMethod(clz, methodName, args.map { it?.javaClass }, if (staticOnly) CallMode.STATIC else CallMode.INSTANCE)
