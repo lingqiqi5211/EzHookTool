@@ -1,16 +1,71 @@
-# EzHookTool API Guide
+# EzHookTool 使用指南
 
-EzHookTool 的 API 分成三类：
+按使用顺序阅读：
 
-- `core`：反射、类查找、方法查找、字段读写、实例创建。
-- `core.java`：给 Java 调用的入口，例如 `Classes`、`Methods`、`Fields`、`Constructors`。
-- `xposed.dsl` / `xposed.java`：给 Kotlin / Java 使用的 hook 入口。
+- [依赖与阅读导航](#dependencies)
+- [Core：反射查询与调用](#core)
+- [Hook：初始化与回调](#hook)
+- [资源：直接值、模块预求值与宿主绑定](#resources)
+- [热重载与失败恢复](#hot-reload)
+- [验证与兼容边界](#validation)
 
-本项目不做 dex 扫描。`findClassIf` 通过 `EzReflect.classResolver` 从目标 `ClassLoader` 获取可查询类名，再按条件筛选；成员查找只在给定 `Class` 的成员和父类成员中查找。
+<a id="dependencies"></a>
 
-## Kotlin
+## 依赖与阅读导航
 
-按条件查找类：
+| 使用场景 | 依赖 | 入口 |
+| --- | --- | --- |
+| 纯 Kotlin/JVM 反射 | `core` | Kotlin 顶层函数、`reflect {}`；Java 的 `Classes` / `Methods` / `Fields` / `Constructors` |
+| 经典 Xposed API 82 | `core` + `hook-xposed-82` | `EzXposed`、`xposed.dsl` / `xposed.java` |
+| libxposed API 101 / 102 | `core` + `hook-xposed-102` | 同名入口；按 102 编译，101 是运行基线，102 特性按需启用 |
+
+两个 Hook artifact **二选一**，不能同时引入。`core` 不依赖 Android 或 Hook framework。
+
+```kotlin
+// build.gradle.kts
+val ezHookToolVersion = "<version>"
+
+dependencies {
+    implementation("io.github.lingqiqi5211.ezhooktool:core:$ezHookToolVersion")
+    // 纯反射到此即可；Hook 模块再选择下面一组。
+    implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-102:$ezHookToolVersion")
+    compileOnly("io.github.libxposed:api:102.0.0")
+
+    // 经典 Xposed 改用：
+    // implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-82:$ezHookToolVersion")
+    // compileOnly("de.robv.android.xposed:api:82")
+}
+```
+
+示例省略重复 import 和应用自己的 `installHooks()` 等实现。Core Kotlin API 位于
+`io.github.lingqiqi5211.ezhooktool.core`，查询类型位于其 `query` 包；Hook DSL 位于
+`io.github.lingqiqi5211.ezhooktool.xposed.dsl`。完整工程可参考
+[`sample-xposed-82`](../sample-xposed-82) 和 [`sample-xposed-102`](../sample-xposed-102)。
+本页是详细指南；项目入口见 [README](../README.md)。
+
+<a id="core"></a>
+
+## Core：反射查询与调用
+
+### 选择 ClassLoader 与加载类
+
+未初始化时默认使用 `ClassLoader.getSystemClassLoader()`。纯反射调用可设置默认加载器，或通过局部作用域显式传入：
+
+```kotlin
+EzReflect.init(yourClassLoader)
+val target = loadClass("com.example.Target")
+val fallback = loadClassFirst("com.example.Target", "com.example.a")
+
+reflect(yourClassLoader) {
+    val method = "com.example.Target".findMethod { name("run") }
+}
+```
+
+`loadClassOrNull` / `loadClassFirstOrNull` 提供可空形式；`lazyClass` / `lazyClassOrNull` 可延迟加载。
+Hook 场景通常由下文的 `EzXposed` 初始化目标加载器，不必重复设置。
+
+项目不做 dex 扫描。`findClassIf` 通过 `EzReflect.classResolver` 获取可查询类名，再按条件筛选；
+默认类名解析器返回空序列，需要调用者接入索引。成员查找只在给定类及所选父类范围内进行。
 
 ```kotlin
 val clazz = findClassIf {
@@ -22,13 +77,23 @@ val clazz = findClassIf {
         name("login")
         paramCount(2)
     }
-    hasField {
-        name("token")
-    }
+    hasField { name("token") }
 }
 ```
 
-查找单个方法：
+对应入口还有 `findClassIfOrNull` 和 `findAllClassesIf`。Java 的类加载门面：
+
+```java
+import io.github.lingqiqi5211.ezhooktool.core.java.Classes;
+
+Class<?> target = Classes.loadClass("com.example.Target");
+Class<?> fallback = Classes.loadClassFirst("com.example.Target", "com.example.a");
+```
+
+Java 门面目前没有 Kotlin `findClassIf { ... }` 的类条件查询入口；可在 Kotlin 侧封装，
+或组合 `Classes.loadClass` 与反射检查。
+
+### 查找方法、字段与构造器
 
 ```kotlin
 val method = clazz.findMethod {
@@ -36,28 +101,77 @@ val method = clazz.findMethod {
     paramCount(2)
     returnType(String::class.java)
 }
-```
-
-查找多个方法：
-
-```kotlin
 val methods = clazz.findAllMethods {
     name("foo")
     paramCount(2)
     findAndSuper()
 }
-```
-
-不写条件时会返回当前查找范围内的全部结果：
-
-```kotlin
-val methods = clazz.findAllMethods()
-val declaredFields = clazz.findAllFields {
+val field = clazz.findField {
+    name("mContext")
+    type(Context::class.java)
     findOnlyClass()
+}
+val constructor = clazz.findConstructor {
+    noParams()
+    isPublic()
 }
 ```
 
-常用方法条件：
+方法和字段默认智能查找：先查当前类，找不到再查父类。
+
+- `findOnlyClass()`：只查当前类。
+- `findAndSuper()`：查当前类和全部父类。
+- 不写条件的 `findAllMethods()` / `findAllFields()` / `findAllConstructors()` 返回当前范围内全部结果。
+- `currentClassOnly()` / `includeSuper()` 是弃用旧名称；最后推荐使用版本为 `1.0.4`。
+
+```kotlin
+val methods = clazz.findAllMethods()
+val declaredFields = clazz.findAllFields { findOnlyClass() }
+```
+
+Java 使用 `filterBy...` 链式追加条件，`first()` 取首项，`toList()` 取全部：
+
+```java
+import io.github.lingqiqi5211.ezhooktool.core.java.Methods;
+import io.github.lingqiqi5211.ezhooktool.core.java.Fields;
+import io.github.lingqiqi5211.ezhooktool.core.java.Constructors;
+
+Method method = Methods.find(target)
+        .filterByName("foo")
+        .filterByParamCount(2)
+        .filterByReturnType(String.class)
+        .findAndSuper()
+        .first();
+
+Field field = Fields.find(target)
+        .filterByName("mContext")
+        .filterByType(Context.class)
+        .findOnlyClass()
+        .first();
+
+Constructor<?> constructor = Constructors.find(target)
+        .filterEmptyParam()
+        .filterPublic()
+        .first();
+```
+
+### 组合查询条件
+
+| 目标 | 常用条件 |
+| --- | --- |
+| 方法名称 | `name`、`nameContains`、`nameStartsWith`、`nameEndsWith` |
+| 方法 / 构造器参数 | `paramCount(2)`、`paramCountIn(1..3)`、`noParams()`、`hasParams()` |
+| 完整参数类型 | `params(String::class.java)`；数量、顺序、类型必须一致 |
+| 可赋值参数 | `paramsAssignableFrom(String::class.java)`；目标参数能接收给定类型 |
+| 方法返回值 | `returnType`、`returnTypeExtendsFrom`、`voidReturnType()` |
+| 字段名称与类型 | `name`、`nameContains`、`type`、`typeExtendsFrom` |
+| 通用可见性 | `isPublic()`、`isPrivate()`、`isProtected()` |
+| 方法 / 字段静态性 | `isStatic()`、`notStatic()` |
+| 方法修饰符 | `isFinal()`、`isAbstract()`、`isNative()`、`isSynchronized()`、`isVarArgs()`、`isSynthetic()`、`isBridge()`、`isDefault()` |
+| 字段修饰符 | `isFinal()`、`isVolatile()`、`isTransient()`、`isEnumConstant()`、`isSynthetic()` |
+| 构造器修饰符 | `isVarArgs()`、`isSynthetic()` |
+
+例如宽松匹配一个公开、非静态方法：
 
 ```kotlin
 val method = clazz.findMethod {
@@ -70,91 +184,7 @@ val method = clazz.findMethod {
 }
 ```
 
-查找字段：
-
-```kotlin
-val field = clazz.findField {
-    name("mContext")
-    type(Context::class.java)
-    findOnlyClass()
-}
-```
-
-查找构造器：
-
-```kotlin
-val constructor = clazz.findConstructor {
-    noParams()
-    isPublic()
-}
-```
-
-安装 hook：
-
-```kotlin
-method.createHook {
-    before { param ->
-        val text = param.argAs<String>(0)
-        param.args[0] = text.trim()
-    }
-
-    after { param ->
-        param.result = "done"
-    }
-}
-```
-
-批量 hook：
-
-```kotlin
-clazz.findAllMethods {
-    name("foo")
-    paramCount(1)
-}.createHooks {
-    before {
-        // ...
-    }
-}
-```
-
-## Java
-
-Java 代码建议使用 `core.java` 包里的入口。链式查询方法使用 `filterBy...` 命名，能直接看出每一步是在追加查找条件。
-
-查找类：
-
-```java
-import io.github.lingqiqi5211.ezhooktool.core.java.Classes;
-
-Class<?> target = Classes.loadClass("com.example.Target");
-```
-
-多个候选类名按顺序兜底：
-
-```java
-Class<?> target = Classes.loadClassFirst(
-        "com.example.Target",
-        "com.example.a"
-);
-```
-
-> Java 端目前没有「按类名 + 内含成员条件挑选类」的条件查找入口（Kotlin 的 `findClassIf { ... }`）；
-> 需要类似能力时请在 Kotlin 侧暴露便利方法或自行组合 [Classes.loadClass] + 反射检查。
-
-查找方法：
-
-```java
-import io.github.lingqiqi5211.ezhooktool.core.java.Methods;
-
-Method method = Methods.find(target)
-        .filterByName("foo")
-        .filterByParamCount(2)
-        .filterByReturnType(String.class)
-        .findAndSuper()
-        .first();
-```
-
-更宽松的参数匹配：
+Java 对应使用 `filterByAssignableParamTypes`、`filterByReturnTypeExtendsFrom` 等：
 
 ```java
 Method method = Methods.find(target)
@@ -165,35 +195,206 @@ Method method = Methods.find(target)
         .first();
 ```
 
-查找字段：
+特殊匹配：
 
-```java
-import io.github.lingqiqi5211.ezhooktool.core.java.Fields;
+- `parameterTypesVague(String::class.java, VagueType, Boolean::class.javaObjectType)`：方法和构造器参数数量固定，
+  `VagueType` 位置跳过精确匹配，其余位置仍要求类型相等。
+- `genericParameterTypes(GenericTypeMatcher.typeVariableNamed("T"))`：匹配方法或构造器擦除前的
+  `genericParameterTypes`，可区分真正的 `TypeVariable` 与已擦除参数。
+- `genericReturnType(GenericTypeMatcher.rawType(List::class.java))`：匹配方法擦除前的 `genericReturnType`。
+  上述泛型条件禁用自动查询缓存。
+- `filter { ... }`：自定义条件。内部再调用查找器会产生警告，优先使用结构化条件；没有手动 `cacheKey` 时不缓存。
 
-Field field = Fields.find(target)
-        .filterByName("mContext")
-        .filterByType(Context.class)
-        .findOnlyClass()
-        .first();
+Java 入口使用同义的 `filterBy...`、`filterPublic()`、`filterStatic()` 等命名。
+
+### 调用、字段读写与 descriptor
+
+```kotlin
+val value = obj.callMethod("getValue")
+obj.putField("enabled", true)
+
+val method = getMethodByDesc("Lcom/example/Foo;->doTask(Ljava/lang/String;I)V")
+val field = getFieldByDesc("Lcom/example/Foo;->name:Ljava/lang/String;")
 ```
 
-查找构造器：
-
 ```java
-import io.github.lingqiqi5211.ezhooktool.core.java.Constructors;
-
-Constructor<?> constructor = Constructors.find(target)
-        .filterEmptyParam()
-        .filterPublic()
-        .first();
+Object value = Methods.callMethod(obj, "getValue");
+Fields.setBooleanField(obj, "enabled", true);
 ```
 
-安装 before / after hook：
+`getMethodByDescOrNull` / `getFieldByDescOrNull` 是可空形式。descriptor 格式错误抛
+`IllegalArgumentException`；格式合法但成员不存在，严格入口抛 `MemberNotFoundException`，可空入口返回 `null`。
+查找错误中的 `Search` 只描述当前类或当前类加父类，不代表接口继承图，也不承诺遍历该图。
+
+BestMatch 的类型重载与实参重载使用同一选择规则：
+
+- 精确类型优先于 primitive/wrapper 对应，再比较引用类型具体程度；多参数逐位比较，不能用总分掩盖歧义。
+- 无法唯一选择时抛 `SingleResultExpectedException`，不按反射枚举顺序任选；覆写优先于同签名父类成员，非 bridge 优先。
+- `null` 只匹配引用类型；不相关的最具体候选仍报告歧义。
+- 不隐式拓宽数值或打包 vararg；vararg 数组须作为单个实参传入。
+- 自动实例 / 静态调用在候选选择前过滤调用模式；公开 `findMethodBestMatch` 本身仍可查找两者。
+- 默认成员解析器区分正常空结果与枚举失败；备用访问也不可用时保留原链接错误，不缓存成“没有成员”。
+
+### 查询计划、缓存与加载器生命周期
+
+查询块结束后生成独立 `QueryPlan`。匹配与缓存 key 使用同一份条件、搜索范围和结果模式；重复条件按 AND 保留，
+`findSingle()`、首项和批量结果不混用，嵌套成员条件也保留完整计划。参数类型数组在登记条件时复制，
+原数组后续修改不改变计划；用户 lambda 内部状态不在快照范围内，手动 `cacheKey(...)` 的一致性由调用者负责。
+
+缓存保存最终结果，不保存扫描过程：
+
+| 查询 | 缓存内容 |
+| --- | --- |
+| `loadClass` / `loadClassOrNull` | `ClassLoader + 类名` 对应的成功结果 |
+| `loadClassFirst` / `loadClassFirstOrNull` | `ClassLoader + 候选名列表` 对应的首个成功结果 |
+| 类条件查询 | 结构化条件或手动 `cacheKey` 对应的结果 |
+| `findMethod` / `findField` / `findConstructor` | 结构化条件对应的首项 |
+| `findAllMethods` / `findAllFields` / `findAllConstructors` | 可缓存条件对应的完整列表 |
+| BestMatch | 名称与参数类型对应的匹配结果 |
+
+找不到的类或成员不缓存。带条件的 `findAll` 只扫描一次，不预热其他查询；批量结果返回独立列表，
+修改列表不影响后续查询。无手动 key 的自定义条件不自动缓存。
+
+当前缓存是同步有界 LRU，类与成员查询**合计最多 4096 条**，超过 **256 项**的集合结果不缓存。
+有效期间强引用键与结果，不靠弱引用自动释放加载器；成员枚举、解析器和用户条件在缓存锁外执行。
+
+```kotlin
+EzReflect.clearCache()
+EzReflect.cacheEnabled = false
+```
+
+`init()`、`reset()`、`clearCache()`、解析器替换和缓存开关变更会发布新配置/缓存状态，清空旧缓存并停止其写入。
+一次同步查询从 DSL 构建到结果选择都使用同一状态，嵌套查询沿用；查询回调中改变配置只影响后续顶层查询。
+默认加载器进入查询状态后才解析，显式传入的加载器不会被替换。
+
+临时加载器用完应清缓存；若仍是默认加载器，还需 `reset()` 或切换加载器。清缓存不会释放调用者持有的
+反射结果、监听器和回调，不能据此认定整个加载器已可回收。
+
+<a id="hook"></a>
+
+## Hook：初始化与回调
+
+### 先区分 82 与 101 / 102
+
+- **82** 使用 `de.robv.android.xposed` 的生命周期，不使用 `XposedInterface`，也没有本页的 102 热重载流程。
+- **101 / 102** 使用 `hook-xposed-102`：普通 before / after / replace、`Chain` / `intercept`、remote preferences / files
+  都属于 101 能力。只有 hook ID、原子替换、entry detach 和热重载回调需要 102。
+- `@RequiresXposedApi(102)` 标记不能按原语义降级的入口；调用前判断所需特性，不能把它们当作 101 普通 Hook 的前置条件。
+
+若模块需要被 101 framework 加载，`META-INF/xposed/module.prop` 使用：
+
+```properties
+minApiVersion=101
+targetApiVersion=102
+```
+
+不要为这种配置声明 `autoHotReload`。API 102 的自动热重载配置见[热重载章节](#hot-reload)。
+
+### 初始化目标环境
+
+**经典 Xposed 82**：模块入口实现 `IXposedHookZygoteInit` 和 `IXposedHookLoadPackage`，分别转发：
+
+```kotlin
+override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
+    EzXposed.initZygote(startupParam)
+}
+
+override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
+    if (lpparam.packageName != TargetApp) return
+    EzXposed.init(lpparam)
+    installHooks()
+}
+```
+
+`initZygote` 是可靠的模块路径来源，并自动初始化 `moduleRes`；`init(lpparam)` 设置目标加载器、包名和进程名。
+未调用 `initZygote` 就执行 `initModuleResources` / `addModuleAssetPath` 会明确报错。
+
+**libxposed 101 / 102**：在 `XposedModule` 中按阶段转发，不把模块加载与目标就绪混为一谈：
+
+```kotlin
+override fun onModuleLoaded(param: ModuleLoadedParam) {
+    EzXposed.initOnModuleLoaded(this, param)
+    EzXposed.onTargetReady { installHooks() }
+}
+
+override fun onPackageLoaded(param: PackageLoadedParam) {
+    if (!param.isFirstPackage || param.packageName != TargetApp) return
+    EzXposed.initOnPackageLoaded(param)
+}
+
+override fun onPackageReady(param: PackageReadyParam) {
+    if (!param.isFirstPackage || param.packageName != TargetApp) return
+    EzXposed.initOnPackageReady(param)
+}
+```
+
+| 初始化入口 | 可用状态与时机 |
+| --- | --- |
+| `initOnModuleLoaded` | 解析 framework 特性，保存 `base`、模块路径、进程名和 `isSystemServer`，初始化模块资源；尚未设置目标加载器 |
+| `initOnPackageLoaded` | 只记录 package 信息 |
+| `initOnPackageReady` | 初始化目标 `EzReflect.classLoader`，触发 `onTargetReady` |
+| `initOnSystemServerStarting` | 初始化 system_server 加载器并触发 `onTargetReady`；不要假设存在 app Context |
+| `initOnPackageLoadedAsTargetReady` | Android Q+ 的提前路径，在 AppComponentFactory 创建前以 `defaultClassLoader` 触发就绪 |
+
+需要提前安装时，用 `initOnPackageLoadedAsTargetReady(param)` 替换普通 `initOnPackageLoaded(param)`；
+后续 `initOnPackageReady` 会被忽略，初次加载和热重载均保持该加载器。**这条提前路径要求 Android Q**，低版本使用正常 ready 时机。
+
+`targetReadyState` 是当前 generation 首次就绪状态：`NOT_STARTED`、`INITIALIZING`、`SUCCEEDED`、`FAILED`，
+原因见 `targetReadyFailure`。分发期间新注册的回调进入队尾，执行后释放；首次成功后的新回调立即执行、不保存，
+也不属于已提交的默认 Hook batch。失败不自动重试，再注册不能重启初始化。未启用默认 batch 时，首次初始化记录
+单个回调异常后继续其余回调，最终仍为 `FAILED`；热重载恢复中的异常向调用方传播。
+这些状态不代表后续即时回调或旧 Hook 清理的结果。
+
+### Application 与模块资源的可用时机
+
+82 和 101 / 102 都可通过 `runOnApplicationAttach` 等待 Application；若已经 attach，新注册回调在当前线程立即执行：
+
+```kotlin
+EzXposed.runOnApplicationAttach { context ->
+    // context 是 Application context。
+}
+```
+
+回调按登记顺序执行，异常记日志且不阻断其他回调。libxposed 必须先调用 `initOnModuleLoaded`；82 的此入口不要求先调
+`initZygote`。过早读取 `appContext` 会抛异常，不确定时用 `appContextOrNull`。
+
+`initAppContext(context)` 默认只在缓存为空时保留 `applicationContext` 或传入的 Application，不可用时抛
+`IllegalStateException`；已有值不覆盖。`force=true` 原样缓存指定 Context，调用者承担 Activity 泄漏等生命周期风险。
+其可选资源注入始终针对原始入参，不因缓存已有值而跳过。
+
+libxposed 同一 generation 的模块资源成功初始化后不重复创建，创建失败可以重试 `initOnModuleLoaded`；
+`initModuleResources()` 是显式刷新，每次创建新模块资源。82 可用 `initModuleResources(origRes)` 复用指定资源配置。
+刷新 `moduleRes` 不等于重新登记已求值的替换值，见[资源章节](#resources)。
+
+### Kotlin / Java 安装回调
+
+Kotlin 的方法与构造器均可使用 `createHook`；批量方法使用 `createHooks`：
+
+```kotlin
+method.createHook {
+    before { param ->
+        param.args[0] = param.argAs<String>(0).trim()
+    }
+    after { param -> param.result = "done" }
+}
+
+clazz.findAllMethods {
+    name("foo")
+    paramCount(1)
+}.createHooks {
+    before {
+        // 处理本次调用。
+    }
+}
+```
+
+Java 使用 `xposed.java` 门面；以下普通 Hook 在 82 与 libxposed 101 / 102 均有对应入口：
 
 ```java
 import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam;
 import io.github.lingqiqi5211.ezhooktool.xposed.java.Hooks;
 import io.github.lingqiqi5211.ezhooktool.xposed.java.IMethodHook;
+import io.github.lingqiqi5211.ezhooktool.xposed.java.IReplaceHook;
 
 Hooks.createHook(method, new IMethodHook() {
     @Override
@@ -207,12 +408,6 @@ Hooks.createHook(method, new IMethodHook() {
         param.setResult("done");
     }
 });
-```
-
-安装 replace hook：
-
-```java
-import io.github.lingqiqi5211.ezhooktool.xposed.java.IReplaceHook;
 
 Hooks.createHook(method, new IReplaceHook() {
     @Override
@@ -220,157 +415,33 @@ Hooks.createHook(method, new IReplaceHook() {
         return null;
     }
 });
-```
 
-查找并 hook 单个方法：
-
-```java
 Hooks.findAndHookMethod(target, "foo", String.class, new IMethodHook() {
     @Override
     public void before(HookParam param) {
-        // ...
+        // 处理本次调用。
     }
 });
-```
 
-批量 hook：
-
-```java
 List<Method> methods = Methods.find(target)
         .filterByName("foo")
         .filterByParamCount(1)
         .toList();
-
 Hooks.createHooks(methods, new IMethodHook() {
     @Override
     public void before(HookParam param) {
-        // ...
+        // 处理本次调用。
     }
 });
 ```
 
-## 查找范围
-
-方法和字段默认使用智能查找：先查当前类，找不到再查父类。
-
-- `findOnlyClass()`：只查当前类。
-- `findAndSuper()`：查当前类和全部父类。
-- `findSuper()` 相关错误消息里的 `Search` 只描述是否继续向上查找，不代表接口继承图。
-
-不写这两个开关时，就是默认智能查找。
-
-旧名称 `currentClassOnly()` / `includeSuper()` 已标记弃用，最后推荐使用版本为 `1.0.4`。
-
-查找范围写在查询块里：
+libxposed 的 `intercept` 用于直接控制 `XposedInterface.Chain`，**101 即可使用**：
 
 ```kotlin
-clazz.findMethod {
-    findOnlyClass()
-    name("foo")
+method.createInterceptHook { chain ->
+    if (isFeatureEnabled()) patchedResult() else chain.proceed()
 }
 ```
-
-## 查询条件
-
-方法查询常用条件：
-
-- `name("foo")` / `nameContains("foo")` / `nameStartsWith("get")` / `nameEndsWith("Locked")`
-- `paramCount(2)` / `paramCountIn(1..3)` / `noParams()` / `hasParams()`
-- `params(String::class.java)`：完整参数类型，数量和顺序必须一致。
-- `paramsAssignableFrom(String::class.java)`：目标方法参数能接收这些类型。
-- `parameterTypesVague(String::class.java, VagueType, Boolean::class.javaObjectType)`：参数数量固定，
-  某些位置用 `VagueType` 占位跳过精确匹配，其余位置仍要求完全相等。
-- `genericParameterTypes(GenericTypeMatcher.typeVariableNamed("T"))`：按擦除前的
-  `Method.genericParameterTypes` 逐位匹配，可命中真正声明的泛型方法参数（`TypeVariable`），
-  桥接方法（bridge method）的参数已被擦除为具体类型，不会匹配。此条件禁用查询缓存。
-- `genericReturnType(GenericTypeMatcher.rawType(List::class.java))`：按擦除前的
-  `Method.genericReturnType` 匹配，例如区分返回 `List<T>` 与返回 `List<String>` 的桥接方法。
-  此条件禁用查询缓存。
-- `returnType(String::class.java)` / `returnTypeExtendsFrom(CharSequence::class.java)` / `voidReturnType()`
-- `isStatic()` / `notStatic()` / `isPublic()` / `isPrivate()` / `isProtected()`
-- `isFinal()` / `isAbstract()` / `isNative()` / `isSynchronized()`
-- `isVarArgs()` / `isSynthetic()` / `isBridge()` / `isDefault()`
-- `filter { ... }`：自定义条件。`filter` 里再调用查找器会产生警告，建议优先使用结构化条件。
-
-字段查询常用条件：
-
-- `name("mContext")` / `nameContains("context")`
-- `type(Context::class.java)` / `typeExtendsFrom(Context::class.java)`
-- `isStatic()` / `notStatic()`
-- `isPublic()` / `isPrivate()` / `isProtected()`
-- `isFinal()` / `isVolatile()` / `isTransient()`
-- `isEnumConstant()` / `isSynthetic()`
-- `filter { ... }`：自定义条件。`filter` 里再调用查找器会产生警告，建议优先使用结构化条件。
-
-构造器查询常用条件：
-
-- `paramCount(2)` / `paramCountIn(1..3)` / `noParams()` / `hasParams()`
-- `params(String::class.java)`：完整参数类型，数量和顺序必须一致。
-- `paramsAssignableFrom(String::class.java)`：目标构造器参数能接收这些类型。
-- `parameterTypesVague(String::class.java, VagueType, Boolean::class.javaObjectType)`：语义与方法查询的
-  同名条件一致。
-- `genericParameterTypes(GenericTypeMatcher.typeVariableNamed("T"))`：语义与方法查询的同名条件一致，
-  按擦除前的 `Constructor.genericParameterTypes` 匹配。此条件禁用查询缓存。
-- `isPublic()` / `isPrivate()` / `isProtected()`
-- `isVarArgs()` / `isSynthetic()`
-- `filter { ... }`：自定义条件。`filter` 里再调用查找器会产生警告，建议优先使用结构化条件。
-
-Java 入口使用同义的 `filterBy...`、`filterPublic()`、`filterStatic()` 等方法。
-
-## 查询缓存
-
-缓存保存的是最终查找结果，不保存查找过程。
-
-会缓存的结果：
-
-- `loadClass` / `loadClassOrNull`：按 `ClassLoader + 类名` 缓存成功加载的类。
-- `loadClassFirst` / `loadClassFirstOrNull`：按 `ClassLoader + 候选类名列表` 缓存第一个成功结果。
-- `findClassIf` / `findClassIfOrNull` / `findAllClassesIf`：按结构化条件或 `cacheKey(...)` 缓存查询结果。
-- `findMethod` / `findField` / `findConstructor`：按结构化查询条件缓存第一个匹配结果。
-- `findAllMethods` / `findAllFields` / `findAllConstructors`：按结构化查询条件缓存完整列表。
-- best-match 查找：按名称和参数类型缓存匹配结果。
-
-不会缓存的内容：
-
-- 找不到的类或成员。
-- 没有 `cacheKey(...)` 的自定义 `filter` 查询。
-
-`findAll` 的行为：
-
-1. 带查询条件的 `findAll` 只扫描一次。
-2. 查询可缓存，或手动指定 `cacheKey(...)` 时，会缓存完整列表。
-3. 列表里的每个结果会按精确签名写入单个查找缓存。
-
-缓存只保存在当前运行期内。高频命中的缓存会刷新访问记录；低频缓存会在内部清理条件达成后自动释放。
-
-关闭缓存会释放已有缓存，也可以手动清除：
-
-```kotlin
-EzReflect.cacheEnabled = false
-EzReflect.clearCache()
-```
-
-`init()`、`reset()` 和 `clearCache()` 都会清空缓存。
-
-## 调用和字段读写
-
-Kotlin：
-
-```kotlin
-val value = obj.callMethod("getValue")
-obj.putField("enabled", true)
-```
-
-Java：
-
-```java
-Object value = Methods.callMethod(obj, "getValue");
-Fields.setBooleanField(obj, "enabled", true);
-```
-
-## libxposed 102 intercept
-
-`intercept` 只用于需要直接操作 `XposedInterface.Chain` 的场景。
 
 ```java
 Hooks.intercept(method, chain -> {
@@ -379,147 +450,189 @@ Hooks.intercept(method, chain -> {
 });
 ```
 
-## libxposed 102 hook ID 与替换
+### safeMode 与异常
 
-在默认 `EzXposed.onTargetReady` 同步初始化中，未调用 `HookFactory.id(...)` 或 `reloadKey(...)` 的
-DSL / Java helper hook 会按 `executable + priority + exceptionMode` 自动聚合成一个物理 hook，并使用稳定
-内部 hook ID。整个回调正常完成后才提交这些物理 hook；同一目标上新增、删除或重排逻辑 hook 都不会改变
-该组 ID，新 generation 会由 framework 逐条原子替换旧组，原物理 handle 随即失效。新增或删除
-executable、priority/exceptionMode 组及显式 hook ID 也受支持：新增项先安装，相同 identity 逐条替换，
-最后才撤销新代码不再声明的旧项。新 generation 即使没有注册任何 hook，只要 `onTargetReady` 回调确实执行，
-也会正确撤销全部旧 hook。
+`EzXposed.safeMode` 默认开启，保护普通 DSL / Java helper 的调用阶段，不是任意副作用的事务：
 
-事务外才临时注册的 helper hook 会收到兜底内部 ID，但它不属于默认自动热重载的可靠边界；应改为同步注册，
-或显式声明 `reloadKey(...)`。
+| 失败阶段 | 回退语义 |
+| --- | --- |
+| before / replace | 丢弃失败回调的参数和输出修改，继续下游，不绕过其他 Hook 手工调用原方法 |
+| after | 恢复进入回调前的结果或异常，不重复执行原方法 |
+| intercept 尚未 `proceed()` | 放行下游调用 |
+| intercept 已 `proceed()` | 保留下游结果或异常，不重复执行 |
+| 原方法自身异常 | 原样传播，不视为模块 callback 失败 |
 
-`HookFactory.id(...)` 用于指定自定义 hook ID；`reloadKey(...)` 表示该 ID 是跨版本稳定契约。
-`id(null)` 则明确关闭自动 ID，适用于完全自定义旧 handle 处置的进阶流程。底层仍完全使用 libxposed
-原生的 hook ID / 原子替换机制；它不能放进默认 `HookReloadBatch`，应在事务外自行定义收尾边界。
+保护包括调用状态与参数数组浅拷贝，不撤销参数对象内部修改或外部副作用。82 在 callback 成功后才提交输出，
+失败时还原参数数组；其 `HookParam.raw` 直接操作 framework 对象，不具有同等保护。用户 logger 抛异常不会阻断安全回退。
+
+libxposed 的 `deoptimize(executable)` 保留 framework 的 Boolean，异常时返回 `false`；
+`deoptimizeOrThrow(executable)` 可区分返回 `false` 与抛异常，未初始化时也会明确报错。
+
+### 102 可选能力：ID、替换与 detach
+
+在 `initOnModuleLoaded` 之后查询能力；初始化前均为 `false`，不应缓存这个早期结果：
+
+```kotlin
+XposedFeature.HOOK_ID.isSupported
+XposedFeature.REPLACE_HOOK.isSupported
+XposedFeature.HOT_RELOAD.isSupported
+XposedFeature.DETACH_ENTRY.isSupported
+XposedFeature.HOOK_ID.minApiVersion  // 102
+EzXposed.frameworkApiVersion        // 未初始化时为 0
+```
+
+能力来自 framework 报告的 API 版本，不反射探测 Xposed API；`isSupported` 只判断能力，不会调用它。
+无法降级的 helper 通常抛带所需版本、特性名和当前版本的 `IllegalStateException`。
+
+| 操作 | API 101 framework | API 102 framework |
+| --- | --- | --- |
+| 普通 Hook、`Chain` / `intercept` | 可用 | 可用 |
+| 自动 Hook ID | 不分配、不调用 `setId` | 热重载启用时分配 |
+| `groupById()` / Java `HookHandles.getId(handle)` | ID 为 `null` | 返回可见的底层 ID，聚合逻辑 handle 为 `null` |
+| `id(nonNull)` / `reloadKey` | 安装时抛异常 | 可用 |
+| `id(null)` | 可匿名安装 | 关闭自动 ID，不能放进默认 batch |
+| `replaceWith` / `replaceIntercept` / `replaceAll` / `Hooks.replaceHook` | 抛异常 | 可用 |
+| `HotReloadSession` / `HookReloadBatch` | 构造即抛异常 | 初始化运行时后可用 |
+| `handleHotReloaded` 系列 / `detachCurrentEntry` | 不可用 | 可用 |
+| `handleHotReloading` | 不支持时警告并返回 `false` | 按当前状态决定是否接受 |
+
+`HookFactory.id(...)` 指定底层 ID，`reloadKey(...)` 进一步表示跨版本稳定契约；默认自动热重载通常不需要逐条声明。
+同一 executable 内显式 key 必须区分不同逻辑 Hook，不要使用库保留的 `ezhooktool.batch.v1:` 命名空间。
 
 ```kotlin
 val handle = method.createHook {
     reloadKey("license-check")
     before {
-        // ...
+        // 检查本次调用。
     }
 }
+val newHandle = handle.replaceWith { true }
+// 需要 Chain 控制时改用 handle.replaceIntercept { chain -> ... }。
 ```
-
-拿到旧 handle 后，用 `replaceWith` / `replaceIntercept` 用 lambda 直接替换：
-
-```kotlin
-val newHandle = handle.replaceWith { /* HookParam */ true }
-```
-
-也可以传 libxposed 原生 `Hooker`，直接走接口成员：
-
-```kotlin
-val newHandle = handle.replaceHook(myHooker)
-```
-
-替换会保留原 hook 的 `executable`、`priority`、`exceptionMode` 和 hook ID；调用成功后原 handle 不再可用。
-替换后的 hook 也会沿用 `EzXposed.safeMode` 的保护。
-
-Java 调用方：
 
 ```java
-HookHandle newHandle = Hooks.replaceHook(oldHandle, methodHook);  // IMethodHook
-HookHandle newHandle = Hooks.replaceHook(oldHandle, replaceHook); // IReplaceHook
-HookHandle newHandle = oldHandle.replaceHook(hooker);             // 原生 Hooker
+import io.github.libxposed.api.XposedInterface.HookHandle;
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookHandles;
 
-// 新建、可参与 HotReloadSession 的 Java hook：
 HookHandle handle = Hooks.createHook(method, "license-check", methodHook);
+HookHandle newHandle = Hooks.replaceHook(handle, methodHook);  // IMethodHook
+// 或 Hooks.replaceHook(handle, replaceHook)，其中 replaceHook 是 IReplaceHook。
+String id = HookHandles.getId(newHandle);
 ```
 
-`HookHandle.id` 是 `getId()` 的 Kotlin 直通属性。默认聚合模式返回的是逻辑 handle，其物理 ID 为工具内部
-实现细节，因此会是 `null`；显式 `id(...)` / `reloadKey(...)` 的 handle 则返回对应 ID：
+helper 替换保留 executable、priority、exceptionMode、ID，并继续提供 safeMode；成功后旧 handle 失效。
+原生 `handle.replaceHook(myHooker)` 也可在确认 102 能力后调用，但原生 Hooker 的保护由调用方负责。
+
+**不要在兼容 101 的代码里直接读 `handle.id`**：Kotlin 优先把它解析成 Java `getId()`，会导致
+`NoSuchMethodError`，不是安全扩展。Java 使用上面的 `HookHandles.getId`；Kotlin 可用安全的 `groupById()` 分组，
+或先判断 `XposedFeature.HOOK_ID.isSupported` 再调用原生 `getId()`。默认聚合返回逻辑 handle，内部物理 ID 不对其暴露。
+
+`EzXposed.detachCurrentEntry()` 停止向当前 entry 分发后续生命周期回调，不撤销已装 Hook，也不禁用其他
+`XposedInterface` API。它幂等，但要求 `initOnModuleLoaded` 传入 `XposedInterfaceWrapper`（如 `XposedModule`），
+否则抛 `IllegalStateException`。只适合确认无需后续回调的非目标 entry；detach 后也收不到 `onHotReloading`，
+需要热重载的目标 entry 不要调用。
+
+<a id="resources"></a>
+
+## 资源：直接值、模块预求值与宿主绑定
+
+`EzResources` 在 82 与 libxposed 101 / 102 提供相同入口，按「包名 + 类型 + 名称」拦截支持的
+`Resources` / `TypedArray` getter。实现思路来自 HyperCeiler 的 `ResourcesTool`，不要求 framework 提供专用资源替换接口。
+包名 `"*"` 表示通配，精确规则优先。先完成上文对应运行时初始化，再登记规则。
+
+### 选择三种方式
+
+| 方式 | 现有 API | 取值与副作用 |
+| --- | --- | --- |
+| 直接值 | `setObjectReplacement` / `setDensityReplacement` | 不注入模块 APK；尺寸替换按密度计算 |
+| 模块预求值 | 先读 `EzXposed.moduleRes`，再 `setObjectReplacement` | 模块内求值后登记固定结果，不绑定宿主资源池 |
+| 宿主绑定 | 显式 `inject`；或兼容入口 `setResReplacement` 在命中时注入 | 模块 APK 进入宿主资源池，引用、Theme、命名空间都受宿主环境约束 |
+
+**直接值：**
 
 ```kotlin
-val current: String? = handle.id
+EzResources.setObjectReplacement("com.example.host", "color", "bg_color", Color.RED)
+EzResources.setDensityReplacement("com.example.host", "dimen", "bar_height", 8f)
 ```
 
-## 资源替换（EzResources）
+`setDensityReplacement` 只接受 `dimen`，按数值乘屏幕密度计算，即 dp 语义。
 
-`EzResources` 借 Android 的 `ResourcesLoader` 把模块 apk 挂进宿主的 `Resources`，再 hook `Resources` /
-`TypedArray` 的 getter，按「包名 + 类型 + 名称」拦截取值。不依赖 framework 提供资源接口，只要能 hook 方法就能用；思路来自
-HyperCeiler 的 `ResourcesTool`。hook-xposed-82 与 hook-xposed-102 都提供，API 相同。
+**模块预求值：**
 
 ```kotlin
-// 用模块里的资源顶掉宿主的
-EzResources.setResReplacement("com.miui.home", "drawable", "ic_launcher", R.drawable.my_icon)
-// 直接给一个值
-EzResources.setObjectReplacement("com.miui.home", "color", "bg_color", Color.RED)
-// 数值 x 屏幕密度（dp 语义），用于 dimen
-EzResources.setDensityReplacement("com.miui.home", "dimen", "bar_height", 8f)
+val title = EzXposed.moduleRes.getString(R.string.module_title)
+EzResources.setObjectReplacement("com.example.host", "string", "title", title)
 ```
 
-包名传 `"*"` 表示不限宿主；同时存在精确规则和通配规则时精确的优先。
+这个 `title` 固定到下一次登记，**不会自动跟随宿主 locale、配置或 Theme 重新求值**。
+需要更新时由模块重新读取并登记；不是新增的自动隔离求值 API，也不把任意 Drawable 等对象冻结。
 
-只想让宿主能解析模块的 `R.xxx`（不做替换）时，用 `EzResources.inject(context)`，或沿用
-`EzXposed.addModuleAssetPath(context)` —— 后者现在就是走前者。
-
-支持的资源类型与对应 getter：
-
-| type | 命中的方法 |
-|---|---|
-| `color` | `Resources.getColor` / `getColorStateList`，`TypedArray.getColor` / `getColorStateList` |
-| `drawable` | `Resources.getDrawable` / `getDrawableForDensity`，`TypedArray.getDrawable` |
-| `string` | `getText` / `getStringArray` / `getTextArray` |
-| `dimen` | `getDimension` / `getDimensionPixelOffset` / `getDimensionPixelSize` |
-| `integer` `bool` `fraction` `layout` `anim` | `getInteger` / `getBoolean` / `getFloat` / `getIntArray` / `getLayout` / `getAnimation` / `getFraction` |
-
-行为约定：
-
-- **按需装 hook。** 只有注册过某类替换才会 hook 对应的 getter，一条都没注册时零开销。
-- **hook 是进程级的。** 装一次服务全部替换规则，带稳定 reloadKey，热重载时由工具原子替换；
-  模块不需要也不应该自己持有或摘除。
-- **一切按宿主当前那个 `Resources` 解析。** resId 到名字的缓存按 Resources 分区（SystemUI 和它的插件在同一进程用不同
-  `Resources`，只用 int 当 key 会串）；模块资源也在命中规则的那个 Resources 里解析，规则命中时才把模块 apk 挂上去，
-  配置和主题都是宿主自己的，不会拿错夜间模式或密度变体。
-- **热重载（102）不否决、不跳过，三件事分开处理。** getter hook 带稳定 reloadKey，和别的 hook 一样由新一代重新声明、
-  `replaceHook` 原子替换。注入过的宿主 `Resources` 和旧 `ResourcesLoader` 都是框架对象，上一代把它们放进 saved state，
-  新一代在 `onTargetReady` 之前对每个 Resources **先挂新 loader、再摘旧的**，宿主解析模块 id 没有空窗。替换规则按名字存、
-  取值时才对当前挂着的 apk 解析 id，所以换了 apk 也不会串。Android R 以下走 `addAssetPath` 摘不掉，模块自身资源保持旧版到重启。
-  82 没有热重载，这一条不适用。
-- **值类型要对得上方法。** `getText` 要 `CharSequence`，`getBoolean` 要 `Boolean`，数值类接受任意
-  `Number`。对不上会记一条 warn 并放行原值，不会把错的类型塞给宿主。
-
-`EzResources.fakeResId(name)` 生成一个不与宿主冲突的虚拟资源 ID，用于宿主里本来没有的资源。
-
-
-## libxposed 102 entry detach
-
-`EzXposed.detachCurrentEntry()` 停止 framework 向当前 module entry 分发后续生命周期回调；
-已注册的 hook 与其它 `XposedInterface` API 不受影响。
-
-适合的场景：
-
-- 多 entry 模块里，当前 entry 检测到自己不在目标 app 中，并确认不需要热重载，立即停止接收回调。
+**宿主绑定：**
 
 ```kotlin
-override fun onPackageReady(param: PackageReadyParam) {
-    if (param.packageName != TargetApp) {
-        EzXposed.detachCurrentEntry()
-        return
-    }
-    EzXposed.initOnPackageReady(param)
-    // ...
-}
+check(EzResources.inject(context))
+// 也可注入指定 Resources：EzResources.inject(resources)。
+// 兼容便利入口：EzXposed.addModuleAssetPath(context)。
+
+EzResources.setResReplacement("com.example.host", "drawable", "ic_launcher", R.drawable.my_icon)
 ```
 
-`detach()` 幂等，多次调用等价于一次。该入口需要 `EzXposed.initOnModuleLoaded` 传入的是
-`XposedInterfaceWrapper`（即 `XposedModule` 或其子类）；否则会抛 `IllegalStateException`。
-调用后也不会再收到 `onHotReloading`，所以目标 entry 只要需要热重载就不能 detach。
+`inject` 只使宿主能解析模块 `R.xxx`，本身不登记替换。R+ 优先使用 `ResourcesLoader`，低版本或相应回退走
+`AssetManager.addAssetPath`；资源 ID / 包命名空间须避免与宿主及其他模块冲突。
+`addModuleAssetPath(Context / Resources)` 委托给 `inject`，失败抛异常。
 
-## libxposed 102 热重载
+legacy `setResReplacement` **仍会在首次命中时注入宿主**，不是模块内隔离求值：它记录模块资源名称，
+取值时对当前资源表解析 ID，并保留 getter 的 density、Theme、fraction、quantity 和格式化参数。
+这不保证模块与宿主的主题属性或命名空间兼容。
 
-**职责先说清楚。** 收集哪些 hook 装了、换代时怎么原子替换、怎么收尾旧 handle，全部是工具在
-`handleHotReloading` / `handleHotReloaded` 这两个回调里做的事 —— 模块不需要、也不应该自己再造一套
-handle 登记。模块唯一要做的是把这两个回调桥接好（原样转发给 `EzXposed`），并保证 hook 在
-`onTargetReady` 的同步窗口里装完。
+`inject(..., onMainLooper = true)` 在非主线程变为异步投递，返回 `true` 不代表已挂载成功；
+热重载恢复期间禁止该选项，必须同步注入。注入失败会记录，getter 热路径不会反复重试。
 
-API 102 的热重载由 framework 在 `onHotReloading` 时发起。要让模块 APK 更新后自动触发，
-在 `META-INF/xposed/module.prop` 中声明：
+### getter 覆盖与值类型
+
+| type | 对应 getter |
+| --- | --- |
+| `color` | `Resources` / `TypedArray` 的 `getColor`、`getColorStateList` |
+| `drawable`、`mipmap` | `Resources.getDrawable` / `getDrawableForDensity`，`TypedArray.getDrawable` |
+| `string` | 两类的 `getText` / `getString`；含 `Resources.getText(id, default)` 与格式化重载 |
+| `plurals` | `Resources.getQuantityText` / `getQuantityString` |
+| `array` | `Resources.getStringArray` / `getTextArray` / `getIntArray`，`TypedArray.getTextArray` |
+| `dimen` | 两类的 `getDimension` / `getDimensionPixelOffset` / `getDimensionPixelSize` |
+| `integer`、`bool`、`fraction` | 两类存在的 `getInteger` / `getInt` / `getBoolean` / `getFloat` / `getFraction` |
+| `layout`、`anim` | `Resources.getLayout` / `getAnimation`；相关引用仍须能由宿主资源池解析 |
+
+TypedArray 只处理公开 `getResourceId` 能取得 ID 的条目，不还原原始 `?attr` 或内联字面值；
+**只支持直接值和尺寸替换，不支持模块资源转发**。Theme / TypedValue 读取与布局内部引用不属于 getter 覆盖承诺。
+直接文本替换 plurals 会让所有数量使用相同文本；Android 复数选择规则需使用模块资源转发。
+
+值类型必须与 getter 相符：`getText` 要求 `CharSequence`，`getBoolean` 要求 `Boolean`，数值 getter 接受
+`Number`；不匹配时警告并放行原值。整数和颜色不经过 Float 转换；pixel offset 截断，pixel size 按尺寸舍入，
+保留非零尺寸的最小像素。数组在登记与返回时复制，Drawable、可变 CharSequence 等对象内部共享由调用者负责。
+
+### 规则、缓存与绑定生命周期
+
+- getter Hook 按类型按需安装，进程级复用；从未登记规则时不安装这些 Hook。102 用稳定 key 参与换代，101 使用匿名 Hook，
+  模块无需持有或手动摘除这些 handle。
+- 一次 getter 使用同一规则快照。定位缓存按 `Resources` 弱引用与 `AssetManager` 来源分区，每种定位表最多 4096 项。
+  注入（含部分失败）和回退使来源失效，旧查询不能回填新表。
+- 定位与最终值分开：不缓存 Theme、density、locale 等决定的最终值，转发按本次参数求值；这不改变上文预求值结果的固定性。
+  外部直接修改同一 AssetManager 内容无法自动感知，应显式 `inject(resources)` 使库内定位失效。
+- `clearReplacements()` 清除规则和类型告警，**不卸载 getter Hook、不解绑 loader**；来源未变时定位缓存仍有效。
+- `fakeResId(name)` 只是兼容用 hash 标识，可能冲突，**不创建真实 Android 资源**，也不保证宿主能解析。
+
+R+ 的 provider 随自有 loader 绑定保留；只有旧绑定全部迁移成功，才释放确认自有的旧 provider。
+旧 saved state 没有所有权信息时不主动关闭。换代失败遵循下节的恢复边界，不以清规则代替释放资源绑定。
+
+<a id="hot-reload"></a>
+
+## 热重载与失败恢复
+
+### 启用默认自动模式（仅 API 102）
+
+默认模式由工具收集 Hook、逐条替换并收尾旧 handle；模块不用再登记或持有一份 handle 列表。
+所有要迁移的 helper Hook 都应在 `onTargetReady` 的**同步窗口**内安装。
+
+要求 API 102 并启用 APK 更新自动触发时，在 `META-INF/xposed/module.prop` 声明：
 
 ```properties
 minApiVersion=102
@@ -527,197 +640,64 @@ targetApiVersion=102
 autoHotReload=true
 ```
 
-启用 `autoHotReload` 的模块应只保留一个 Java entry。framework 不会因为热重载重新分发
-`onModuleLoaded`、`onPackageLoaded`、`onPackageReady` 或 `onSystemServerStarting`；新代码只会收到
-`onHotReloaded`。因此必须把当前目标进程的 classloader 等信息保存并恢复，并在该回调中重新注册规则。
-
-### 热重载是可选特性
-
-hook ID（`HookBuilder.setId` / `HookHandle.getId`）、`HookHandle.replaceHook`、
-`XposedInterfaceWrapper.detach` 和这一整套热重载回调都是 API 102 才新增的，API 101 没有。
-`hook-xposed-102` 按 102 编译，但把这些当作**可选特性**：运行时根据 framework 通过
-`XposedInterface.getApiVersion()` 报告的 API 版本按需启用，因此同一份产物也能跑在只实现 API 101
-的 framework 上。能力判断不反射 Xposed API，framework 启用 `PROP_RT_API_PROTECTION` 时也不会误判。
-
-特性通过 `XposedFeature` 查询，每一项都带最低版本：
+启用 `autoHotReload` 的模块应只保留一个 Java entry。在前文 libxposed 初始化片段之外，再桥接两个回调：
 
 ```kotlin
-XposedFeature.HOOK_ID.isSupported       // HookBuilder.setId / HookHandle.getId
-XposedFeature.REPLACE_HOOK.isSupported  // HookHandle.replaceHook
-XposedFeature.HOT_RELOAD.isSupported    // onHotReloading / onHotReloaded
-XposedFeature.DETACH_ENTRY.isSupported  // XposedInterfaceWrapper.detach
+override fun onHotReloading(param: HotReloadingParam): Boolean =
+    EzXposed.handleHotReloading(param)
 
-XposedFeature.HOOK_ID.minApiVersion     // 102
-EzXposed.frameworkApiVersion            // framework 侧 API 版本，未初始化时为 0
-```
-
-`isSupported` 只表示 framework 是否提供能力，不会主动调用对应功能；应在 `initOnModuleLoaded` 之后查询。
-初始化前所有特性都返回 `false`，该结果不会缓存。热重载仍由 `hotReloadEnabled` 手动开关，其它特性只在
-调用对应 API 时使用。
-
-依赖这些特性、且**无法降级**的公开 API 都标注了 `@RequiresXposedApi(102)`：版本不足时调用会抛出
-`IllegalStateException`，报错信息里带上要求的版本、特性名和当前 framework 版本。能优雅降级的
-API 不标注。完整对照：
-
-| | API 101 framework | API 102 framework |
-| --- | --- | --- |
-| hook / 反射 / 资源等全部其它能力 | 可用 | 可用 |
-| 自动分配 hook ID、调用 `setId` | 不执行 | 执行 |
-| `HookHandle.id`、`groupById()` | 恒为 `null` | 返回底层 ID |
-| `HookFactory.id(...)` / `reloadKey(...)` | 安装时抛异常 | 可用 |
-| `replaceWith` / `replaceIntercept` / `replaceAll` / `Hooks.replaceHook` | 抛异常 | 可用 |
-| `HotReloadSession` / `HookReloadBatch` | 构造即抛异常 | 可用 |
-| `handleHotReloaded` 系列 | 抛异常 | 可用 |
-| `handleHotReloading` | 记一条警告并返回 `false` | 正常保存 snapshot |
-| `detachCurrentEntry()` | 抛异常 | 可用 |
-
-### 主动关掉热重载
-
-即使 framework 支持，模块也可以用一个开关关掉整套机制——不再分配内部 hook ID、不再调用 `setId`、
-`onTargetReady` 的初始化不再进入默认聚合事务，`handleHotReloading` 直接返回 `false` 让 framework 放弃
-热重载（模块自己的显式声明，不打日志）。开关必须在 `initOnModuleLoaded` 之前设置，因为默认聚合事务
-在那里创建：
-
-```kotlin
-class MainHook : XposedModule() {
-    override fun onModuleLoaded(param: ModuleLoadedParam) {
-        EzXposed.hotReloadEnabled = false
-        EzXposed.initOnModuleLoaded(this, param)
-        EzXposed.onTargetReady { installHooks() }
-    }
-}
-
-EzXposed.hotReloadActive  // hotReloadEnabled && XposedFeature.HOT_RELOAD.isSupported
-```
-
-关掉后显式 `id(...)` / `reloadKey(...)` 仍然透传给 framework，`HookReloadBatch` 也照常工作；
-但 `HotReloadSession.prepare` 内部走 `handleHotReloading`，同样会返回 `false`——要用 session 就不要关
-这个开关。
-
-要让模块真的能被 101 framework 加载，`module.prop` 需要放开下限，并且不要声明 `autoHotReload`：
-
-```properties
-minApiVersion=101
-targetApiVersion=102
-```
-
-模块自身仍然按 102 编译。`onHotReloading` / `onHotReloaded` 这两个覆写方法的参数类型在 101 上不存在，
-但 framework 永远不会调用它们，方法体也就不会被执行到，因此保留覆写是安全的。
-
-### 默认自动模式
-
-新模块不需要逐条写 `reloadKey` 或包一层批次。把全部**同步** hook 初始化放进
-`EzXposed.onTargetReady { ... }`，并使用下列生命周期骨架：
-
-```kotlin
-class MainHook : XposedModule() {
-    override fun onModuleLoaded(param: ModuleLoadedParam) {
-        EzXposed.initOnModuleLoaded(this, param)
-        EzXposed.onTargetReady { installHooks() }
-    }
-
-    override fun onPackageLoaded(param: PackageLoadedParam) {
-        if (param.isFirstPackage && param.packageName == TargetApp) {
-            EzXposed.initOnPackageLoaded(param)
-        }
-    }
-
-    override fun onPackageReady(param: PackageReadyParam) {
-        if (param.isFirstPackage && param.packageName == TargetApp) {
-            EzXposed.initOnPackageReady(param)
-        }
-    }
-
-    override fun onHotReloading(param: HotReloadingParam): Boolean =
-        EzXposed.handleHotReloading(param)
-
-    override fun onHotReloaded(param: HotReloadedParam) {
-        // API 102 不会重放 onModuleLoaded；此重载会初始化新 generation、注册回调并恢复 snapshot。
-        EzXposed.handleHotReloadedWithTargetReady(this, param, { installHooks() })
-    }
+override fun onHotReloaded(param: HotReloadedParam) {
+    EzXposed.handleHotReloadedWithTargetReady(this, param, { installHooks() })
 }
 ```
 
-如果 Hook 必须在 `AppComponentFactory` 创建前生效，可手动把
-`initOnPackageLoaded(param)` 换成 `initOnPackageLoadedAsTargetReady(param)`。
-这会在 `onPackageLoaded` 立即执行 `onTargetReady`；后续
-`initOnPackageReady(param)` 会被安全忽略，初次加载和热重载都继续使用
-`defaultClassLoader`，不会重复安装同一批 Hook。默认行为仍保持在
-`onPackageReady` 安装。
+framework 不会重放 `onModuleLoaded`、package 或 system_server 生命周期；新代码只收到 `onHotReloaded`。
+`handleHotReloadedWithTargetReady` 初始化新 generation、注册回调、恢复目标 snapshot 并重装 Hook，
+返回 `AutomaticHotReloadResult`。已经自行初始化并注册回调的流程可调用 `handleHotReloaded`，
+或使用返回统计结果的 `restoreHotReloadedAutomatically`。
 
-默认事务会先完整收集 `onTargetReady` 内的逻辑 hook，再按
-`executable + priority + exceptionMode` 提交稳定物理 ID。回调抛异常时不会发布这些默认物理 hook，旧 generation
-保持有效。提交时先安装新增 identity，再让 framework 逐条原子替换相同 ID 的旧组；全部成功后才撤销
-新代码不再声明的旧 hook。这允许开关导致的目标增删，也允许全部开关关闭。需要统计结果时，使用
-`EzXposed.restoreHotReloadedAutomatically(this, param)`，它返回 `AutomaticHotReloadResult`。
+`onHotReloading` 必须原样返回工具结果，`false` 意味着取消整个请求。目标未成功 ready、已有失败状态或当前 batch
+不可恢复时会拒绝。首次从无 Hook ID 的旧版本迁移，需完整重启一次目标进程，不能强行把旧 handle 当成可迁移项。
 
-libxposed 没有跨多个 hook 的整批事务。规则收集期间的异常可以保证零发布；新增 hook 安装失败时会尝试撤销
-本次已经新增的项。若撤销本身失败，或底层在第 N 条旧 hook 替换时失败，进程可能包含两代实现，工具会抛出
-明确错误并要求重启目标进程。这里的“原子”始终只表示单个 handle 或相同 executable + ID 的单条替换。
+`hotReloadEnabled` 默认 `true`。如需禁用，在 `initOnModuleLoaded` **之前**设置 `false`；之后不分配自动 ID、
+不进入默认 batch，`handleHotReloading` 静默返回 `false`。`hotReloadActive` 等于该开关与 framework 能力同时满足。
+禁用不阻止显式 `id` / `reloadKey` 或手动 `HookReloadBatch`；但 `HotReloadSession.prepare` 也走这个开关，会返回 `false`。
+101 不提供热重载，普通 Hook 不受影响；按 102 编译保留的热重载覆写不会被 101 framework 调用，不能主动执行其中的 102 API。
 
-首次从无 hook ID 的旧版本迁移时，默认模式会拒绝热重载并要求完整重启一次目标进程；这样不会在无法核对
-旧 handle 的情况下伪报成功。
+### 安装、功能开关与多进程
 
-### 多 hook 与功能开关
+默认 batch 按 `executable + priority + exceptionMode` 聚合无显式 ID 的 helper Hook。同步回调全部成功后才发布；
+同组逻辑 Hook 的增删重排不改变物理 ID。显式 ID 也在 batch 收集结束后发布，但不与无 ID Hook 聚合。
 
-模块更新时重新读取持久设置，并用一个开关包住同一功能的全部**同步** hook 初始化即可。开关从开到关时，
-新 generation 不再声明这些 hook，默认流程会在其它新 hook 安装成功后统一撤销对应旧 handle；所有开关都关闭
-也属于正常结果。
+提交时先安装新增 identity，再逐条替换相同 executable + ID，最后撤销新代码不再声明的旧项。
+因此目标、priority / exceptionMode 组与显式 ID 都可以增删；只要 `onTargetReady` 确实执行，即使本代一个 Hook
+也未声明，也能清理全部旧项。这是**单条原子替换**，不是跨多个 Hook 的整批事务。
 
 ```kotlin
 private fun installHooks() {
     val switches = readHookSwitches()
-
     if (switches.loginReporter) {
-        // 一个开关管理两个目标；不需要为默认模式手写 reloadKey。
-        loginMethod.createBeforeHook { /* ... */ }
-        reportMethod.createBeforeHook { /* ... */ }
+        loginMethod.createBeforeHook {
+            // 处理登录。
+        }
+        reportMethod.createBeforeHook {
+            // 处理上报。
+        }
     }
-
     if (switches.premium) {
         premiumMethod.createReplaceHook { true }
     }
 }
 ```
 
-同一 executable 上的多个无 key helper hook 会聚合到同一个物理 hook；分别开关、增删或重排逻辑 callback
-不会互相覆盖。若显式使用 `reloadKey`，同一 executable 内每条逻辑 hook 必须使用不同 key。
+更新 APK 时重新读取持久开关，把同一功能的全部同步 Hook 放进同一个分支即可。要在不更新模块时即时切换，
+固定安装 Hook，让 callback 读取 remote preferences 或 listener 更新的线程安全状态；不能复用安装时的固定 snapshot。
+before / after 关闭时直接返回，replace 类功能用 `intercept` 和 `chain.proceed()` 放行。
 
-如果开关要在模块不更新时立即生效，推荐固定安装 hook，只让 callback 读取可更新状态。`before` / `after`
-关闭时直接返回；replace 类功能用 `intercept` 在关闭时放行原调用：
-
-```kotlin
-method.createInterceptHook { chain ->
-    if (isFeatureEnabled()) patchedResult() else chain.proceed()
-}
-```
-
-`isFeatureEnabled()` 应读取当前 remote preferences 或由 listener 更新的线程安全状态，不能复用安装 hook 时取得的
-固定 snapshot。
-
-不要把旧 generation 的 `HookHandle`、模块 data class 或 lambda 放进 saved state。开关应来自 remote preferences、
-文件、系统服务等跨 generation 来源，新 generation 自己重新读取。若为了即时开关注册了 listener、receiver 或线程，
-还必须按后文的 `HotReloadSession.scope` 用法在旧 generation 停止它们。
-
-### 多作用域与多进程
-
-scope list 可以包含多个 app；同一 app 的主进程和 remote process 也会各自创建 module entry。每个目标进程都有
-独立 snapshot、hook batch 和热重载结果，不存在一次回调同时切换所有作用域。初始化函数按恢复后的
-`isSystemServer`、`packageName`、`processName` 分派规则：
+scope list 可含多个 app；主进程和 remote process 各自有 entry、snapshot 和结果，不会一次切换所有进程。
+可以按恢复后的 `isSystemServer`、`packageName` 和 `processName` 分派：
 
 ```kotlin
-private val TargetApps = setOf("com.example.alpha", "com.example.beta")
-
-override fun onPackageLoaded(param: PackageLoadedParam) {
-    if (!param.isFirstPackage || param.packageName !in TargetApps) return
-    EzXposed.initOnPackageLoaded(param)
-}
-
-override fun onPackageReady(param: PackageReadyParam) {
-    if (!param.isFirstPackage || param.packageName !in TargetApps) return
-    EzXposed.initOnPackageReady(param)
-}
-
 override fun onSystemServerStarting(param: SystemServerStartingParam) {
     EzXposed.initOnSystemServerStarting(param)
 }
@@ -733,188 +713,152 @@ private fun installHooks() {
 }
 ```
 
-默认自动模式以“一个进程中的首个目标 package”为恢复边界，因此 app 场景建议只处理 `isFirstPackage`。
-如果同一进程之后通过 shared UID 或 `createPackageContext(..., CONTEXT_INCLUDE_CODE)` 加载第二个 package，并且也要
-对它安装 hook，这属于多个 target-ready 时点，不能塞进已经提交的默认 batch；应使用显式 `reloadKey` 和自定义
-旧 handle 管理。需要热重载的目标 entry 不要调用 `detachCurrentEntry()`。
+多 app 时把前文 package 回调的目标条件改为集合匹配，仍建议过滤 `isFirstPackage`。
+默认恢复边界是一个进程的首个目标 package。shared UID 或 `createPackageContext(..., CONTEXT_INCLUDE_CODE)`
+后来加载的第二个 package 属于另一个 ready 时点，不能塞入已提交的 batch，应使用显式 key 和自定义收尾。
+异步、延迟、Hook 回调内才安装的规则，以及首次 ready 成功后的即时回调，也不属于默认可靠边界。
+事务外 helper 虽有兜底 ID，仍应改成同步安装或明确自定义迁移。
 
-### 自定义 identity 与收尾
+### 自定义 identity、batch 与旧 handle
 
-少量需要在同一 executable 内跨大规模重排保持精确 identity 的 hook，可显式声明 `reloadKey`：
+需要稳定的逐条 identity 时用 `reloadKey`。Java 有对应入口：
 
-```kotlin
-method.createHook {
-    reloadKey("license-check")
-    before { /* ... */ }
-}
+```java
+Hooks.createHook(method, "license-check", methodHook);
+Hooks.findAndHookMethodWithKey(target, "foo", "foo-hook", String.class, methodHook);
+Hooks.findAndHookConstructorWithKey(target, "constructor-hook", String.class, methodHook);
 ```
 
-`HotReloadSession` 仍适用于要求每条 hook 都显式 `reloadKey` 的严格流程；默认模式内部已经使用
-`HookReloadBatch` 聚合同类 hook。只有需要自定义 namespace、收尾时机或手动事务边界时，才需要直接使用
-`HookReloadBatch`。两种方式都会在新 hook 成功后才处理遗留旧 handle。
+只有需要自定义 namespace 或事务边界时才直接使用 `HookReloadBatch`：新 generation 在旧 handle 有效时
+`captureOldHooks`，再 `install` 一次完整同步初始化，成功后 `finishHotReload`。默认流程已经完成这些工作，
+不要与它或管理同一批 Hook 的 `HotReloadSession` 重叠。
 
-完全自定义旧 handle 迁移时，传入 `onOldHooks`；工具不会再默认全量 unhook：
+完全自定义旧 handle 处置时，传 `onOldHooks`；工具不再默认替你全量 unhook：
 
 ```kotlin
 EzXposed.handleHotReloaded(
     this,
     param,
     onOldHooks = java.util.function.Consumer { oldHandles ->
-        // 自行 replaceHook / unhook / 保留。
+        // 自行替换、unhook 或保留；承担对应恢复边界。
     },
 )
 ```
 
-`HookFactory.id(null)` 会明确关闭自动 ID；此类 hook 不能进入默认自动 batch，必须走上述自定义流程。Java 可使用
-`Hooks.createHook(method, "license-check", callback)`、`Hooks.findAndHookMethodWithKey(...)` 或
-`Hooks.findAndHookConstructorWithKey(...)` 声明稳定 `reloadKey`。
+`id(null)` 关闭自动 ID，不能进入默认 batch；使用它必须在事务外定义旧 handle 收尾方式。
+辅助函数保留：
 
-### 外部回调与 `HotReloadSession.scope`
+- `oldHandles.groupById()` → `Map<String?, List<HookHandle>>`。
+- `oldHandles.replaceAll(hooker)` → 按原顺序返回新 handle；中途失败不回滚已替换项。
+- `oldHandles.unhookAll()` → 尝试全部清理，最后统一报告失败。
 
-需要注销 listener、receiver、binder callback 或线程时，使用一个 `HotReloadSession` 同时管理全部 hook 和外部
-清理。每个 generation 都重新创建 session；session 会接管 `oldHookHandles` 的全部内容，所以不能与 raw
-libxposed hook、另一个 session 或其它旧 handle 管理方式混用。session 中每条 helper hook 都必须有唯一
-`reloadKey`。
+### 外部回调与 HotReloadSession.scope
+
+listener、receiver、binder callback 和线程不是 HookHandle，模块必须停止或注销它们。
+需要统一管理时选用 `HotReloadSession`，**替代**默认自动模式：一个 entry 使用一个 session，每条 helper Hook
+都有显式 `reloadKey`，同一 executable 内不重复。它接管全部旧 handle，不与 raw libxposed Hook、其他 session
+或其他旧 handle 管理方式混用。
+
+每个 generation 在 `initOnModuleLoaded` 解析完 102 能力后再创建 session，不要在 entry 字段初始化时提前构造：
 
 ```kotlin
-class MainHook : XposedModule() {
-    private val reloadSession = HotReloadSession()
+private lateinit var reloadSession: HotReloadSession
 
-    override fun onModuleLoaded(param: ModuleLoadedParam) {
-        EzXposed.initOnModuleLoaded(this, param)
-        registerTargetReady()
-    }
-
-    private fun registerTargetReady() {
-        reloadSession.onTargetReady {
-            watchedMethod.createHook {
-                reloadKey("watched-method")
-                before { /* ... */ }
+private fun registerTargetReady() {
+    reloadSession = HotReloadSession()
+    reloadSession.onTargetReady {
+        watchedMethod.createHook {
+            reloadKey("watched-method")
+            before {
+                // 处理本次调用。
             }
-
-            val registration = registerHostListener()
-            reloadSession.scope.onReloading {
-                registration.unregister()
-                stopModuleThreads()
-            }
-
-            // 这里只能保存 system / app classloader 对象或 String、primitive 等中立值。
-            currentHostToken()?.let { reloadSession.scope.putState("host-token", it) }
         }
-    }
-
-    override fun onHotReloading(param: HotReloadingParam): Boolean =
-        reloadSession.prepare(param)
-
-    override fun onHotReloaded(param: HotReloadedParam) {
-        // framework 不会重放 onModuleLoaded。
-        EzXposed.initOnModuleLoaded(this, param)
-        registerTargetReady()
-        reloadSession.restore(this, param) { extra ->
-            val token = reloadSession.scope.state("host-token")
-            // 在 target-ready callback 前恢复其它中立状态。
+        val registration = registerHostListener()
+        reloadSession.scope.onReloading {
+            registration.unregister()
+            stopModuleThreads()
         }
+        currentHostToken()?.let { reloadSession.scope.putState("host-token", it) }
+    }
+}
+
+override fun onModuleLoaded(param: ModuleLoadedParam) {
+    EzXposed.initOnModuleLoaded(this, param)
+    registerTargetReady()
+}
+
+override fun onHotReloading(param: HotReloadingParam): Boolean =
+    reloadSession.prepare(param)
+
+override fun onHotReloaded(param: HotReloadedParam) {
+    EzXposed.initOnModuleLoaded(this, param)
+    registerTargetReady()
+    reloadSession.restore(this, param) { extra ->
+        val token = reloadSession.scope.state("host-token")
+        // 在 target-ready callback 前恢复自己的状态。
     }
 }
 ```
 
-`prepare` 只有在 snapshot 可恢复时才执行清理，并按登记的相反顺序调用 cleanup。cleanup 完成后旧 generation 的
-外部注册已经停止；如果新 generation 随后恢复失败，不能继续假设旧运行状态完整，应重启目标进程。saved state
-不得包含模块类、模块 lambda、模块 `ClassLoader` 或间接持有它们的容器。
+package / system_server 回调仍使用前文初始化入口。`prepare` 仅在 snapshot 可恢复时执行 cleanup，
+按登记逆序尝试清理；成功后旧 generation 的外部注册已经停止，新代失败不能假设旧运行状态仍完整。
+已开始的外部调用仍须自行结束。
 
-## 错误契约
+**跨代数据不是任意对象的 deep freeze：**
 
-- descriptor 格式错误抛 `IllegalArgumentException`。
-- descriptor 合法但目标成员不存在，严格入口抛 `MemberNotFoundException`，`OrNull` 入口返回 `null`。
-- `MemberNotFoundException` 的 `Search` 只描述当前类或当前类 + 父类，不包含接口继承图。
+- `handleHotReloading` 的业务 `extra` 与 scope 状态交接时，对 Map、Collection、对象数组和 primitive array 生成独立快照。
+- 保留共享子对象别名及数组 runtime component type；最多 **32 层、4096 节点/槽位**，分配容器前检查预算。
+  循环容器、不能保持数组类型、复制后会合并不同键或元素的情况明确拒绝。
+- `IdentityHashMap` 保留身份键语义，其他集合转换为标准有序容器。
+- 其他允许的 system / system_server / 目标 app 对象保留引用，不遍历、不隔离或撤销其内部状态。
+  不得保存模块 data class、lambda、模块加载器，或通过容器带入模块对象；模块数组类型和依赖模块的子加载器也会拒绝。
+  framework 仍执行最终校验。
+- scope 开始准备后拒收新状态和 cleanup；准备失败恢复接收，成功后退休。清空旧 scope 不会清空已经交出的快照。
+- Resources、loader、provider 的 framework 对象另走资源状态通道，不经过业务快照复制。
 
-## safeMode 阶段语义
+持久开关应来自 remote preferences、文件或系统服务，新 generation 自行读取，不要通过 saved state 搬运旧模块对象或 HookHandle。
 
-`EzXposed.safeMode = true` 时，hook callback 阶段性失败会按以下规则回退，避免目标 app 因模块异常崩溃：
+### 资源迁移与失败后的处理
 
-**before / replace 阶段：**
+资源换代分三部分，不应因已注入资源而跳过 getter Hook 或否决整个请求：
 
-callback 失败时回退原调用，恢复 framework 传入的初始 `thisObject` / `args` / `result` / `throwable`，让原方法执行一次并返回真实结果。
+1. getter Hook 由新一代按正常规则声明和替换，避免钉住旧模块加载器。
+2. 注入过的宿主 Resources 与旧 loader / 自有 provider 经资源状态通道交接；在 `onTargetReady` 前先挂新 loader，再摘旧 loader。
+3. 替换规则由新代重新登记，模块转发规则按名称解析当前 APK 的 ID。R 以下旧 `addAssetPath` 绑定不能撤回，需重启才能清除旧资源影响。
 
-```kotlin
-method.createHook {
-    before { param ->
-        param.result = fetchCache()  // 若 fetchCache() 抛异常，before callback 整体失败
-    }
-}
-// safeMode: before 失败 → 恢复初始状态 → 执行原方法 → 返回原方法结果
-```
+provider 仅在旧绑定全部迁移成功后释放。失败时遵循资源 journal 的回退或重启判断，不能关闭所有权不明的旧对象。
+已 inflate 的 View、宿主静态缓存、SystemUI 缓存和非自有绑定不会自动刷新。
 
-**after 阶段：**
+| 失败位置 | 保证与处理 |
+| --- | --- |
+| 默认 batch 仍在收集规则，未发布物理 Hook | 回调失败不发布该批 Hook；不撤销用户自己修改的状态或已停止的外部服务 |
+| 新增 Hook 安装失败 | 尝试撤销本次已拿到 handle 的新增项；不能仅凭撤销成功断言安装无副作用 |
+| 底层 `HookBuilder.intercept` 抛错 | **即使是首次物理安装，也可能已安装但未返回 handle**；结果不明，要求重启目标进程。101 普通安装同样适用 |
+| 已开始旧 Hook 替换、自定义旧 handle 处置、直接 session 安装等不可逆操作 | 不把资源盲目退回旧版；失败保留当前资源并要求重启，可能已混合两代 Hook |
+| 旧 Hook 清理失败 | 继续尝试其余清理，统一报告失败，阻止当前 entry 后续热重载；资源已提交，不再回滚 |
 
-callback 失败时保留下游已执行的原方法结果或异常，**不会重复执行原方法**。
+资源迁移、`onExtra`、自定义 `onOldHooks` 与首次 ready 回调共享异常处理边界。资源迁移失败不继续发布 Hook；
+只有尚未发生不可逆或结果不明的操作时才尝试资源回退，撤销按逆序执行。若加回旧 loader 失败，不再摘对应新 loader，
+避免移除最后一份可用资源，并要求重启。
 
-```kotlin
-method.createHook {
-    after { param ->
-        logResult(param.result)  // 若 logResult 抛异常，after callback 失败
-    }
-}
-// safeMode: after 失败 → 保留原方法已返回的 result/throwable → 直接传播给调用方
-```
+这不是跨 generation 的全局失败锁。framework 如何继续处理失败 entry、真实 loader 是否按预期切换，仍需实机确认。
+用户原生 API、异步任务与其他外部副作用不在库的回滚保证内；宿主没有可逆更新 API 时应重启目标进程。
 
-**intercept 阶段：**
+<a id="validation"></a>
 
-未调用 `proceed()` 时失败行为同 replace；已调用 `proceed()` 时保留下游结果，不重复执行。
+## 验证与兼容边界
 
-```kotlin
-method.createHook {
-    intercept { chain ->
-        val start = System.nanoTime()
-        val result = chain.proceed()  // 下游已执行
-        logTiming(System.nanoTime() - start)  // 若 logTiming 抛异常
-        result
-    }
-}
-// safeMode: intercept 已 proceed 后失败 → 保留 proceed 返回的结果 → 传播给调用方
-```
+纯 JVM 测试可验证查询计划、缓存界限、重载选择、回调状态、跨代快照、异常顺序与恢复控制流。
+Android stub / fake **不能证明真实 Hook 生效、ResourcesLoader 切换或 Theme 效果**；这些行为尚未实机验证，
+不能把逻辑测试通过写成 framework 兼容结论。
 
-**原方法自身异常：**
+实机验收至少区分：
 
-原方法抛的异常直接传播给调用方，不视为 callback 失败，safeMode 不拦截。
+- 经典 82 与 libxposed 101 普通 Hook；101 不得触碰 102-only API。
+- 102 的连续换代、目标增删、全部功能关闭，以及首次安装结果不明、部分替换和清理失败。
+- Android 26 的 TypedArray 与旧注入路径；Q 的提前 target-ready；R+ 的 loader / provider 迁移和失败恢复。
+- Theme / 命名空间冲突、locale / 复数、数组、mipmap、已 inflate View 和宿主缓存。
+- 外部 listener / 线程的注销与结束，旧加载器是否仍被用户对象或宿主缓存引用。
 
-```kotlin
-method.createHook {
-    before { param ->
-        // 修改参数，让原方法内部抛 IllegalArgumentException
-    }
-}
-// 原方法抛的 IllegalArgumentException 会原样抛给调用方，safeMode 不干预
-```
-
-### 外部回调与跨代宿主状态
-
-hook 之外的 listener、receiver、binder callback、线程或资源 observer 不是 `HookHandle`，必须由模块自己
-取消注册。需要统一保存状态和清理回调时可使用 `HotReloadSession.scope`；它只接受 system、system_server
-或目标 app classloader 创建的对象。模块自身的 data class、lambda、匿名对象，或包含这些对象的容器不能跨代
-保存，framework 仍会做最终校验。
-
-### 不适合承诺“无缝”的情况
-
-默认模式能逐条原子替换的是**已经存在、在 `onTargetReady` 同步回调内声明的代码 hook**，不是任意运行时副作用：
-
-- 首次调用、异步任务或回调内部才创建的延迟 hook，无法在 `onHotReloaded` 时组成可靠的同步序列。应改为
-  在 `onTargetReady` 同步安装，或使用显式 `reloadKey` 加自定义清理边界。
-- 目标已经 ready 后才新增的 `onTargetReady` 回调会立即执行，但不属于已提交的默认聚合事务；这类规则应
-  使用显式 `reloadKey` 或自定义旧 handle 收尾。
-- `Resources`、`AssetManager`、`ResourcesLoader`、已 inflate 的 View、静态缓存和 SystemUI 资源缓存
-  可能仍指向旧 APK 或已计算结果。热重载不会自动重跑资源覆盖、重新 inflate UI 或清空宿主缓存；这类
-  改动需要模块自行撤销并重新应用，若宿主没有可逆 API，就应回退到重启目标进程。
-- 已启动的线程和向 framework/系统服务注册的外部回调必须在热重载前停止或注销，否则旧 module classloader
-  仍可能被引用。
-
-### 兼容入口
-
-`EzXposed.handleHotReloading` / `handleHotReloaded` 仍是默认低成本入口；
-`handleHotReloadedWithTargetReady` 可在 API 102 不重放生命周期时一并注册新 generation 的同步规则。
-`EzXposed.safeMode` 只负责回退 hook callback 的阶段性失败：before / replace / intercept 失败会回退原调用；after 失败只保留下游原结果，不会重复执行原方法。
-与旧版本不同，默认流程不再先 unhook 全部旧 handle。手动处理旧 handle 时，辅助函数仍可使用：
-
-- `oldHandles.groupById()` → `Map<String?, List<HookHandle>>`
-- `oldHandles.replaceAll(hooker)` → `List<HookHandle>`，按原顺序返回新 handle
-- `oldHandles.unhookAll()`：尝试全部 unhook，最后统一报告所有失败
+源码验证入口是 `./gradlew build`，覆盖编译、lint、Core 单测与 `checkApi102Gateway` 等检查；
+它不能替代上述实机验收。

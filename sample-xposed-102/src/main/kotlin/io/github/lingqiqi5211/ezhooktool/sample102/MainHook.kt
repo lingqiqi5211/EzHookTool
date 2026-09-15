@@ -16,6 +16,7 @@ import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleResourceHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleSecondaryHook
 import io.github.lingqiqi5211.ezhooktool.sample102.hooks.ExampleVipHook
 import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
+import io.github.lingqiqi5211.ezhooktool.xposed.TargetReadyState
 
 private const val PrimaryTarget = "com.example.target"
 private const val SecondaryTarget = "com.example.secondary"
@@ -38,10 +39,13 @@ class MainHook : XposedModule() {
     override fun onPackageReady(param: PackageReadyParam) {
         if (!param.isFirstPackage || param.packageName !in TargetApps) return
         EzXposed.initOnPackageReady(param)
+        if (EzXposed.targetReadyState == TargetReadyState.FAILED) {
+            // 不自动重试：初始化可能已经产生不可撤销的副作用。
+            android.util.Log.e("EzHookToolSample", "Target initialization failed", EzXposed.targetReadyFailure)
+        }
     }
 
-    override fun onHotReloading(param: HotReloadingParam): Boolean =
-        EzXposed.handleHotReloading(param)
+    override fun onHotReloading(param: HotReloadingParam): Boolean = EzXposed.handleHotReloading(param)
 
     override fun onHotReloaded(param: HotReloadedParam) {
         EzXposed.handleHotReloadedWithTargetReady(
@@ -60,16 +64,21 @@ class MainHook : XposedModule() {
     private fun installHooksForCurrentScope() {
         val switches = readHookSwitches()
         when (EzXposed.packageName) {
-            PrimaryTarget -> initHooks(
-                ExampleVipHook.takeIf { switches.vip },
-                ExampleCryptoHook.takeIf { switches.crypto },
-                ExampleReporterHook.takeIf { switches.loginReporter },
-                ExampleReplaceHook.takeIf { switches.remoteConfig },
-                ExampleResourceHook.takeIf { switches.resources },
-            )
-            SecondaryTarget -> initHooks(
-                ExampleSecondaryHook.takeIf { switches.secondaryFeature },
-            )
+            PrimaryTarget -> {
+                initHooks(
+                    ExampleVipHook.takeIf { switches.vip },
+                    ExampleCryptoHook.takeIf { switches.crypto },
+                    ExampleReporterHook.takeIf { switches.loginReporter },
+                    ExampleReplaceHook.takeIf { switches.remoteConfig },
+                    ExampleResourceHook.takeIf { switches.resources },
+                )
+            }
+
+            SecondaryTarget -> {
+                initHooks(
+                    ExampleSecondaryHook.takeIf { switches.secondaryFeature },
+                )
+            }
         }
     }
 

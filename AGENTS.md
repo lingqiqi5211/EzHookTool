@@ -66,8 +66,12 @@ EzHookTool 是 Kotlin 反射工具库，同时提供 Android / Xposed / libxpose
 ### 资源替换（`EzResources`，82 与 102 共用）
 
 - hook 是进程级、按需装的：注册过某类替换才 hook 对应 getter；一条没注册时零开销。
-- `resIdCache` 按 `Resources` 弱引用分区、每区 4096 封顶、查找不分配；注入失败只记一次，不在 getter
+- 资源定位缓存按 `Resources` 弱引用分区、每种表 4096 封顶、命中查找不分配；注入失败只记一次，不在 getter
   热路径上重试。改这个类先想清楚它每秒被调几千次。
+- 一次 getter 使用同一规则快照；来源定位与最终值分开，注入/回退使旧定位失效，旧查询不能回填新表。
+  Theme 与配置决定的最终值逐次求值；数组登记和返回隔离，任意对象内部状态不承诺隔离。
+- provider 随自有 loader 的绑定生命周期保留；全部旧绑定迁移成功后才释放已确认自有的旧 provider，
+  部分失败沿用 journal 的回退/重启结果，不关闭所有权不明的旧格式对象。
 - 热重载三件事分开：getter hook 走正常迁移；注入过的 `Resources` 与旧 `ResourcesLoader`（都是框架对象）经 saved state
   第 9 位交给新一代，`EzResources.restoreFromHotReload` 在 `onTargetReady` 之前先挂新再摘旧；替换规则按名字存。
   `onHotReloading` 返回 `false` 会取消整个请求，资源状态永远不能拖累其它 hook，也不要为它跳过 hook（会钉住上一代 classloader）。
@@ -76,8 +80,8 @@ EzHookTool 是 Kotlin 反射工具库，同时提供 Android / Xposed / libxpose
 
 - `core` 不得引入 Android、Xposed、libxposed 依赖；API 不假设调用者在 hook 环境中。
 - `EzReflect` 默认 `ClassLoader` 语义必须稳定，未初始化时有可预测回退。
-- 查找缓存的外层是 `WeakKeyConcurrentMap`（Class / ClassLoader 键弱引用，否则热重载后旧 generation 被钉住），
-  命中路径无锁、无原子操作，不要加回去。
+- 查询使用同一个配置快照；嵌套查询沿用，旧查询不能向新缓存写入。缓存按作用域持有强引用、总容量有界，
+  退休后清空并停止写入；解析器与用户条件在缓存锁外执行。不以弱键或无锁代替生命周期和一致性保证。
 - descriptor 解析、重载匹配、可访问性处理要考虑 primitive/boxed、nullable、static/instance、
   inherited/declared、vararg/array/generic erased。
 - DSL 与 Java facade 都是正式支持面；错误信息要描述查找条件和目标类型。
@@ -101,7 +105,7 @@ EzHookTool 是 Kotlin 反射工具库，同时提供 Android / Xposed / libxpose
 
 - 任何 Kotlin 改动：`./gradlew build`。它包含编译、lint、`core` 单测和 `checkApi102Gateway`。CI
   （`.github/workflows/build.yml`）跑的也是这一条。
-- `hook-xposed-82` / `hook-xposed-102` 不写测试。hook 行为只能在真机上验证，改动结果以对应模块编译加实机为准。
+- `hook-xposed-82` / `hook-xposed-102` 的返回值、回调队列、状态转换、saved state 和异常顺序应写纯逻辑 JVM 测试，复用现有 JUnit。Android stub / fake 只验证控制流，不证明 framework 行为；真实 hook 生效与 ResourcesLoader 切换仍需真机验证，不把 Hook 专用逻辑搬进 `core`。
 - 涉及 descriptor、重载匹配、finder 条件组合：补充或更新 `core` 测试。
 - 涉及初始化流程、资源注入、safe mode：同时检查 82 与 102。
 

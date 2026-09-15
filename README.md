@@ -1,205 +1,79 @@
 # EzHookTool
 
-一个让 Android / Xposed / libxposed 场景下的反射与 hook 编写更直接的 Kotlin 工具库。  
-当前拆分为 `core`、`hook-xposed-82`、`hook-xposed-102` 三个主模块，其中 `core` 可以单独用于纯反射场景。
+Kotlin 反射与 Hook 工具库，提供成员查找、调用、DSL 和 Java 入口。`core` 可独立用于 JVM；Android Hook 按运行时选择经典 Xposed 或 libxposed 适配层。
 
-当前 Maven 最新构建版本为: ![Maven Central Version](https://img.shields.io/maven-central/v/io.github.lingqiqi5211.ezhooktool/core)
+![Maven Central](https://img.shields.io/maven-central/v/io.github.lingqiqi5211.ezhooktool/core)
 
-### 快速开始
+[详细指南](doc/overview.md) · [API 文档](https://lingqiqi5211.github.io/EzHookTool/api/latest/) · [版本变化](CHANGELOG.md) · [示例工程](#示例与构建)
 
-`build.gradle`
+本文对应当前源码。使用已发布版本时，请同时查看 CHANGELOG；`Unreleased` 中的变化尚未发布。
 
-```groovy
-dependencies {
-    def ezHookToolVersion = '<version>'
+## 选择模块
 
-    implementation "io.github.lingqiqi5211.ezhooktool:core:$ezHookToolVersion"
-    implementation "io.github.lingqiqi5211.ezhooktool:hook-xposed-102:$ezHookToolVersion"
-    // 或
-    // implementation "io.github.lingqiqi5211.ezhooktool:hook-xposed-82:$ezHookToolVersion"
+| 使用场景 | 依赖 | 边界 |
+| --- | --- | --- |
+| 纯 JVM / Android 反射 | `core` | 不依赖 Android、Xposed 或 libxposed |
+| 经典 Xposed | `hook-xposed-82` | Xposed API 82 |
+| libxposed | `hook-xposed-102` | 按 API 102 编译，运行基线为 API 101；热重载等能力需要 API 102 |
 
-    // 如果你的模块直接使用 Xposed / libxposed 的类型，
-    // 还需要额外声明对应运行时 API。
-    compileOnly "io.github.libxposed:api:102.0.0"
-    // 或
-    // compileOnly "de.robv.android.xposed:api:82"
-}
-```
+两个 Hook 模块二选一，不能同时引入。它们提供相同包名的常用入口，共享与 framework 无关的实现；不代表所有后端能力完全相同。
 
-`build.gradle.kts`
+## 添加依赖
+
+在模块的 `build.gradle.kts` 中选择所需依赖，将 `<version>` 替换为发布版本：
 
 ```kotlin
+repositories {
+    mavenCentral()
+}
+
 dependencies {
     val ezHookToolVersion = "<version>"
-
     implementation("io.github.lingqiqi5211.ezhooktool:core:$ezHookToolVersion")
+
+    // 使用 libxposed 时添加；纯反射项目不需要。
     implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-102:$ezHookToolVersion")
-    // 或
-    // implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-82:$ezHookToolVersion")
-    // 注意：hook-xposed-102 和 hook-xposed-82 二选一，不要同时引入。
-
-    // 如果你的模块直接使用 Xposed / libxposed 的类型，
-    // 还需要额外声明对应运行时 API。
     compileOnly("io.github.libxposed:api:102.0.0")
-    // 或
-    // compileOnly("de.robv.android.xposed:api:82")
 }
 ```
 
-`xposed-api-82`
+经典 Xposed 项目改用以下两项，并按 Xposed API 的要求配置依赖仓库：
 
 ```kotlin
-private const val TargetApp = "com.example.target"
-
-class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
-    override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
-        EzXposed.initZygote(startupParam)
-    }
-
-    override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
-        if (lpparam.packageName != TargetApp) return
-
-        EzXposed.init(lpparam)
-        initHooks()
-    }
-
-    private fun initHooks() {
-        // register your hooks here
-    }
-}
+implementation("io.github.lingqiqi5211.ezhooktool:hook-xposed-82:$ezHookToolVersion")
+compileOnly("de.robv.android.xposed:api:82")
 ```
 
-`xposed-api-102`
+## 先从反射开始
 
 ```kotlin
-import io.github.libxposed.api.XposedModule
-import io.github.libxposed.api.XposedModuleInterface.HotReloadedParam
-import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
-import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
-import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
-import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+import io.github.lingqiqi5211.ezhooktool.core.findMethod
 
-private const val TargetApp = "com.example.target"
-
-class MainHook : XposedModule() {
-    override fun onModuleLoaded(param: ModuleLoadedParam) {
-        EzXposed.initOnModuleLoaded(this, param)
-        EzXposed.onTargetReady { initHooks() }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.Q)
-    override fun onPackageLoaded(param: PackageLoadedParam) {
-        if (!param.isFirstPackage || param.packageName != TargetApp) return
-
-        EzXposed.initOnPackageLoaded(param)
-    }
-
-    override fun onPackageReady(param: PackageReadyParam) {
-        if (!param.isFirstPackage || param.packageName != TargetApp) return
-
-        EzXposed.initOnPackageReady(param)
-    }
-
-    override fun onHotReloading(param: HotReloadingParam): Boolean =
-        EzXposed.handleHotReloading(param)
-
-    override fun onHotReloaded(param: HotReloadedParam) {
-        EzXposed.handleHotReloadedWithTargetReady(this, param, { initHooks() })
-    }
-
-    private fun initHooks() {
-        // register your hooks here
-    }
-}
-```
-
-需要在 `AppComponentFactory` 创建前安装全部 Hook 时，把 `onPackageLoaded` 中的
-`initOnPackageLoaded(param)` 改为 `initOnPackageLoadedAsTargetReady(param)`。
-后续 `initOnPackageReady(param)` 会被安全忽略，保证初次加载和热重载始终使用
-`defaultClassLoader`，也不会重复执行 `onTargetReady`。标准模块继续使用默认的
-`onPackageReady` 时机。
-
-`reflection-only`
-
-```kotlin
-// 可选
-// 在使用本库之前，调用此函数设置默认的 ClassLoader。
-// 否则它会默认使用 ClassLoader.getSystemClassLoader()。
-EzReflect.init(yourClassLoader)
-```
-
-### 资源替换
-
-`EzResources` 借 Android 的 `ResourcesLoader` 把模块 apk 挂进宿主 `Resources`，再 hook
-`Resources` / `TypedArray` 的 getter 按「包名 + 类型 + 名称」拦截取值。不依赖 framework 提供资源接口，只要能 hook 方法就能用；
-思路来自 HyperCeiler 的 `ResourcesTool`。hook-xposed-82 与 hook-xposed-102 都提供。
-
-```kotlin
-EzResources.setResReplacement("com.miui.home", "drawable", "ic_launcher", R.drawable.my_icon)
-EzResources.setObjectReplacement("com.miui.home", "color", "bg_color", Color.RED)
-EzResources.setDensityReplacement("com.miui.home", "dimen", "bar_height", 8f)
-```
-
-按需装 hook（没注册替换就零开销），包名支持 `"*"` 通配。102 热重载时 getter hook 正常原子替换，模块 apk 的 loader
-由新一代先挂新再摘旧、没有空窗，规则按名字存所以换 apk 也不串。详见 `doc/overview.md`。
-
-### API 102 新能力
-
-详细说明见 `doc/overview.md`。
-
-`HookFactory` 的默认热重载路径会把同一 executable、优先级和异常模式的 DSL / Java helper hook 自动聚合为
-一个带稳定内部 ID 的物理 hook。所有同步规则构建完成后才提交；相同 ID 的旧组由 framework 逐条原子替换，
-通常无需手写 ID。新增目标会先安装，已经关闭或删除的旧目标会在最后撤销，因此支持开关引起的 hook 增删，
-也支持新版本关闭全部 hook。
-需要独立的跨版本 identity 时，再使用语义更明确的 `reloadKey`：
-
-```kotlin
-val handle = method.createHook {
-    reloadKey("license-check")
-    before { /* ... */ }
+class Example {
+    private fun greeting(name: String): String = "Hello, $name"
 }
 
-val newHandle = handle.replaceWith { /* HookParam */ true }
-```
-
-`EzXposed.detachCurrentEntry()` 停止 framework 向当前 entry 分发后续生命周期回调，hook 不受影响：
-
-```kotlin
-override fun onPackageReady(param: PackageReadyParam) {
-    if (param.packageName != TargetApp) {
-        EzXposed.detachCurrentEntry()
-        return
-    }
-    EzXposed.initOnPackageReady(param)
+val method = findMethod(Example::class.java) {
+    name("greeting")
+    params(String::class.java)
 }
+val text = method.invoke(Example(), "EzHookTool")
 ```
 
-`detachCurrentEntry()` 也会停止 `onHotReloading`。需要热重载的目标 entry 不要调用它；它只适合确认不会安装
-hook 的非目标 entry。
+按类名查找时，可用 `EzReflect.init(yourClassLoader)` 设置默认加载器；未初始化时使用 `SystemClassLoader`。直接传入 `Class` 不需要初始化。
 
-热重载相关能力（hook ID、`replaceHook`、`detach`、`onHotReloaded` 一套回调）都是 API 102 才有的，
-`hook-xposed-102` 根据 framework 报告的运行时 API 版本按需启用：跑在只实现 API 101 的 framework
-上时自动退化——不分配 hook ID、不调用 `setId`，hook 与其余能力照常工作。该判断不反射 Xposed API，
-因此兼容 `PROP_RT_API_PROTECTION`。无法降级的公开 API 都标注了
-`@RequiresXposedApi(102)`，版本不足时会带着当前 framework 版本明确报错。
+- 条件默认按 AND 组合；可选择当前类、继承链或唯一结果。
+- 查询匹配和缓存使用同一份计划；一次同步查询及其嵌套查询沿用同一配置。
+- 缓存合计最多 4096 条，超过 256 项的集合结果不缓存。它在作用域内持有强引用，配置切换或 `clearCache()` 会清空旧缓存并阻止旧查询回写。
+- BestMatch 无法唯一选择时报告歧义，不依赖枚举顺序；不隐式拓宽数值或打包 vararg。
 
-```kotlin
-XposedFeature.HOT_RELOAD.isSupported  // framework 是否提供该特性
-XposedFeature.HOOK_ID.minApiVersion   // 102
-EzXposed.frameworkApiVersion          // framework 侧 API 版本
+字段、构造器、descriptor、Java 门面和错误契约见 [Core 指南](doc/overview.md#core)。
 
-EzXposed.hotReloadEnabled = false     // 模块主动关掉；须在 initOnModuleLoaded 之前设置
-EzXposed.hotReloadActive              // 支持且启用
-```
+## 接入 Hook 生命周期
 
-`isSupported` 表示 framework 是否提供能力，不会强制调用该能力；应在 `initOnModuleLoaded` 之后查询，
-初始化前统一返回 `false` 且不会缓存。热重载仍由 `hotReloadEnabled` 手动开关，其它特性只在调用对应 API
-时使用。
+### libxposed：API 101 / 102
 
-热重载：API 102 模块在 `META-INF/xposed/module.prop` 中设置 `autoHotReload=true` 后，
-Xposed 应用更新模块也会请求热重载。新模块默认只需把所有同步初始化放进
-`EzXposed.onTargetReady { ... }`，工具会自动聚合并分配稳定物理 ID；规则构建成功后，相同 ID 的旧 hook
-会逐条无空窗替换，不会先全量 unhook 旧 handle：
+在模块入口记录 framework 和目标进程信息，把同步 Hook 初始化放入 `onTargetReady`：
 
 ```kotlin
 class MainHook : XposedModule() {
@@ -209,117 +83,90 @@ class MainHook : XposedModule() {
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
-        if (param.packageName != TargetApp) return
+        if (!param.isFirstPackage || param.packageName != "com.example.target") return
         EzXposed.initOnPackageReady(param)
     }
 
-    override fun onHotReloading(param: HotReloadingParam) =
-        EzXposed.handleHotReloading(param)
-
-    override fun onHotReloaded(param: HotReloadedParam) {
-        // API 102 不会重放 onModuleLoaded；这个重载会完成新 generation 的初始化与规则注册。
-        EzXposed.handleHotReloadedWithTargetReady(this, param, targetReady = { installHooks() })
+    private fun installHooks() {
+        // 在这里同步安装 Hook。
     }
 }
 ```
 
-新增、删除或重排逻辑 hook、目标 executable、优先级/异常模式组和显式 hook ID 都受支持。一个功能包含多个
-hook 时，可以用同一个开关包住整组同步初始化；新 generation 重新读取持久设置即可：
+上面省略了 import 和模块声明文件，完整配置见 [102 示例入口](sample-xposed-102/src/main/kotlin/io/github/lingqiqi5211/ezhooktool/sample102/MainHook.kt)。普通模块使用 `onPackageReady`；Android Q 以上需要更早时机时，再选择指南中的 `initOnPackageLoadedAsTargetReady`。
+
+### 经典 Xposed：API 82
+
+在 `IXposedHookLoadPackage.handleLoadPackage` 筛选目标包后调用 `EzXposed.init(lpparam)`，再安装 Hook。使用模块资源时，还需实现 `IXposedHookZygoteInit` 并调用 `EzXposed.initZygote(startupParam)`，提供可靠的模块路径。
+
+完整入口见 [82 示例](sample-xposed-82/src/main/kotlin/io/github/lingqiqi5211/ezhooktool/sample82/MainHook.kt)。
+
+### 查找后安装
+
+初始化完成后，两种适配层都可使用常用 DSL：
 
 ```kotlin
-private fun installHooks() {
-    val switches = readHookSwitches()
-    if (switches.loginReporter) {
-        loginMethod.createBeforeHook { /* ... */ }
-        reportMethod.createBeforeHook { /* ... */ }
-    }
-    if (switches.premium) {
-        premiumMethod.createReplaceHook { true }
-    }
-}
+import io.github.lingqiqi5211.ezhooktool.core.findMethod
+import io.github.lingqiqi5211.ezhooktool.xposed.dsl.createReplaceHook
+
+findMethod("com.example.Target") {
+    name("isEnabled")
+    noParams()
+}.createReplaceHook { true }
 ```
 
-若开关需要立即生效而不是等模块热重载，保持 hook 固定安装，在 callback 内读取可更新状态；关闭时直接放行：
+普通 DSL 的 `safeMode` 会丢弃失败回调中尚未提交的参数和输出修改；after 失败不会再次执行原方法。`HookParam.raw`、参数对象内部修改以及文件、网络等副作用不在保护范围内。
+
+[Hook 指南](doc/overview.md#hook) 包含 before / after / intercept、初始化失败查询、优先级和后端能力差异。
+
+## 资源替换：先选清楚副作用
+
+| 需求 | 用法 | 是否改变宿主资源池 |
+| --- | --- | --- |
+| 替换已有资源的值 | `setObjectReplacement` / `setDensityReplacement` | 否 |
+| 使用模块求值后的文本、颜色等 | 先从 `EzXposed.moduleRes` 读取，再登记值 | 否；值固定到重新登记，不会自动跟随宿主配置或 Theme |
+| 让宿主解析模块资源 | `inject` 或兼容入口 `setResReplacement` | 是；需要考虑命名空间、绑定和热重载限制 |
 
 ```kotlin
-method.createInterceptHook { chain ->
-    if (isFeatureEnabled()) patchedResult() else chain.proceed()
-}
+EzResources.setObjectReplacement("com.example.target", "color", "accent", Color.RED)
+EzResources.setDensityReplacement("com.example.target", "dimen", "toolbar_height", 48f)
 ```
 
-多个作用域按进程分别保存和恢复，互不共用一次热重载事务。在 `installHooks()` 内按
-`EzXposed.isSystemServer`、`packageName`、`processName` 分派即可；`onPackageReady` 建议只接收
-`isFirstPackage`，避免同一进程后续加载的其它 package 落到批次外。示例工程同时列出了两个 app scope。
+资源 getter 按需安装，包名支持 `"*"`。当前覆盖普通值、数组、mipmap、plurals 和常用 TypedArray 读取，但不是完整 Android 资源替换层：TypedArray 不转发模块资源，也不能还原原始 `?attr`。`clearReplacements()` 不解绑 loader，`fakeResId()` 不创建真实资源或保证无冲突。
 
-`reloadKey`、`HotReloadSession`、`HookReloadBatch` 与 `handleHotReloaded(..., onOldHooks = ...)` 保留给需要
-自定义 identity、跨代状态或旧 handle 迁移的场景。listener、receiver、线程、资源缓存或已 inflate 的 View
-不属于 hook handle，必须在旧 generation 明确停止，并在新 generation 重建。
+覆盖范围、Theme 和 provider 生命周期见 [资源指南](doc/overview.md#resources)。
 
-libxposed 只保证单个 handle 或相同 ID hook 的原子替换，没有“全部 hook 一次性回滚”的能力。若底层在替换
-多条旧 hook 的中途失败，或新增 hook 安装失败后无法完整撤销，工具会明确报错，此时应重启目标进程；不会把
-混合状态伪报为成功。
-完整约束、迁移条件和 Java 写法见 `doc/overview.md`。
+## 热重载：API 102 的可选能力
 
-### 模块说明
+将 `onHotReloading` 和 `onHotReloaded` 原样桥接给 `EzXposed`，并在 `onTargetReady` 的同步窗口内安装 Hook。工具负责收集、聚合和迁移；模块不必手动登记 handle。需要独立跨版本标识时再使用 `reloadKey`。
 
-- `core`：反射、查找、实例化、descriptor 解析、DSL 作用域
-- `hook-xposed-82`：经典 Xposed API 82 hook 辅助函数与兼容桥接
-- `hook-xposed-102`：libxposed hook 辅助函数与兼容桥接。**按 API 102 编译，运行基线是 API 101**：
-  101 有的直接用；`setId` / `replaceHook` / 热重载 / `detach` 这些 102 才有的能力由 `XposedFeature` 在运行时协商，
-  framework 不支持时对应入口明确报错、其余功能照常。库内部对 102 API 的调用只允许出现在
-  `XposedApiCompat.Api102` 一处，由 `:hook-xposed-102:checkApi102Gateway` 在构建期强制
+- API 101 可使用普通 Hook（包括替换返回值），但不能使用 102-only 的 hook ID、`HookHandle.replaceHook`、热重载和 entry detach；通过 `XposedFeature` 查询能力。
+- `onTargetReady` 初始化失败不自动重试。`targetReadyState` / `targetReadyFailure` 描述首次初始化，不代表整次热重载成功。
+- framework 不提供全部 Hook 的统一原子回滚。部分发布、底层结果不明或撤销失败时，工具明确要求重启目标进程，不把混合状态报告为成功。
+- 业务容器快照与 framework 对象分通道；监听器、线程和已创建的 View 仍需处理自己的生命周期。
 
-### API 文档
+完整桥接代码、功能开关、交接数据和失败处理见 [热重载指南](doc/overview.md#hot-reload)。
 
-已接入 Dokka。
+## 示例与构建
 
-推荐用法和参数说明见：
+- [sample-xposed-82](sample-xposed-82)：经典 Xposed 接入与 Hook / 资源用法。
+- [sample-xposed-102](sample-xposed-102)：libxposed 接入、多个目标作用域和热重载。
+- [详细指南](doc/overview.md)：Kotlin / Java 用法、行为契约与限制。
+- [API 文档](https://lingqiqi5211.github.io/EzHookTool/api/latest/)：Dokka 生成的签名与 KDoc。
 
-- `doc/overview.md`
-
-本地生成后的文档位于：
-
-- `doc/api/index.html`
-
-发布后的在线文档会跟随 GitHub Release 自动构建，并写入 `gh-pages` 分支的 `api/latest/` 与 `api/<tag>/`：
-
-- 最新版：`https://lingqiqi5211.github.io/EzHookTool/api/latest/`
-- 指定 release：`https://lingqiqi5211.github.io/EzHookTool/api/<tag>/`
-
-重新生成：
-
-```bash
-./gradlew generateApiDocs
-```
-
-建议阅读顺序：
-
-1. 先看 `core`
-2. 再根据运行时选择 `hook-xposed-82` 或 `hook-xposed-102`
-3. Java 写法入口看 `core.java` 包下的 `Classes`、`Methods`、`Fields`、`Constructors`，以及 hook 模块里的 `xposed.java.Hooks`
-
-### 构建
-
-构建需要 JDK 25。
+本地构建需要 JDK 25：
 
 ```bash
 ./gradlew build
 ./gradlew generateApiDocs
-./gradlew publishAllToMavenLocal
 ```
 
-### 示例工程
+`build` 包含编译、lint、JVM 测试和 API 102 网关检查。它不证明真实 Hook、ResourcesLoader 或 Theme 行为已通过真机验证；验证边界见 [指南](doc/overview.md#validation)。
 
-- `sample-xposed-82`
-- `sample-xposed-102`
+API 文档生成到 `doc/api/index.html`；发布文档位于 `api/latest/` 和 `api/<tag>/`。
 
-### 致谢
+## 致谢与 License
 
-感谢这些项目提供的思路与启发：
+感谢 [EzXHelper](https://github.com/KyuubiRan/EzXHelper)、[KavaRef](https://github.com/HighCapable/KavaRef) 的思路与启发。资源辅助亦参考了 HyperCeiler 的 ResourcesTool。
 
-- [EzXHelper](https://github.com/KyuubiRan/EzXHelper)
-- [KavaRef](https://github.com/HighCapable/KavaRef)
-
-### License
-
-MIT
+[MIT](LICENSE)
