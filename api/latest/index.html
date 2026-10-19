@@ -114,17 +114,17 @@
           <tbody>
             <tr>
               <td>纯 Kotlin/JVM 反射</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">core</code></td>
-              <td>Kotlin 顶层函数、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">reflect {}</code>；Java 的 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Classes</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Methods</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Fields</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Constructors</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">core</code></td>
+              <td>Kotlin 顶层函数、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">reflect {}</code>；Java 的 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Classes</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Methods</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Fields</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Constructors</code></td>
             </tr>
             <tr>
               <td>经典 Xposed API 82</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">core</code> + <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">hook-xposed-82</code></td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">EzXposed</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">xposed.dsl</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">xposed.java</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">core</code> + <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">hook-xposed-82</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">EzXposed</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">xposed.dsl</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">xposed.java</code></td>
             </tr>
             <tr>
               <td>libxposed API 101 / 102</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">core</code> + <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">hook-xposed-102</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">core</code> + <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">hook-xposed-102</code></td>
               <td>同名入口；按 102 编译，101 是运行基线，102 特性按需启用</td>
             </tr>
           </tbody>
@@ -136,7 +136,7 @@
 <span class="copy-tooltip">
           <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
 <span class="copy-icon"></span></span></div>
-      <p class="paragraph">示例省略重复 import 和应用自己的 <code class="lang-kotlin">installHooks()</code> 等实现。Core Kotlin API 位于 <code class="lang-kotlin">io.github.lingqiqi5211.ezhooktool.core</code>，查询类型位于其 <code class="lang-kotlin">query</code> 包；Hook DSL 位于 <code class="lang-kotlin">io.github.lingqiqi5211.ezhooktool.xposed.dsl</code>。完整工程可参考 ../sample-xposed-82 和 ../sample-xposed-102。 本页是详细指南；项目入口见 ../README.md。</p>
+      <p class="paragraph">示例省略重复 import 和应用自己的 <code class="lang-kotlin">installHooks()</code> 等实现。Core Kotlin API 位于 <code class="lang-kotlin">io.github.lingqiqi5211.ezhooktool.core</code>，查询类型位于其 <code class="lang-kotlin">query</code> 包；Hook DSL 位于 <code class="lang-kotlin">io.github.lingqiqi5211.ezhooktool.xposed.dsl</code>。完整工程可参考 ../sample-xposed-82 和 ../sample-xposed-102。 本页是详细指南；项目入口见 ../README.md，接入其它工程时的单一入口见 AI_GUIDE.md。</p>
       <p class="paragraph"><a id="core"></a></p>
       <h2 class="">Core：反射查询与调用</h2>
       <h3 class="">选择 ClassLoader 与加载类</h3>
@@ -204,47 +204,47 @@
           <tbody>
             <tr>
               <td>方法名称</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">name</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">nameContains</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">nameStartsWith</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">nameEndsWith</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">name</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">nameContains</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">nameStartsWith</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">nameEndsWith</code></td>
             </tr>
             <tr>
               <td>方法 / 构造器参数</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">paramCount(2)</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">paramCountIn(1..3)</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">noParams()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">hasParams()</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">paramCount(2)</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">paramCountIn(1..3)</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">noParams()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">hasParams()</code></td>
             </tr>
             <tr>
               <td>完整参数类型</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">params(String::class.java)</code>；数量、顺序、类型必须一致</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">params(String::class.java)</code>；数量、顺序、类型必须一致</td>
             </tr>
             <tr>
               <td>可赋值参数</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">paramsAssignableFrom(String::class.java)</code>；目标参数能接收给定类型</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">paramsAssignableFrom(String::class.java)</code>；目标参数能接收给定类型</td>
             </tr>
             <tr>
               <td>方法返回值</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">returnType</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">returnTypeExtendsFrom</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">voidReturnType()</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">returnType</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">returnTypeExtendsFrom</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">voidReturnType()</code></td>
             </tr>
             <tr>
               <td>字段名称与类型</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">name</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">nameContains</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">type</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">typeExtendsFrom</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">name</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">nameContains</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">type</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">typeExtendsFrom</code></td>
             </tr>
             <tr>
               <td>通用可见性</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isPublic()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isPrivate()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isProtected()</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isPublic()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isPrivate()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isProtected()</code></td>
             </tr>
             <tr>
               <td>方法 / 字段静态性</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isStatic()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">notStatic()</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isStatic()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">notStatic()</code></td>
             </tr>
             <tr>
               <td>方法修饰符</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isFinal()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isAbstract()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isNative()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isSynchronized()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isVarArgs()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isSynthetic()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isBridge()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isDefault()</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isFinal()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isAbstract()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isNative()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isSynchronized()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isVarArgs()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isSynthetic()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isBridge()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isDefault()</code></td>
             </tr>
             <tr>
               <td>字段修饰符</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isFinal()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isVolatile()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isTransient()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isEnumConstant()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isSynthetic()</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isFinal()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isVolatile()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isTransient()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isEnumConstant()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isSynthetic()</code></td>
             </tr>
             <tr>
               <td>构造器修饰符</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isVarArgs()</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isSynthetic()</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isVarArgs()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isSynthetic()</code></td>
             </tr>
           </tbody>
         </table>
@@ -323,23 +323,23 @@
           </thead>
           <tbody>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">loadClass</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">loadClassOrNull</code></td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">ClassLoader + 类名</code> 对应的成功结果</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">loadClass</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">loadClassOrNull</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">ClassLoader + 类名</code> 对应的成功结果</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">loadClassFirst</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">loadClassFirstOrNull</code></td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">ClassLoader + 候选名列表</code> 对应的首个成功结果</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">loadClassFirst</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">loadClassFirstOrNull</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">ClassLoader + 候选名列表</code> 对应的首个成功结果</td>
             </tr>
             <tr>
               <td>类条件查询</td>
-              <td>结构化条件或手动 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">cacheKey</code> 对应的结果</td>
+              <td>结构化条件或手动 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">cacheKey</code> 对应的结果</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">findMethod</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">findField</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">findConstructor</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findMethod</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findField</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findConstructor</code></td>
               <td>结构化条件对应的首项</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">findAllMethods</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">findAllFields</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">findAllConstructors</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findAllMethods</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findAllFields</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findAllConstructors</code></td>
               <td>可缓存条件对应的完整列表</td>
             </tr>
             <tr>
@@ -351,8 +351,10 @@
       </div>
       <p class="paragraph">找不到的类或成员不缓存。带条件的 <code class="lang-kotlin">findAll</code> 只扫描一次，不预热其他查询；批量结果返回独立列表， 修改列表不影响后续查询。无手动 key 的自定义条件不自动缓存。</p>
       <p class="paragraph">当前缓存是同步有界 LRU，类与成员查询<strong>合计最多 4096 条</strong>，超过 <strong>256 项</strong>的集合结果不缓存。 有效期间强引用键与结果，不靠弱引用自动释放加载器；成员枚举、解析器和用户条件在缓存锁外执行。</p>
+      <p class="paragraph">使用默认成员解析器，且首项查询的条件恰好是「名称 + 完整参数类型」（字段只有名称、构造器只有完整参数类型）时，内部按签名直接查找， 不再枚举成员；命中结果仍用同一份计划校验，找不到时保持原搜索范围与 <code class="lang-kotlin">MemberNotFoundException</code> 契约。 自定义 <code class="lang-kotlin">MemberResolver</code>、<code class="lang-kotlin">findSingle()</code>、批量查询和带 <code class="lang-kotlin">filter</code>、assignable、vague、泛型条件的查询继续完整扫描。</p>
+      <p class="paragraph">缓存计数用 <code class="lang-kotlin">EzReflect.cacheStats</code> 读取：<code class="lang-kotlin">generation</code>、<code class="lang-kotlin">entries</code>、<code class="lang-kotlin">capacity</code>、<code class="lang-kotlin">hits</code>、<code class="lang-kotlin">misses</code>、<code class="lang-kotlin">evictions</code>、 <code class="lang-kotlin">skippedOversizeResults</code>。快照只含数字，不持有 Class、ClassLoader 或结果；换代后计数从零开始。</p>
       <div class="sample-container">
-        <pre><code class="block lang-kotlin" theme="idea">EzReflect.clearCache()<br>EzReflect.cacheEnabled = false</code></pre>
+        <pre><code class="block lang-kotlin" theme="idea">val stats = EzReflect.cacheStats<br>EzReflect.clearCache()<br>EzReflect.cacheEnabled = false</code></pre>
 <span class="copy-tooltip">
           <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
 <span class="copy-icon"></span></span></div>
@@ -403,24 +405,24 @@
           </thead>
           <tbody>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">initOnModuleLoaded</code></td>
-              <td>解析 framework 特性，保存 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">base</code>、模块路径、进程名和 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">isSystemServer</code>，初始化模块资源；尚未设置目标加载器</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">initOnModuleLoaded</code></td>
+              <td>解析 framework 特性，保存 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">base</code>、模块路径、进程名和 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isSystemServer</code>，初始化模块资源；尚未设置目标加载器</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">initOnPackageLoaded</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">initOnPackageLoaded</code></td>
               <td>只记录 package 信息</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">initOnPackageReady</code></td>
-              <td>初始化目标 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">EzReflect.classLoader</code>，触发 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">onTargetReady</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">initOnPackageReady</code></td>
+              <td>初始化目标 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">EzReflect.classLoader</code>，触发 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">onTargetReady</code></td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">initOnSystemServerStarting</code></td>
-              <td>初始化 system_server 加载器并触发 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">onTargetReady</code>；不要假设存在 app Context</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">initOnSystemServerStarting</code></td>
+              <td>初始化 system_server 加载器并触发 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">onTargetReady</code>；不要假设存在 app Context</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">initOnPackageLoadedAsTargetReady</code></td>
-              <td>Android Q+ 的提前路径，在 AppComponentFactory 创建前以 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">defaultClassLoader</code> 触发就绪</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">initOnPackageLoadedAsTargetReady</code></td>
+              <td>Android Q+ 的提前路径，在 AppComponentFactory 创建前以 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">defaultClassLoader</code> 触发就绪</td>
             </tr>
           </tbody>
         </table>
@@ -428,13 +430,14 @@
       <p class="paragraph">需要提前安装时，用 <code class="lang-kotlin">initOnPackageLoadedAsTargetReady(param)</code> 替换普通 <code class="lang-kotlin">initOnPackageLoaded(param)</code>； 后续 <code class="lang-kotlin">initOnPackageReady</code> 会被忽略，初次加载和热重载均保持该加载器。<strong>这条提前路径要求 Android Q</strong>，低版本使用正常 ready 时机。</p>
       <p class="paragraph"><code class="lang-kotlin">targetReadyState</code> 是当前 generation 首次就绪状态：<code class="lang-kotlin">NOT_STARTED</code>、<code class="lang-kotlin">INITIALIZING</code>、<code class="lang-kotlin">SUCCEEDED</code>、<code class="lang-kotlin">FAILED</code>， 原因见 <code class="lang-kotlin">targetReadyFailure</code>。分发期间新注册的回调进入队尾，执行后释放；首次成功后的新回调立即执行、不保存， 也不属于已提交的默认 Hook batch。失败不自动重试，再注册不能重启初始化。未启用默认 batch 时，首次初始化记录 单个回调异常后继续其余回调，最终仍为 <code class="lang-kotlin">FAILED</code>；热重载恢复中的异常向调用方传播。 这些状态不代表后续即时回调或旧 Hook 清理的结果。</p>
       <h3 class="">Application 与模块资源的可用时机</h3>
-      <p class="paragraph">82 和 101 / 102 都可通过 <code class="lang-kotlin">runOnApplicationAttach</code> 等待 Application；若已经 attach，新注册回调在当前线程立即执行：</p>
+      <p class="paragraph">82 和 101 / 102 都可通过 attach 回调等待 Application；若已经 attach，新注册回调在注册线程立即执行一次：</p>
       <div class="sample-container">
-        <pre><code class="block lang-kotlin" theme="idea">EzXposed.runOnApplicationAttach { context -&gt;<br>    // context 是 Application context。<br>}</code></pre>
+        <pre><code class="block lang-kotlin" theme="idea">EzXposed.runOnApplicationAttach { context -&gt;<br>    // context 是 Application.attach(Context) 的入参，不能假定为 Application。<br>}<br><br>val subscription = EzXposed.subscribeApplicationAttach { context -&gt;<br>    // 需要时再 subscription.cancel()。<br>}<br><br>EzXposed.runOnApplicationAttachOnce { context -&gt;<br>    // 只跑一次：领取后立即从登记表移除，抛异常也算消费。<br>}</code></pre>
 <span class="copy-tooltip">
           <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
 <span class="copy-icon"></span></span></div>
-      <p class="paragraph">回调按登记顺序执行，异常记日志且不阻断其他回调。libxposed 必须先调用 <code class="lang-kotlin">initOnModuleLoaded</code>；82 的此入口不要求先调 <code class="lang-kotlin">initZygote</code>。过早读取 <code class="lang-kotlin">appContext</code> 会抛异常，不确定时用 <code class="lang-kotlin">appContextOrNull</code>。</p>
+      <p class="paragraph"><code class="lang-kotlin">runOnApplicationAttach</code> 没有 token，回调长期保留；需要能取消时用返回 <code class="lang-kotlin">ApplicationAttachSubscription</code> 的 <code class="lang-kotlin">subscribeApplicationAttach</code>。<code class="lang-kotlin">cancel()</code> 阻止尚未领取的调用；已领取的调用仍可能在取消后开始或完成。 重复 cancel 无害，取消后的 token 不再强持有回调对象。 <code class="lang-kotlin">runOnApplicationAttachOnce</code> 在领取执行前摘除并清引用，晚注册同样只跑一次。</p>
+      <p class="paragraph">回调按登记顺序执行（并发之间不承诺额外顺序），异常记日志且不阻断其他回调；用户 logger 自己抛异常也不会打断后续回调。 登记与 attach 分发共用同一把锁；Context 探针在锁外读取，期间若发生分发则重读，避免漏发或重复补发。 回调、logger 与 framework hook 安装都在锁外执行，回调里可以重入登记或取消。 libxposed 三个入口都必须先调用 <code class="lang-kotlin">initOnModuleLoaded</code>；82 的三个入口都不要求先调 <code class="lang-kotlin">initZygote</code>。 两个新入口找不到 <code class="lang-kotlin">Application.attach(Context)</code> 时抛 <code class="lang-kotlin">IllegalStateException</code>；安装或 Context 读取失败保留原异常， 注册失败不留回调。旧的无 token 入口找不到 attach 方法时仍只记日志。 登记与 token 只属于当前 module generation / classloader，不进入热重载 saved state。 过早读取 <code class="lang-kotlin">appContext</code> 会抛异常，不确定时用 <code class="lang-kotlin">appContextOrNull</code>。102 后端内部安装 attach hook 时只在 framework 支持 hook ID（API 102）时使用稳定 <code class="lang-kotlin">reloadKey</code>，API 101 上匿名安装，因此不影响运行基线。</p>
       <p class="paragraph"><code class="lang-kotlin">initAppContext(context)</code> 默认只在缓存为空时保留 <code class="lang-kotlin">applicationContext</code> 或传入的 Application，不可用时抛 <code class="lang-kotlin">IllegalStateException</code>；已有值不覆盖。<code class="lang-kotlin">force=true</code> 原样缓存指定 Context，调用者承担 Activity 泄漏等生命周期风险。 其可选资源注入始终针对原始入参，不因缓存已有值而跳过。</p>
       <p class="paragraph">libxposed 同一 generation 的模块资源成功初始化后不重复创建，创建失败可以重试 <code class="lang-kotlin">initOnModuleLoaded</code>； <code class="lang-kotlin">initModuleResources()</code> 是显式刷新，每次创建新模块资源。82 可用 <code class="lang-kotlin">initModuleResources(origRes)</code> 复用指定资源配置。 刷新 <code class="lang-kotlin">moduleRes</code> 不等于重新登记已求值的替换值，见#resources。</p>
       <h3 class="">Kotlin / Java 安装回调</h3>
@@ -481,11 +484,11 @@
               <td>恢复进入回调前的结果或异常，不重复执行原方法</td>
             </tr>
             <tr>
-              <td>intercept 尚未 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">proceed()</code></td>
+              <td>intercept 尚未 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">proceed()</code></td>
               <td>放行下游调用</td>
             </tr>
             <tr>
-              <td>intercept 已 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">proceed()</code></td>
+              <td>intercept 已 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">proceed()</code></td>
               <td>保留下游结果或异常，不重复执行</td>
             </tr>
             <tr>
@@ -516,48 +519,48 @@
           </thead>
           <tbody>
             <tr>
-              <td>普通 Hook、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Chain</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">intercept</code></td>
+              <td>普通 Hook、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Chain</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">intercept</code></td>
               <td>可用</td>
               <td>可用</td>
             </tr>
             <tr>
               <td>自动 Hook ID</td>
-              <td>不分配、不调用 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">setId</code></td>
+              <td>不分配、不调用 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">setId</code></td>
               <td>热重载启用时分配</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">groupById()</code> / Java <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">HookHandles.getId(handle)</code></td>
-              <td>ID 为 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">null</code></td>
-              <td>返回可见的底层 ID，聚合逻辑 handle 为 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">null</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">groupById()</code> / Java <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">HookHandles.getId(handle)</code></td>
+              <td>ID 为 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">null</code></td>
+              <td>返回可见的底层 ID，聚合逻辑 handle 为 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">null</code></td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">id(nonNull)</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">reloadKey</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">id(nonNull)</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">reloadKey</code></td>
               <td>安装时抛异常</td>
               <td>可用</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">id(null)</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">id(null)</code></td>
               <td>可匿名安装</td>
               <td>关闭自动 ID，不能放进默认 batch</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">replaceWith</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">replaceIntercept</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">replaceAll</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Hooks.replaceHook</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">replaceWith</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">replaceIntercept</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">replaceAll</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Hooks.replaceHook</code></td>
               <td>抛异常</td>
               <td>可用</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">HotReloadSession</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">HookReloadBatch</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">HotReloadSession</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">HookReloadBatch</code></td>
               <td>构造即抛异常</td>
               <td>初始化运行时后可用</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">handleHotReloaded</code> 系列 / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">detachCurrentEntry</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">handleHotReloaded</code> 系列 / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">detachCurrentEntry</code></td>
               <td>不可用</td>
               <td>可用</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">handleHotReloading</code></td>
-              <td>不支持时警告并返回 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">false</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">handleHotReloading</code></td>
+              <td>不支持时警告并返回 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">false</code></td>
               <td>按当前状态决定是否接受</td>
             </tr>
           </tbody>
@@ -593,17 +596,17 @@
           <tbody>
             <tr>
               <td>直接值</td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">setObjectReplacement</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">setDensityReplacement</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">setObjectReplacement</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">setDensityReplacement</code></td>
               <td>不注入模块 APK；尺寸替换按密度计算</td>
             </tr>
             <tr>
               <td>模块预求值</td>
-              <td>先读 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">EzXposed.moduleRes</code>，再 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">setObjectReplacement</code></td>
+              <td>先读 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">EzXposed.moduleRes</code>，再 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">setObjectReplacement</code></td>
               <td>模块内求值后登记固定结果，不绑定宿主资源池</td>
             </tr>
             <tr>
               <td>宿主绑定</td>
-              <td>显式 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">inject</code>；或兼容入口 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">setResReplacement</code> 在命中时注入</td>
+              <td>显式 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">inject</code>；或兼容入口 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">setResReplacement</code> 在命中时注入</td>
               <td>模块 APK 进入宿主资源池，引用、Theme、命名空间都受宿主环境约束</td>
             </tr>
           </tbody>
@@ -643,36 +646,36 @@
           </thead>
           <tbody>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">color</code></td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Resources</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">TypedArray</code> 的 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getColor</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getColorStateList</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">color</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">TypedArray</code> 的 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getColor</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getColorStateList</code></td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">drawable</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">mipmap</code></td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Resources.getDrawable</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getDrawableForDensity</code>，<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">TypedArray.getDrawable</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">drawable</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">mipmap</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources.getDrawable</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getDrawableForDensity</code>，<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">TypedArray.getDrawable</code></td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">string</code></td>
-              <td>两类的 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getText</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getString</code>；含 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Resources.getText(id, default)</code> 与格式化重载</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">string</code></td>
+              <td>两类的 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getText</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getString</code>；含 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources.getText(id, default)</code> 与格式化重载</td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">plurals</code></td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Resources.getQuantityText</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getQuantityString</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">plurals</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources.getQuantityText</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getQuantityString</code></td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">array</code></td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Resources.getStringArray</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getTextArray</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getIntArray</code>，<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">TypedArray.getTextArray</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">array</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources.getStringArray</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getTextArray</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getIntArray</code>，<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">TypedArray.getTextArray</code></td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">dimen</code></td>
-              <td>两类的 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getDimension</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getDimensionPixelOffset</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getDimensionPixelSize</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">dimen</code></td>
+              <td>两类的 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getDimension</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getDimensionPixelOffset</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getDimensionPixelSize</code></td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">integer</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">bool</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">fraction</code></td>
-              <td>两类存在的 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getInteger</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getInt</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getBoolean</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getFloat</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getFraction</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">integer</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">bool</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">fraction</code></td>
+              <td>两类存在的 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getInteger</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getInt</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getBoolean</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getFloat</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getFraction</code></td>
             </tr>
             <tr>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">layout</code>、<code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">anim</code></td>
-              <td><code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">Resources.getLayout</code> / <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">getAnimation</code>；相关引用仍须能由宿主资源池解析</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">layout</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">anim</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources.getLayout</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getAnimation</code>；相关引用仍须能由宿主资源池解析</td>
             </tr>
           </tbody>
         </table>
@@ -822,7 +825,7 @@
               <td>尝试撤销本次已拿到 handle 的新增项；不能仅凭撤销成功断言安装无副作用</td>
             </tr>
             <tr>
-              <td>底层 <code class="org.jetbrains.dokka.pages.commenttable@1c77f5a3 lang-kotlin">HookBuilder.intercept</code> 抛错</td>
+              <td>底层 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">HookBuilder.intercept</code> 抛错</td>
               <td><strong>即使是首次物理安装，也可能已安装但未返回 handle</strong>；结果不明，要求重启目标进程。101 普通安装同样适用</td>
             </tr>
             <tr>

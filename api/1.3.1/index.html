@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>All modules</title>
+    <link href="images/logo-icon.svg" rel="icon" type="image/svg">
+        <script>var pathToRoot = "";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="scripts/sourceset_dependencies.js" async="async"></script>
+<link href="styles/style.css" rel="Stylesheet">
+<link href="styles/main.css" rel="Stylesheet">
+<link href="styles/prism.css" rel="Stylesheet">
+<link href="styles/logo-styles.css" rel="Stylesheet">
+<link href="ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="scripts/navigation-loader.js" async="async"></script>
+<script type="text/javascript" src="scripts/platform-content-handler.js" async="async"></script>
+<script type="text/javascript" src="scripts/main.js" defer="defer"></script>
+<script type="text/javascript" src="scripts/prism.js" async="async"></script>
+<script type="text/javascript" src="ui-kit/ui-kit.min.js" defer="defer"></script>
+</head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+            <a class="library-name--link" href="index.html" tabindex="1">
+                    EzHookTool
+            </a>
+        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle"
+                type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+        </div>
+        <div class="navigation-controls">
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button"
+                    type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config='{"defaultSize": 280, "minSize": 200, "maxSize": 400}'>
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list"
+                    data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    EzHookTool
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" id="content" pageIds="EzHookTool::.ext/allModules///PointingToDeclaration//0">
+  <div class="breadcrumbs"></div>
+  <div class="cover ">
+    <div class="cover ">
+      <h1 class="">EzHookTool 使用指南</h1>
+      <p class="paragraph">按使用顺序阅读：</p>
+      <ul>
+        <li>
+          <p class="paragraph">#dependencies</p>
+        </li>
+        <li>
+          <p class="paragraph">#core</p>
+        </li>
+        <li>
+          <p class="paragraph">#hook</p>
+        </li>
+        <li>
+          <p class="paragraph">#resources</p>
+        </li>
+        <li>
+          <p class="paragraph">#hot-reload</p>
+        </li>
+        <li>
+          <p class="paragraph">#validation</p>
+        </li>
+      </ul>
+      <p class="paragraph"><a id="dependencies"></a></p>
+      <h2 class="">依赖与阅读导航</h2>
+      <div class="table--container">
+        <table>
+          <thead>
+            <tr>
+              <th>使用场景</th>
+              <th>依赖</th>
+              <th>入口</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>纯 Kotlin/JVM 反射</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">core</code></td>
+              <td>Kotlin 顶层函数、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">reflect {}</code>；Java 的 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Classes</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Methods</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Fields</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Constructors</code></td>
+            </tr>
+            <tr>
+              <td>经典 Xposed API 82</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">core</code> + <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">hook-xposed-82</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">EzXposed</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">xposed.dsl</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">xposed.java</code></td>
+            </tr>
+            <tr>
+              <td>libxposed API 101 / 102</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">core</code> + <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">hook-xposed-102</code></td>
+              <td>同名入口；按 102 编译，101 是运行基线，102 特性按需启用</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="paragraph">两个 Hook artifact <strong>二选一</strong>，不能同时引入。<code class="lang-kotlin">core</code> 不依赖 Android 或 Hook framework。</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">// build.gradle.kts<br>val ezHookToolVersion = &quot;&lt;version&gt;&quot;<br><br>dependencies {<br>    implementation(&quot;io.github.lingqiqi5211.ezhooktool:core:$ezHookToolVersion&quot;)<br>    // 纯反射到此即可；Hook 模块再选择下面一组。<br>    implementation(&quot;io.github.lingqiqi5211.ezhooktool:hook-xposed-102:$ezHookToolVersion&quot;)<br>    compileOnly(&quot;io.github.libxposed:api:102.0.0&quot;)<br><br>    // 经典 Xposed 改用：<br>    // implementation(&quot;io.github.lingqiqi5211.ezhooktool:hook-xposed-82:$ezHookToolVersion&quot;)<br>    // compileOnly(&quot;de.robv.android.xposed:api:82&quot;)<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">示例省略重复 import 和应用自己的 <code class="lang-kotlin">installHooks()</code> 等实现。Core Kotlin API 位于 <code class="lang-kotlin">io.github.lingqiqi5211.ezhooktool.core</code>，查询类型位于其 <code class="lang-kotlin">query</code> 包；Hook DSL 位于 <code class="lang-kotlin">io.github.lingqiqi5211.ezhooktool.xposed.dsl</code>。完整工程可参考 ../sample-xposed-82 和 ../sample-xposed-102。 本页是详细指南；项目入口见 ../README.md，接入其它工程时的单一入口见 AI_GUIDE.md。</p>
+      <p class="paragraph"><a id="core"></a></p>
+      <h2 class="">Core：反射查询与调用</h2>
+      <h3 class="">选择 ClassLoader 与加载类</h3>
+      <p class="paragraph">未初始化时默认使用 <code class="lang-kotlin">ClassLoader.getSystemClassLoader()</code>。纯反射调用可设置默认加载器，或通过局部作用域显式传入：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">EzReflect.init(yourClassLoader)<br>val target = loadClass(&quot;com.example.Target&quot;)<br>val fallback = loadClassFirst(&quot;com.example.Target&quot;, &quot;com.example.a&quot;)<br><br>reflect(yourClassLoader) {<br>    val method = &quot;com.example.Target&quot;.findMethod { name(&quot;run&quot;) }<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph"><code class="lang-kotlin">loadClassOrNull</code> / <code class="lang-kotlin">loadClassFirstOrNull</code> 提供可空形式；<code class="lang-kotlin">lazyClass</code> / <code class="lang-kotlin">lazyClassOrNull</code> 可延迟加载。 Hook 场景通常由下文的 <code class="lang-kotlin">EzXposed</code> 初始化目标加载器，不必重复设置。</p>
+      <p class="paragraph">项目不做 dex 扫描。<code class="lang-kotlin">findClassIf</code> 通过 <code class="lang-kotlin">EzReflect.classResolver</code> 获取可查询类名，再按条件筛选； 默认类名解析器返回空序列，需要调用者接入索引。成员查找只在给定类及所选父类范围内进行。</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val clazz = findClassIf {<br>    findSingle()<br>    cacheKey(&quot;login-activity&quot;)<br>    packageStartsWith(&quot;com.example&quot;)<br>    simpleNameContains(&quot;Login&quot;)<br>    hasMethod {<br>        name(&quot;login&quot;)<br>        paramCount(2)<br>    }<br>    hasField { name(&quot;token&quot;) }<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">对应入口还有 <code class="lang-kotlin">findClassIfOrNull</code> 和 <code class="lang-kotlin">findAllClassesIf</code>。Java 的类加载门面：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">import io.github.lingqiqi5211.ezhooktool.core.java.Classes;<br><br>Class&lt;?&gt; target = Classes.loadClass(&quot;com.example.Target&quot;);<br>Class&lt;?&gt; fallback = Classes.loadClassFirst(&quot;com.example.Target&quot;, &quot;com.example.a&quot;);</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">Java 门面目前没有 Kotlin <code class="lang-kotlin">findClassIf { ... }</code> 的类条件查询入口；可在 Kotlin 侧封装， 或组合 <code class="lang-kotlin">Classes.loadClass</code> 与反射检查。</p>
+      <h3 class="">查找方法、字段与构造器</h3>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val method = clazz.findMethod {<br>    name(&quot;foo&quot;)<br>    paramCount(2)<br>    returnType(String::class.java)<br>}<br>val methods = clazz.findAllMethods {<br>    name(&quot;foo&quot;)<br>    paramCount(2)<br>    findAndSuper()<br>}<br>val field = clazz.findField {<br>    name(&quot;mContext&quot;)<br>    type(Context::class.java)<br>    findOnlyClass()<br>}<br>val constructor = clazz.findConstructor {<br>    noParams()<br>    isPublic()<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">方法和字段默认智能查找：先查当前类，找不到再查父类。</p>
+      <ul>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">findOnlyClass()</code>：只查当前类。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">findAndSuper()</code>：查当前类和全部父类。</p>
+        </li>
+        <li>
+          <p class="paragraph">不写条件的 <code class="lang-kotlin">findAllMethods()</code> / <code class="lang-kotlin">findAllFields()</code> / <code class="lang-kotlin">findAllConstructors()</code> 返回当前范围内全部结果。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">currentClassOnly()</code> / <code class="lang-kotlin">includeSuper()</code> 是弃用旧名称；最后推荐使用版本为 <code class="lang-kotlin">1.0.4</code>。</p>
+        </li>
+      </ul>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val methods = clazz.findAllMethods()<br>val declaredFields = clazz.findAllFields { findOnlyClass() }</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">Java 使用 <code class="lang-kotlin">filterBy...</code> 链式追加条件，<code class="lang-kotlin">first()</code> 取首项，<code class="lang-kotlin">toList()</code> 取全部：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">import io.github.lingqiqi5211.ezhooktool.core.java.Methods;<br>import io.github.lingqiqi5211.ezhooktool.core.java.Fields;<br>import io.github.lingqiqi5211.ezhooktool.core.java.Constructors;<br><br>Method method = Methods.find(target)<br>        .filterByName(&quot;foo&quot;)<br>        .filterByParamCount(2)<br>        .filterByReturnType(String.class)<br>        .findAndSuper()<br>        .first();<br><br>Field field = Fields.find(target)<br>        .filterByName(&quot;mContext&quot;)<br>        .filterByType(Context.class)<br>        .findOnlyClass()<br>        .first();<br><br>Constructor&lt;?&gt; constructor = Constructors.find(target)<br>        .filterEmptyParam()<br>        .filterPublic()<br>        .first();</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <h3 class="">组合查询条件</h3>
+      <div class="table--container">
+        <table>
+          <thead>
+            <tr>
+              <th>目标</th>
+              <th>常用条件</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>方法名称</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">name</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">nameContains</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">nameStartsWith</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">nameEndsWith</code></td>
+            </tr>
+            <tr>
+              <td>方法 / 构造器参数</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">paramCount(2)</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">paramCountIn(1..3)</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">noParams()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">hasParams()</code></td>
+            </tr>
+            <tr>
+              <td>完整参数类型</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">params(String::class.java)</code>；数量、顺序、类型必须一致</td>
+            </tr>
+            <tr>
+              <td>可赋值参数</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">paramsAssignableFrom(String::class.java)</code>；目标参数能接收给定类型</td>
+            </tr>
+            <tr>
+              <td>方法返回值</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">returnType</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">returnTypeExtendsFrom</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">voidReturnType()</code></td>
+            </tr>
+            <tr>
+              <td>字段名称与类型</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">name</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">nameContains</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">type</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">typeExtendsFrom</code></td>
+            </tr>
+            <tr>
+              <td>通用可见性</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isPublic()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isPrivate()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isProtected()</code></td>
+            </tr>
+            <tr>
+              <td>方法 / 字段静态性</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isStatic()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">notStatic()</code></td>
+            </tr>
+            <tr>
+              <td>方法修饰符</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isFinal()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isAbstract()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isNative()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isSynchronized()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isVarArgs()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isSynthetic()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isBridge()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isDefault()</code></td>
+            </tr>
+            <tr>
+              <td>字段修饰符</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isFinal()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isVolatile()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isTransient()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isEnumConstant()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isSynthetic()</code></td>
+            </tr>
+            <tr>
+              <td>构造器修饰符</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isVarArgs()</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isSynthetic()</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="paragraph">例如宽松匹配一个公开、非静态方法：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val method = clazz.findMethod {<br>    nameContains(&quot;open&quot;)<br>    paramCountIn(1..3)<br>    paramsAssignableFrom(String::class.java)<br>    returnTypeExtendsFrom(CharSequence::class.java)<br>    isPublic()<br>    notStatic()<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">Java 对应使用 <code class="lang-kotlin">filterByAssignableParamTypes</code>、<code class="lang-kotlin">filterByReturnTypeExtendsFrom</code> 等：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">Method method = Methods.find(target)<br>        .filterByNameContains(&quot;open&quot;)<br>        .filterByAssignableParamTypes(String.class)<br>        .filterByReturnTypeExtendsFrom(CharSequence.class)<br>        .filterPublic()<br>        .first();</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">特殊匹配：</p>
+      <ul>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">parameterTypesVague(String::class.java, VagueType, Boolean::class.javaObjectType)</code>：方法和构造器参数数量固定，   <code class="lang-kotlin">VagueType</code> 位置跳过精确匹配，其余位置仍要求类型相等。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">genericParameterTypes(GenericTypeMatcher.typeVariableNamed(&quot;T&quot;))</code>：匹配方法或构造器擦除前的   <code class="lang-kotlin">genericParameterTypes</code>，可区分真正的 <code class="lang-kotlin">TypeVariable</code> 与已擦除参数。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">genericReturnType(GenericTypeMatcher.rawType(List::class.java))</code>：匹配方法擦除前的 <code class="lang-kotlin">genericReturnType</code>。   上述泛型条件禁用自动查询缓存。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">filter { ... }</code>：自定义条件。内部再调用查找器会产生警告，优先使用结构化条件；没有手动 <code class="lang-kotlin">cacheKey</code> 时不缓存。</p>
+        </li>
+      </ul>
+      <p class="paragraph">Java 入口使用同义的 <code class="lang-kotlin">filterBy...</code>、<code class="lang-kotlin">filterPublic()</code>、<code class="lang-kotlin">filterStatic()</code> 等命名。</p>
+      <h3 class="">调用、字段读写与 descriptor</h3>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val value = obj.callMethod(&quot;getValue&quot;)<br>obj.putField(&quot;enabled&quot;, true)<br><br>val method = getMethodByDesc(&quot;Lcom/example/Foo;-&gt;doTask(Ljava/lang/String;I)V&quot;)<br>val field = getFieldByDesc(&quot;Lcom/example/Foo;-&gt;name:Ljava/lang/String;&quot;)</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">Object value = Methods.callMethod(obj, &quot;getValue&quot;);<br>Fields.setBooleanField(obj, &quot;enabled&quot;, true);</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph"><code class="lang-kotlin">getMethodByDescOrNull</code> / <code class="lang-kotlin">getFieldByDescOrNull</code> 是可空形式。descriptor 格式错误抛 <code class="lang-kotlin">IllegalArgumentException</code>；格式合法但成员不存在，严格入口抛 <code class="lang-kotlin">MemberNotFoundException</code>，可空入口返回 <code class="lang-kotlin">null</code>。 查找错误中的 <code class="lang-kotlin">Search</code> 只描述当前类或当前类加父类，不代表接口继承图，也不承诺遍历该图。</p>
+      <p class="paragraph">BestMatch 的类型重载与实参重载使用同一选择规则：</p>
+      <ul>
+        <li>
+          <p class="paragraph">精确类型优先于 primitive/wrapper 对应，再比较引用类型具体程度；多参数逐位比较，不能用总分掩盖歧义。</p>
+        </li>
+        <li>
+          <p class="paragraph">无法唯一选择时抛 <code class="lang-kotlin">SingleResultExpectedException</code>，不按反射枚举顺序任选；覆写优先于同签名父类成员，非 bridge 优先。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">null</code> 只匹配引用类型；不相关的最具体候选仍报告歧义。</p>
+        </li>
+        <li>
+          <p class="paragraph">不隐式拓宽数值或打包 vararg；vararg 数组须作为单个实参传入。</p>
+        </li>
+        <li>
+          <p class="paragraph">自动实例 / 静态调用在候选选择前过滤调用模式；公开 <code class="lang-kotlin">findMethodBestMatch</code> 本身仍可查找两者。</p>
+        </li>
+        <li>
+          <p class="paragraph">默认成员解析器区分正常空结果与枚举失败；备用访问也不可用时保留原链接错误，不缓存成“没有成员”。</p>
+        </li>
+      </ul>
+      <h3 class="">查询计划、缓存与加载器生命周期</h3>
+      <p class="paragraph">查询块结束后生成独立 <code class="lang-kotlin">QueryPlan</code>。匹配与缓存 key 使用同一份条件、搜索范围和结果模式；重复条件按 AND 保留， <code class="lang-kotlin">findSingle()</code>、首项和批量结果不混用，嵌套成员条件也保留完整计划。参数类型数组在登记条件时复制， 原数组后续修改不改变计划；用户 lambda 内部状态不在快照范围内，手动 <code class="lang-kotlin">cacheKey(...)</code> 的一致性由调用者负责。</p>
+      <p class="paragraph">缓存保存最终结果，不保存扫描过程：</p>
+      <div class="table--container">
+        <table>
+          <thead>
+            <tr>
+              <th>查询</th>
+              <th>缓存内容</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">loadClass</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">loadClassOrNull</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">ClassLoader + 类名</code> 对应的成功结果</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">loadClassFirst</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">loadClassFirstOrNull</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">ClassLoader + 候选名列表</code> 对应的首个成功结果</td>
+            </tr>
+            <tr>
+              <td>类条件查询</td>
+              <td>结构化条件或手动 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">cacheKey</code> 对应的结果</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findMethod</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findField</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findConstructor</code></td>
+              <td>结构化条件对应的首项</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findAllMethods</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findAllFields</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">findAllConstructors</code></td>
+              <td>可缓存条件对应的完整列表</td>
+            </tr>
+            <tr>
+              <td>BestMatch</td>
+              <td>名称与参数类型对应的匹配结果</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="paragraph">找不到的类或成员不缓存。带条件的 <code class="lang-kotlin">findAll</code> 只扫描一次，不预热其他查询；批量结果返回独立列表， 修改列表不影响后续查询。无手动 key 的自定义条件不自动缓存。</p>
+      <p class="paragraph">当前缓存是同步有界 LRU，类与成员查询<strong>合计最多 4096 条</strong>，超过 <strong>256 项</strong>的集合结果不缓存。 有效期间强引用键与结果，不靠弱引用自动释放加载器；成员枚举、解析器和用户条件在缓存锁外执行。</p>
+      <p class="paragraph">使用默认成员解析器，且首项查询的条件恰好是「名称 + 完整参数类型」（字段只有名称、构造器只有完整参数类型）时，内部按签名直接查找， 不再枚举成员；命中结果仍用同一份计划校验，找不到时保持原搜索范围与 <code class="lang-kotlin">MemberNotFoundException</code> 契约。 自定义 <code class="lang-kotlin">MemberResolver</code>、<code class="lang-kotlin">findSingle()</code>、批量查询和带 <code class="lang-kotlin">filter</code>、assignable、vague、泛型条件的查询继续完整扫描。</p>
+      <p class="paragraph">缓存计数用 <code class="lang-kotlin">EzReflect.cacheStats</code> 读取：<code class="lang-kotlin">generation</code>、<code class="lang-kotlin">entries</code>、<code class="lang-kotlin">capacity</code>、<code class="lang-kotlin">hits</code>、<code class="lang-kotlin">misses</code>、<code class="lang-kotlin">evictions</code>、 <code class="lang-kotlin">skippedOversizeResults</code>。快照只含数字，不持有 Class、ClassLoader 或结果；换代后计数从零开始。</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val stats = EzReflect.cacheStats<br>EzReflect.clearCache()<br>EzReflect.cacheEnabled = false</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph"><code class="lang-kotlin">init()</code>、<code class="lang-kotlin">reset()</code>、<code class="lang-kotlin">clearCache()</code>、解析器替换和缓存开关变更会发布新配置/缓存状态，清空旧缓存并停止其写入。 一次同步查询从 DSL 构建到结果选择都使用同一状态，嵌套查询沿用；查询回调中改变配置只影响后续顶层查询。 默认加载器进入查询状态后才解析，显式传入的加载器不会被替换。</p>
+      <p class="paragraph">临时加载器用完应清缓存；若仍是默认加载器，还需 <code class="lang-kotlin">reset()</code> 或切换加载器。清缓存不会释放调用者持有的 反射结果、监听器和回调，不能据此认定整个加载器已可回收。</p>
+      <p class="paragraph"><a id="hook"></a></p>
+      <h2 class="">Hook：初始化与回调</h2>
+      <h3 class="">先区分 82 与 101 / 102</h3>
+      <ul>
+        <li>
+          <p class="paragraph"><strong>82</strong> 使用 <code class="lang-kotlin">de.robv.android.xposed</code> 的生命周期，不使用 <code class="lang-kotlin">XposedInterface</code>，也没有本页的 102 热重载流程。</p>
+        </li>
+        <li>
+          <p class="paragraph"><strong>101 / 102</strong> 使用 <code class="lang-kotlin">hook-xposed-102</code>：普通 before / after / replace、<code class="lang-kotlin">Chain</code> / <code class="lang-kotlin">intercept</code>、remote preferences / files   都属于 101 能力。只有 hook ID、原子替换、entry detach 和热重载回调需要 102。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">@RequiresXposedApi(102)</code> 标记不能按原语义降级的入口；调用前判断所需特性，不能把它们当作 101 普通 Hook 的前置条件。</p>
+        </li>
+      </ul>
+      <p class="paragraph">若模块需要被 101 framework 加载，<code class="lang-kotlin">META-INF/xposed/module.prop</code> 使用：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-properties" theme="idea">minApiVersion=101<br>targetApiVersion=102</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">不要为这种配置声明 <code class="lang-kotlin">autoHotReload</code>。API 102 的自动热重载配置见#hot-reload。</p>
+      <h3 class="">初始化目标环境</h3>
+      <p class="paragraph"><strong>经典 Xposed 82</strong>：模块入口实现 <code class="lang-kotlin">IXposedHookZygoteInit</code> 和 <code class="lang-kotlin">IXposedHookLoadPackage</code>，分别转发：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {<br>    EzXposed.initZygote(startupParam)<br>}<br><br>override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {<br>    if (lpparam.packageName != TargetApp) return<br>    EzXposed.init(lpparam)<br>    installHooks()<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph"><code class="lang-kotlin">initZygote</code> 是可靠的模块路径来源，并自动初始化 <code class="lang-kotlin">moduleRes</code>；<code class="lang-kotlin">init(lpparam)</code> 设置目标加载器、包名和进程名。 未调用 <code class="lang-kotlin">initZygote</code> 就执行 <code class="lang-kotlin">initModuleResources</code> / <code class="lang-kotlin">addModuleAssetPath</code> 会明确报错。</p>
+      <p class="paragraph"><strong>libxposed 101 / 102</strong>：在 <code class="lang-kotlin">XposedModule</code> 中按阶段转发，不把模块加载与目标就绪混为一谈：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">override fun onModuleLoaded(param: ModuleLoadedParam) {<br>    EzXposed.initOnModuleLoaded(this, param)<br>    EzXposed.onTargetReady { installHooks() }<br>}<br><br>override fun onPackageLoaded(param: PackageLoadedParam) {<br>    if (!param.isFirstPackage || param.packageName != TargetApp) return<br>    EzXposed.initOnPackageLoaded(param)<br>}<br><br>override fun onPackageReady(param: PackageReadyParam) {<br>    if (!param.isFirstPackage || param.packageName != TargetApp) return<br>    EzXposed.initOnPackageReady(param)<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <div class="table--container">
+        <table>
+          <thead>
+            <tr>
+              <th>初始化入口</th>
+              <th>可用状态与时机</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">initOnModuleLoaded</code></td>
+              <td>解析 framework 特性，保存 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">base</code>、模块路径、进程名和 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">isSystemServer</code>，初始化模块资源；尚未设置目标加载器</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">initOnPackageLoaded</code></td>
+              <td>只记录 package 信息</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">initOnPackageReady</code></td>
+              <td>初始化目标 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">EzReflect.classLoader</code>，触发 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">onTargetReady</code></td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">initOnSystemServerStarting</code></td>
+              <td>初始化 system_server 加载器并触发 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">onTargetReady</code>；不要假设存在 app Context</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">initOnPackageLoadedAsTargetReady</code></td>
+              <td>Android Q+ 的提前路径，在 AppComponentFactory 创建前以 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">defaultClassLoader</code> 触发就绪</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="paragraph">需要提前安装时，用 <code class="lang-kotlin">initOnPackageLoadedAsTargetReady(param)</code> 替换普通 <code class="lang-kotlin">initOnPackageLoaded(param)</code>； 后续 <code class="lang-kotlin">initOnPackageReady</code> 会被忽略，初次加载和热重载均保持该加载器。<strong>这条提前路径要求 Android Q</strong>，低版本使用正常 ready 时机。</p>
+      <p class="paragraph"><code class="lang-kotlin">targetReadyState</code> 是当前 generation 首次就绪状态：<code class="lang-kotlin">NOT_STARTED</code>、<code class="lang-kotlin">INITIALIZING</code>、<code class="lang-kotlin">SUCCEEDED</code>、<code class="lang-kotlin">FAILED</code>， 原因见 <code class="lang-kotlin">targetReadyFailure</code>。分发期间新注册的回调进入队尾，执行后释放；首次成功后的新回调立即执行、不保存， 也不属于已提交的默认 Hook batch。失败不自动重试，再注册不能重启初始化。未启用默认 batch 时，首次初始化记录 单个回调异常后继续其余回调，最终仍为 <code class="lang-kotlin">FAILED</code>；热重载恢复中的异常向调用方传播。 这些状态不代表后续即时回调或旧 Hook 清理的结果。</p>
+      <h3 class="">Application 与模块资源的可用时机</h3>
+      <p class="paragraph">82 和 101 / 102 都可通过 attach 回调等待 Application；若已经 attach，新注册回调在注册线程立即执行一次：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">EzXposed.runOnApplicationAttach { context -&gt;<br>    // context 是 Application.attach(Context) 的入参，不能假定为 Application。<br>}<br><br>val subscription = EzXposed.subscribeApplicationAttach { context -&gt;<br>    // 需要时再 subscription.cancel()。<br>}<br><br>EzXposed.runOnApplicationAttachOnce { context -&gt;<br>    // 只跑一次：领取后立即从登记表移除，抛异常也算消费。<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph"><code class="lang-kotlin">runOnApplicationAttach</code> 没有 token，回调长期保留；需要能取消时用返回 <code class="lang-kotlin">ApplicationAttachSubscription</code> 的 <code class="lang-kotlin">subscribeApplicationAttach</code>。<code class="lang-kotlin">cancel()</code> 阻止尚未领取的调用；已领取的调用仍可能在取消后开始或完成。 重复 cancel 无害，取消后的 token 不再强持有回调对象。 <code class="lang-kotlin">runOnApplicationAttachOnce</code> 在领取执行前摘除并清引用，晚注册同样只跑一次。</p>
+      <p class="paragraph">回调按登记顺序执行（并发之间不承诺额外顺序），异常记日志且不阻断其他回调；用户 logger 自己抛异常也不会打断后续回调。 登记与 attach 分发共用同一把锁；Context 探针在锁外读取，期间若发生分发则重读，避免漏发或重复补发。 回调、logger 与 framework hook 安装都在锁外执行，回调里可以重入登记或取消。 libxposed 三个入口都必须先调用 <code class="lang-kotlin">initOnModuleLoaded</code>；82 的三个入口都不要求先调 <code class="lang-kotlin">initZygote</code>。 两个新入口找不到 <code class="lang-kotlin">Application.attach(Context)</code> 时抛 <code class="lang-kotlin">IllegalStateException</code>；安装或 Context 读取失败保留原异常， 注册失败不留回调。旧的无 token 入口找不到 attach 方法时仍只记日志。 登记与 token 只属于当前 module generation / classloader，不进入热重载 saved state。 过早读取 <code class="lang-kotlin">appContext</code> 会抛异常，不确定时用 <code class="lang-kotlin">appContextOrNull</code>。102 后端内部安装 attach hook 时只在 framework 支持 hook ID（API 102）时使用稳定 <code class="lang-kotlin">reloadKey</code>，API 101 上匿名安装，因此不影响运行基线。</p>
+      <p class="paragraph"><code class="lang-kotlin">initAppContext(context)</code> 默认只在缓存为空时保留 <code class="lang-kotlin">applicationContext</code> 或传入的 Application，不可用时抛 <code class="lang-kotlin">IllegalStateException</code>；已有值不覆盖。<code class="lang-kotlin">force=true</code> 原样缓存指定 Context，调用者承担 Activity 泄漏等生命周期风险。 其可选资源注入始终针对原始入参，不因缓存已有值而跳过。</p>
+      <p class="paragraph">libxposed 同一 generation 的模块资源成功初始化后不重复创建，创建失败可以重试 <code class="lang-kotlin">initOnModuleLoaded</code>； <code class="lang-kotlin">initModuleResources()</code> 是显式刷新，每次创建新模块资源。82 可用 <code class="lang-kotlin">initModuleResources(origRes)</code> 复用指定资源配置。 刷新 <code class="lang-kotlin">moduleRes</code> 不等于重新登记已求值的替换值，见#resources。</p>
+      <h3 class="">Kotlin / Java 安装回调</h3>
+      <p class="paragraph">Kotlin 的方法与构造器均可使用 <code class="lang-kotlin">createHook</code>；批量方法使用 <code class="lang-kotlin">createHooks</code>：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">method.createHook {<br>    before { param -&gt;<br>        param.args[0] = param.argAs&lt;String&gt;(0).trim()<br>    }<br>    after { param -&gt; param.result = &quot;done&quot; }<br>}<br><br>clazz.findAllMethods {<br>    name(&quot;foo&quot;)<br>    paramCount(1)<br>}.createHooks {<br>    before {<br>        // 处理本次调用。<br>    }<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">Java 使用 <code class="lang-kotlin">xposed.java</code> 门面；以下普通 Hook 在 82 与 libxposed 101 / 102 均有对应入口：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">import io.github.lingqiqi5211.ezhooktool.xposed.common.HookParam;<br>import io.github.lingqiqi5211.ezhooktool.xposed.java.Hooks;<br>import io.github.lingqiqi5211.ezhooktool.xposed.java.IMethodHook;<br>import io.github.lingqiqi5211.ezhooktool.xposed.java.IReplaceHook;<br><br>Hooks.createHook(method, new IMethodHook() {<br>    @Override<br>    public void before(HookParam param) {<br>        Object[] args = param.getArgs();<br>        args[0] = ((String) args[0]).trim();<br>    }<br><br>    @Override<br>    public void after(HookParam param) {<br>        param.setResult(&quot;done&quot;);<br>    }<br>});<br><br>Hooks.createHook(method, new IReplaceHook() {<br>    @Override<br>    public Object replace(HookParam param) {<br>        return null;<br>    }<br>});<br><br>Hooks.findAndHookMethod(target, &quot;foo&quot;, String.class, new IMethodHook() {<br>    @Override<br>    public void before(HookParam param) {<br>        // 处理本次调用。<br>    }<br>});<br><br>List&lt;Method&gt; methods = Methods.find(target)<br>        .filterByName(&quot;foo&quot;)<br>        .filterByParamCount(1)<br>        .toList();<br>Hooks.createHooks(methods, new IMethodHook() {<br>    @Override<br>    public void before(HookParam param) {<br>        // 处理本次调用。<br>    }<br>});</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">libxposed 的 <code class="lang-kotlin">intercept</code> 用于直接控制 <code class="lang-kotlin">XposedInterface.Chain</code>，<strong>101 即可使用</strong>：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">method.createInterceptHook { chain -&gt;<br>    if (isFeatureEnabled()) patchedResult() else chain.proceed()<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">Hooks.intercept(method, chain -&gt; {<br>    Object[] args = chain.getArgs().toArray();<br>    return chain.proceed(args);<br>});</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <h3 class="">safeMode 与异常</h3>
+      <p class="paragraph"><code class="lang-kotlin">EzXposed.safeMode</code> 默认开启，保护普通 DSL / Java helper 的调用阶段，不是任意副作用的事务：</p>
+      <div class="table--container">
+        <table>
+          <thead>
+            <tr>
+              <th>失败阶段</th>
+              <th>回退语义</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>before / replace</td>
+              <td>丢弃失败回调的参数和输出修改，继续下游，不绕过其他 Hook 手工调用原方法</td>
+            </tr>
+            <tr>
+              <td>after</td>
+              <td>恢复进入回调前的结果或异常，不重复执行原方法</td>
+            </tr>
+            <tr>
+              <td>intercept 尚未 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">proceed()</code></td>
+              <td>放行下游调用</td>
+            </tr>
+            <tr>
+              <td>intercept 已 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">proceed()</code></td>
+              <td>保留下游结果或异常，不重复执行</td>
+            </tr>
+            <tr>
+              <td>原方法自身异常</td>
+              <td>原样传播，不视为模块 callback 失败</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="paragraph">保护包括调用状态与参数数组浅拷贝，不撤销参数对象内部修改或外部副作用。82 在 callback 成功后才提交输出， 失败时还原参数数组；其 <code class="lang-kotlin">HookParam.raw</code> 直接操作 framework 对象，不具有同等保护。用户 logger 抛异常不会阻断安全回退。</p>
+      <p class="paragraph">libxposed 的 <code class="lang-kotlin">deoptimize(executable)</code> 保留 framework 的 Boolean，异常时返回 <code class="lang-kotlin">false</code>； <code class="lang-kotlin">deoptimizeOrThrow(executable)</code> 可区分返回 <code class="lang-kotlin">false</code> 与抛异常，未初始化时也会明确报错。</p>
+      <h3 class="">102 可选能力：ID、替换与 detach</h3>
+      <p class="paragraph">在 <code class="lang-kotlin">initOnModuleLoaded</code> 之后查询能力；初始化前均为 <code class="lang-kotlin">false</code>，不应缓存这个早期结果：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">XposedFeature.HOOK_ID.isSupported<br>XposedFeature.REPLACE_HOOK.isSupported<br>XposedFeature.HOT_RELOAD.isSupported<br>XposedFeature.DETACH_ENTRY.isSupported<br>XposedFeature.HOOK_ID.minApiVersion  // 102<br>EzXposed.frameworkApiVersion        // 未初始化时为 0</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">能力来自 framework 报告的 API 版本，不反射探测 Xposed API；<code class="lang-kotlin">isSupported</code> 只判断能力，不会调用它。 无法降级的 helper 通常抛带所需版本、特性名和当前版本的 <code class="lang-kotlin">IllegalStateException</code>。</p>
+      <div class="table--container">
+        <table>
+          <thead>
+            <tr>
+              <th>操作</th>
+              <th>API 101 framework</th>
+              <th>API 102 framework</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>普通 Hook、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Chain</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">intercept</code></td>
+              <td>可用</td>
+              <td>可用</td>
+            </tr>
+            <tr>
+              <td>自动 Hook ID</td>
+              <td>不分配、不调用 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">setId</code></td>
+              <td>热重载启用时分配</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">groupById()</code> / Java <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">HookHandles.getId(handle)</code></td>
+              <td>ID 为 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">null</code></td>
+              <td>返回可见的底层 ID，聚合逻辑 handle 为 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">null</code></td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">id(nonNull)</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">reloadKey</code></td>
+              <td>安装时抛异常</td>
+              <td>可用</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">id(null)</code></td>
+              <td>可匿名安装</td>
+              <td>关闭自动 ID，不能放进默认 batch</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">replaceWith</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">replaceIntercept</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">replaceAll</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Hooks.replaceHook</code></td>
+              <td>抛异常</td>
+              <td>可用</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">HotReloadSession</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">HookReloadBatch</code></td>
+              <td>构造即抛异常</td>
+              <td>初始化运行时后可用</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">handleHotReloaded</code> 系列 / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">detachCurrentEntry</code></td>
+              <td>不可用</td>
+              <td>可用</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">handleHotReloading</code></td>
+              <td>不支持时警告并返回 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">false</code></td>
+              <td>按当前状态决定是否接受</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="paragraph"><code class="lang-kotlin">HookFactory.id(...)</code> 指定底层 ID，<code class="lang-kotlin">reloadKey(...)</code> 进一步表示跨版本稳定契约；默认自动热重载通常不需要逐条声明。 同一 executable 内显式 key 必须区分不同逻辑 Hook，不要使用库保留的 <code class="lang-kotlin">ezhooktool.batch.v1:</code> 命名空间。</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val handle = method.createHook {<br>    reloadKey(&quot;license-check&quot;)<br>    before {<br>        // 检查本次调用。<br>    }<br>}<br>val newHandle = handle.replaceWith { true }<br>// 需要 Chain 控制时改用 handle.replaceIntercept { chain -&gt; ... }。</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">import io.github.libxposed.api.XposedInterface.HookHandle;<br>import io.github.lingqiqi5211.ezhooktool.xposed.dsl.HookHandles;<br><br>HookHandle handle = Hooks.createHook(method, &quot;license-check&quot;, methodHook);<br>HookHandle newHandle = Hooks.replaceHook(handle, methodHook);  // IMethodHook<br>// 或 Hooks.replaceHook(handle, replaceHook)，其中 replaceHook 是 IReplaceHook。<br>String id = HookHandles.getId(newHandle);</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">helper 替换保留 executable、priority、exceptionMode、ID，并继续提供 safeMode；成功后旧 handle 失效。 原生 <code class="lang-kotlin">handle.replaceHook(myHooker)</code> 也可在确认 102 能力后调用，但原生 Hooker 的保护由调用方负责。</p>
+      <p class="paragraph"><strong>不要在兼容 101 的代码里直接读 </strong><code class="strong lang-kotlin"><strong>handle.id</strong></code>：Kotlin 优先把它解析成 Java <code class="lang-kotlin">getId()</code>，会导致 <code class="lang-kotlin">NoSuchMethodError</code>，不是安全扩展。Java 使用上面的 <code class="lang-kotlin">HookHandles.getId</code>；Kotlin 可用安全的 <code class="lang-kotlin">groupById()</code> 分组， 或先判断 <code class="lang-kotlin">XposedFeature.HOOK_ID.isSupported</code> 再调用原生 <code class="lang-kotlin">getId()</code>。默认聚合返回逻辑 handle，内部物理 ID 不对其暴露。</p>
+      <p class="paragraph"><code class="lang-kotlin">EzXposed.detachCurrentEntry()</code> 停止向当前 entry 分发后续生命周期回调，不撤销已装 Hook，也不禁用其他 <code class="lang-kotlin">XposedInterface</code> API。它幂等，但要求 <code class="lang-kotlin">initOnModuleLoaded</code> 传入 <code class="lang-kotlin">XposedInterfaceWrapper</code>（如 <code class="lang-kotlin">XposedModule</code>）， 否则抛 <code class="lang-kotlin">IllegalStateException</code>。只适合确认无需后续回调的非目标 entry；detach 后也收不到 <code class="lang-kotlin">onHotReloading</code>， 需要热重载的目标 entry 不要调用。</p>
+      <p class="paragraph"><a id="resources"></a></p>
+      <h2 class="">资源：直接值、模块预求值与宿主绑定</h2>
+      <p class="paragraph"><code class="lang-kotlin">EzResources</code> 在 82 与 libxposed 101 / 102 提供相同入口，按「包名 + 类型 + 名称」拦截支持的 <code class="lang-kotlin">Resources</code> / <code class="lang-kotlin">TypedArray</code> getter。实现思路来自 HyperCeiler 的 <code class="lang-kotlin">ResourcesTool</code>，不要求 framework 提供专用资源替换接口。 包名 <code class="lang-kotlin">&quot;*&quot;</code> 表示通配，精确规则优先。先完成上文对应运行时初始化，再登记规则。</p>
+      <h3 class="">选择三种方式</h3>
+      <div class="table--container">
+        <table>
+          <thead>
+            <tr>
+              <th>方式</th>
+              <th>现有 API</th>
+              <th>取值与副作用</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>直接值</td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">setObjectReplacement</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">setDensityReplacement</code></td>
+              <td>不注入模块 APK；尺寸替换按密度计算</td>
+            </tr>
+            <tr>
+              <td>模块预求值</td>
+              <td>先读 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">EzXposed.moduleRes</code>，再 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">setObjectReplacement</code></td>
+              <td>模块内求值后登记固定结果，不绑定宿主资源池</td>
+            </tr>
+            <tr>
+              <td>宿主绑定</td>
+              <td>显式 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">inject</code>；或兼容入口 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">setResReplacement</code> 在命中时注入</td>
+              <td>模块 APK 进入宿主资源池，引用、Theme、命名空间都受宿主环境约束</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="paragraph"><strong>直接值：</strong></p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">EzResources.setObjectReplacement(&quot;com.example.host&quot;, &quot;color&quot;, &quot;bg_color&quot;, Color.RED)<br>EzResources.setDensityReplacement(&quot;com.example.host&quot;, &quot;dimen&quot;, &quot;bar_height&quot;, 8f)</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph"><code class="lang-kotlin">setDensityReplacement</code> 只接受 <code class="lang-kotlin">dimen</code>，按数值乘屏幕密度计算，即 dp 语义。</p>
+      <p class="paragraph"><strong>模块预求值：</strong></p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">val title = EzXposed.moduleRes.getString(R.string.module_title)<br>EzResources.setObjectReplacement(&quot;com.example.host&quot;, &quot;string&quot;, &quot;title&quot;, title)</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">这个 <code class="lang-kotlin">title</code> 固定到下一次登记，<strong>不会自动跟随宿主 locale、配置或 Theme 重新求值</strong>。 需要更新时由模块重新读取并登记；不是新增的自动隔离求值 API，也不把任意 Drawable 等对象冻结。</p>
+      <p class="paragraph"><strong>宿主绑定：</strong></p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">check(EzResources.inject(context))<br>// 也可注入指定 Resources：EzResources.inject(resources)。<br>// 兼容便利入口：EzXposed.addModuleAssetPath(context)。<br><br>EzResources.setResReplacement(&quot;com.example.host&quot;, &quot;drawable&quot;, &quot;ic_launcher&quot;, R.drawable.my_icon)</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph"><code class="lang-kotlin">inject</code> 只使宿主能解析模块 <code class="lang-kotlin">R.xxx</code>，本身不登记替换。R+ 优先使用 <code class="lang-kotlin">ResourcesLoader</code>，低版本或相应回退走 <code class="lang-kotlin">AssetManager.addAssetPath</code>；资源 ID / 包命名空间须避免与宿主及其他模块冲突。 <code class="lang-kotlin">addModuleAssetPath(Context / Resources)</code> 委托给 <code class="lang-kotlin">inject</code>，失败抛异常。</p>
+      <p class="paragraph">legacy <code class="lang-kotlin">setResReplacement</code> <strong>仍会在首次命中时注入宿主</strong>，不是模块内隔离求值：它记录模块资源名称， 取值时对当前资源表解析 ID，并保留 getter 的 density、Theme、fraction、quantity 和格式化参数。 这不保证模块与宿主的主题属性或命名空间兼容。</p>
+      <p class="paragraph"><code class="lang-kotlin">inject(..., onMainLooper = true)</code> 在非主线程变为异步投递，返回 <code class="lang-kotlin">true</code> 不代表已挂载成功； 热重载恢复期间禁止该选项，必须同步注入。注入失败会记录，getter 热路径不会反复重试。</p>
+      <h3 class="">getter 覆盖与值类型</h3>
+      <div class="table--container">
+        <table>
+          <thead>
+            <tr>
+              <th>type</th>
+              <th>对应 getter</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">color</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">TypedArray</code> 的 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getColor</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getColorStateList</code></td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">drawable</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">mipmap</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources.getDrawable</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getDrawableForDensity</code>，<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">TypedArray.getDrawable</code></td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">string</code></td>
+              <td>两类的 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getText</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getString</code>；含 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources.getText(id, default)</code> 与格式化重载</td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">plurals</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources.getQuantityText</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getQuantityString</code></td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">array</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources.getStringArray</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getTextArray</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getIntArray</code>，<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">TypedArray.getTextArray</code></td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">dimen</code></td>
+              <td>两类的 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getDimension</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getDimensionPixelOffset</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getDimensionPixelSize</code></td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">integer</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">bool</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">fraction</code></td>
+              <td>两类存在的 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getInteger</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getInt</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getBoolean</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getFloat</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getFraction</code></td>
+            </tr>
+            <tr>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">layout</code>、<code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">anim</code></td>
+              <td><code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">Resources.getLayout</code> / <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">getAnimation</code>；相关引用仍须能由宿主资源池解析</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="paragraph">TypedArray 只处理公开 <code class="lang-kotlin">getResourceId</code> 能取得 ID 的条目，不还原原始 <code class="lang-kotlin">?attr</code> 或内联字面值； <strong>只支持直接值和尺寸替换，不支持模块资源转发</strong>。Theme / TypedValue 读取与布局内部引用不属于 getter 覆盖承诺。 直接文本替换 plurals 会让所有数量使用相同文本；Android 复数选择规则需使用模块资源转发。</p>
+      <p class="paragraph">值类型必须与 getter 相符：<code class="lang-kotlin">getText</code> 要求 <code class="lang-kotlin">CharSequence</code>，<code class="lang-kotlin">getBoolean</code> 要求 <code class="lang-kotlin">Boolean</code>，数值 getter 接受 <code class="lang-kotlin">Number</code>；不匹配时警告并放行原值。整数和颜色不经过 Float 转换；pixel offset 截断，pixel size 按尺寸舍入， 保留非零尺寸的最小像素。数组在登记与返回时复制，Drawable、可变 CharSequence 等对象内部共享由调用者负责。</p>
+      <h3 class="">规则、缓存与绑定生命周期</h3>
+      <ul>
+        <li>
+          <p class="paragraph">getter Hook 按类型按需安装，进程级复用；从未登记规则时不安装这些 Hook。102 用稳定 key 参与换代，101 使用匿名 Hook，   模块无需持有或手动摘除这些 handle。</p>
+        </li>
+        <li>
+          <p class="paragraph">一次 getter 使用同一规则快照。定位缓存按 <code class="lang-kotlin">Resources</code> 弱引用与 <code class="lang-kotlin">AssetManager</code> 来源分区，每种定位表最多 4096 项。   注入（含部分失败）和回退使来源失效，旧查询不能回填新表。</p>
+        </li>
+        <li>
+          <p class="paragraph">定位与最终值分开：不缓存 Theme、density、locale 等决定的最终值，转发按本次参数求值；这不改变上文预求值结果的固定性。   外部直接修改同一 AssetManager 内容无法自动感知，应显式 <code class="lang-kotlin">inject(resources)</code> 使库内定位失效。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">clearReplacements()</code> 清除规则和类型告警，<strong>不卸载 getter Hook、不解绑 loader</strong>；来源未变时定位缓存仍有效。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">fakeResId(name)</code> 只是兼容用 hash 标识，可能冲突，<strong>不创建真实 Android 资源</strong>，也不保证宿主能解析。</p>
+        </li>
+      </ul>
+      <p class="paragraph">R+ 的 provider 随自有 loader 绑定保留；只有旧绑定全部迁移成功，才释放确认自有的旧 provider。 旧 saved state 没有所有权信息时不主动关闭。换代失败遵循下节的恢复边界，不以清规则代替释放资源绑定。</p>
+      <p class="paragraph"><a id="hot-reload"></a></p>
+      <h2 class="">热重载与失败恢复</h2>
+      <h3 class="">启用默认自动模式（仅 API 102）</h3>
+      <p class="paragraph">默认模式由工具收集 Hook、逐条替换并收尾旧 handle；模块不用再登记或持有一份 handle 列表。 所有要迁移的 helper Hook 都应在 <code class="lang-kotlin">onTargetReady</code> 的<strong>同步窗口</strong>内安装。</p>
+      <p class="paragraph">要求 API 102 并启用 APK 更新自动触发时，在 <code class="lang-kotlin">META-INF/xposed/module.prop</code> 声明：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-properties" theme="idea">minApiVersion=102<br>targetApiVersion=102<br>autoHotReload=true</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">启用 <code class="lang-kotlin">autoHotReload</code> 的模块应只保留一个 Java entry。在前文 libxposed 初始化片段之外，再桥接两个回调：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">override fun onHotReloading(param: HotReloadingParam): Boolean =<br>    EzXposed.handleHotReloading(param)<br><br>override fun onHotReloaded(param: HotReloadedParam) {<br>    EzXposed.handleHotReloadedWithTargetReady(this, param, { installHooks() })<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">framework 不会重放 <code class="lang-kotlin">onModuleLoaded</code>、package 或 system_server 生命周期；新代码只收到 <code class="lang-kotlin">onHotReloaded</code>。 <code class="lang-kotlin">handleHotReloadedWithTargetReady</code> 初始化新 generation、注册回调、恢复目标 snapshot 并重装 Hook， 返回 <code class="lang-kotlin">AutomaticHotReloadResult</code>。已经自行初始化并注册回调的流程可调用 <code class="lang-kotlin">handleHotReloaded</code>， 或使用返回统计结果的 <code class="lang-kotlin">restoreHotReloadedAutomatically</code>。</p>
+      <p class="paragraph"><code class="lang-kotlin">onHotReloading</code> 必须原样返回工具结果，<code class="lang-kotlin">false</code> 意味着取消整个请求。目标未成功 ready、已有失败状态或当前 batch 不可恢复时会拒绝。首次从无 Hook ID 的旧版本迁移，需完整重启一次目标进程，不能强行把旧 handle 当成可迁移项。</p>
+      <p class="paragraph"><code class="lang-kotlin">hotReloadEnabled</code> 默认 <code class="lang-kotlin">true</code>。如需禁用，在 <code class="lang-kotlin">initOnModuleLoaded</code> <strong>之前</strong>设置 <code class="lang-kotlin">false</code>；之后不分配自动 ID、 不进入默认 batch，<code class="lang-kotlin">handleHotReloading</code> 静默返回 <code class="lang-kotlin">false</code>。<code class="lang-kotlin">hotReloadActive</code> 等于该开关与 framework 能力同时满足。 禁用不阻止显式 <code class="lang-kotlin">id</code> / <code class="lang-kotlin">reloadKey</code> 或手动 <code class="lang-kotlin">HookReloadBatch</code>；但 <code class="lang-kotlin">HotReloadSession.prepare</code> 也走这个开关，会返回 <code class="lang-kotlin">false</code>。 101 不提供热重载，普通 Hook 不受影响；按 102 编译保留的热重载覆写不会被 101 framework 调用，不能主动执行其中的 102 API。</p>
+      <h3 class="">安装、功能开关与多进程</h3>
+      <p class="paragraph">默认 batch 按 <code class="lang-kotlin">executable + priority + exceptionMode</code> 聚合无显式 ID 的 helper Hook。同步回调全部成功后才发布； 同组逻辑 Hook 的增删重排不改变物理 ID。显式 ID 也在 batch 收集结束后发布，但不与无 ID Hook 聚合。</p>
+      <p class="paragraph">提交时先安装新增 identity，再逐条替换相同 executable + ID，最后撤销新代码不再声明的旧项。 因此目标、priority / exceptionMode 组与显式 ID 都可以增删；只要 <code class="lang-kotlin">onTargetReady</code> 确实执行，即使本代一个 Hook 也未声明，也能清理全部旧项。这是<strong>单条原子替换</strong>，不是跨多个 Hook 的整批事务。</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">private fun installHooks() {<br>    val switches = readHookSwitches()<br>    if (switches.loginReporter) {<br>        loginMethod.createBeforeHook {<br>            // 处理登录。<br>        }<br>        reportMethod.createBeforeHook {<br>            // 处理上报。<br>        }<br>    }<br>    if (switches.premium) {<br>        premiumMethod.createReplaceHook { true }<br>    }<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">更新 APK 时重新读取持久开关，把同一功能的全部同步 Hook 放进同一个分支即可。要在不更新模块时即时切换， 固定安装 Hook，让 callback 读取 remote preferences 或 listener 更新的线程安全状态；不能复用安装时的固定 snapshot。 before / after 关闭时直接返回，replace 类功能用 <code class="lang-kotlin">intercept</code> 和 <code class="lang-kotlin">chain.proceed()</code> 放行。</p>
+      <p class="paragraph">scope list 可含多个 app；主进程和 remote process 各自有 entry、snapshot 和结果，不会一次切换所有进程。 可以按恢复后的 <code class="lang-kotlin">isSystemServer</code>、<code class="lang-kotlin">packageName</code> 和 <code class="lang-kotlin">processName</code> 分派：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">override fun onSystemServerStarting(param: SystemServerStartingParam) {<br>    EzXposed.initOnSystemServerStarting(param)<br>}<br><br>private fun installHooks() {<br>    when {<br>        EzXposed.isSystemServer -&gt; installSystemServerHooks()<br>        EzXposed.packageName == &quot;com.example.alpha&quot; &amp;&amp;<br>            EzXposed.processName.endsWith(&quot;:remote&quot;) -&gt; installAlphaRemoteHooks()<br>        EzXposed.packageName == &quot;com.example.alpha&quot; -&gt; installAlphaHooks()<br>        EzXposed.packageName == &quot;com.example.beta&quot; -&gt; installBetaHooks()<br>    }<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">多 app 时把前文 package 回调的目标条件改为集合匹配，仍建议过滤 <code class="lang-kotlin">isFirstPackage</code>。 默认恢复边界是一个进程的首个目标 package。shared UID 或 <code class="lang-kotlin">createPackageContext(..., CONTEXT_INCLUDE_CODE)</code> 后来加载的第二个 package 属于另一个 ready 时点，不能塞入已提交的 batch，应使用显式 key 和自定义收尾。 异步、延迟、Hook 回调内才安装的规则，以及首次 ready 成功后的即时回调，也不属于默认可靠边界。 事务外 helper 虽有兜底 ID，仍应改成同步安装或明确自定义迁移。</p>
+      <h3 class="">自定义 identity、batch 与旧 handle</h3>
+      <p class="paragraph">需要稳定的逐条 identity 时用 <code class="lang-kotlin">reloadKey</code>。Java 有对应入口：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-java" theme="idea">Hooks.createHook(method, &quot;license-check&quot;, methodHook);<br>Hooks.findAndHookMethodWithKey(target, &quot;foo&quot;, &quot;foo-hook&quot;, String.class, methodHook);<br>Hooks.findAndHookConstructorWithKey(target, &quot;constructor-hook&quot;, String.class, methodHook);</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">只有需要自定义 namespace 或事务边界时才直接使用 <code class="lang-kotlin">HookReloadBatch</code>：新 generation 在旧 handle 有效时 <code class="lang-kotlin">captureOldHooks</code>，再 <code class="lang-kotlin">install</code> 一次完整同步初始化，成功后 <code class="lang-kotlin">finishHotReload</code>。默认流程已经完成这些工作， 不要与它或管理同一批 Hook 的 <code class="lang-kotlin">HotReloadSession</code> 重叠。</p>
+      <p class="paragraph">完全自定义旧 handle 处置时，传 <code class="lang-kotlin">onOldHooks</code>；工具不再默认替你全量 unhook：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">EzXposed.handleHotReloaded(<br>    this,<br>    param,<br>    onOldHooks = java.util.function.Consumer { oldHandles -&gt;<br>        // 自行替换、unhook 或保留；承担对应恢复边界。<br>    },<br>)</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph"><code class="lang-kotlin">id(null)</code> 关闭自动 ID，不能进入默认 batch；使用它必须在事务外定义旧 handle 收尾方式。 辅助函数保留：</p>
+      <ul>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">oldHandles.groupById()</code> → <code class="lang-kotlin">Map&lt;String?, List&lt;HookHandle&gt;&gt;</code>。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">oldHandles.replaceAll(hooker)</code> → 按原顺序返回新 handle；中途失败不回滚已替换项。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">oldHandles.unhookAll()</code> → 尝试全部清理，最后统一报告失败。</p>
+        </li>
+      </ul>
+      <h3 class="">外部回调与 HotReloadSession.scope</h3>
+      <p class="paragraph">listener、receiver、binder callback 和线程不是 HookHandle，模块必须停止或注销它们。 需要统一管理时选用 <code class="lang-kotlin">HotReloadSession</code>，<strong>替代</strong>默认自动模式：一个 entry 使用一个 session，每条 helper Hook 都有显式 <code class="lang-kotlin">reloadKey</code>，同一 executable 内不重复。它接管全部旧 handle，不与 raw libxposed Hook、其他 session 或其他旧 handle 管理方式混用。</p>
+      <p class="paragraph">每个 generation 在 <code class="lang-kotlin">initOnModuleLoaded</code> 解析完 102 能力后再创建 session，不要在 entry 字段初始化时提前构造：</p>
+      <div class="sample-container">
+        <pre><code class="block lang-kotlin" theme="idea">private lateinit var reloadSession: HotReloadSession<br><br>private fun registerTargetReady() {<br>    reloadSession = HotReloadSession()<br>    reloadSession.onTargetReady {<br>        watchedMethod.createHook {<br>            reloadKey(&quot;watched-method&quot;)<br>            before {<br>                // 处理本次调用。<br>            }<br>        }<br>        val registration = registerHostListener()<br>        reloadSession.scope.onReloading {<br>            registration.unregister()<br>            stopModuleThreads()<br>        }<br>        currentHostToken()?.let { reloadSession.scope.putState(&quot;host-token&quot;, it) }<br>    }<br>}<br><br>override fun onModuleLoaded(param: ModuleLoadedParam) {<br>    EzXposed.initOnModuleLoaded(this, param)<br>    registerTargetReady()<br>}<br><br>override fun onHotReloading(param: HotReloadingParam): Boolean =<br>    reloadSession.prepare(param)<br><br>override fun onHotReloaded(param: HotReloadedParam) {<br>    EzXposed.initOnModuleLoaded(this, param)<br>    registerTargetReady()<br>    reloadSession.restore(this, param) { extra -&gt;<br>        val token = reloadSession.scope.state(&quot;host-token&quot;)<br>        // 在 target-ready callback 前恢复自己的状态。<br>    }<br>}</code></pre>
+<span class="copy-tooltip">
+          <div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div>
+<span class="copy-icon"></span></span></div>
+      <p class="paragraph">package / system_server 回调仍使用前文初始化入口。<code class="lang-kotlin">prepare</code> 仅在 snapshot 可恢复时执行 cleanup， 按登记逆序尝试清理；成功后旧 generation 的外部注册已经停止，新代失败不能假设旧运行状态仍完整。 已开始的外部调用仍须自行结束。</p>
+      <p class="paragraph"><strong>跨代数据不是任意对象的 deep freeze：</strong></p>
+      <ul>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">handleHotReloading</code> 的业务 <code class="lang-kotlin">extra</code> 与 scope 状态交接时，对 Map、Collection、对象数组和 primitive array 生成独立快照。</p>
+        </li>
+        <li>
+          <p class="paragraph">保留共享子对象别名及数组 runtime component type；最多 <strong>32 层、4096 节点/槽位</strong>，分配容器前检查预算。   循环容器、不能保持数组类型、复制后会合并不同键或元素的情况明确拒绝。</p>
+        </li>
+        <li>
+          <p class="paragraph"><code class="lang-kotlin">IdentityHashMap</code> 保留身份键语义，其他集合转换为标准有序容器。</p>
+        </li>
+        <li>
+          <p class="paragraph">其他允许的 system / system_server / 目标 app 对象保留引用，不遍历、不隔离或撤销其内部状态。   不得保存模块 data class、lambda、模块加载器，或通过容器带入模块对象；模块数组类型和依赖模块的子加载器也会拒绝。   framework 仍执行最终校验。</p>
+        </li>
+        <li>
+          <p class="paragraph">scope 开始准备后拒收新状态和 cleanup；准备失败恢复接收，成功后退休。清空旧 scope 不会清空已经交出的快照。</p>
+        </li>
+        <li>
+          <p class="paragraph">Resources、loader、provider 的 framework 对象另走资源状态通道，不经过业务快照复制。</p>
+        </li>
+      </ul>
+      <p class="paragraph">持久开关应来自 remote preferences、文件或系统服务，新 generation 自行读取，不要通过 saved state 搬运旧模块对象或 HookHandle。</p>
+      <h3 class="">资源迁移与失败后的处理</h3>
+      <p class="paragraph">资源换代分三部分，不应因已注入资源而跳过 getter Hook 或否决整个请求：</p>
+      <ol>
+        <li>
+          <p class="paragraph">getter Hook 由新一代按正常规则声明和替换，避免钉住旧模块加载器。</p>
+        </li>
+        <li>
+          <p class="paragraph">注入过的宿主 Resources 与旧 loader / 自有 provider 经资源状态通道交接；在 <code class="lang-kotlin">onTargetReady</code> 前先挂新 loader，再摘旧 loader。</p>
+        </li>
+        <li>
+          <p class="paragraph">替换规则由新代重新登记，模块转发规则按名称解析当前 APK 的 ID。R 以下旧 <code class="lang-kotlin">addAssetPath</code> 绑定不能撤回，需重启才能清除旧资源影响。</p>
+        </li>
+      </ol>
+      <p class="paragraph">provider 仅在旧绑定全部迁移成功后释放。失败时遵循资源 journal 的回退或重启判断，不能关闭所有权不明的旧对象。 已 inflate 的 View、宿主静态缓存、SystemUI 缓存和非自有绑定不会自动刷新。</p>
+      <div class="table--container">
+        <table>
+          <thead>
+            <tr>
+              <th>失败位置</th>
+              <th>保证与处理</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>默认 batch 仍在收集规则，未发布物理 Hook</td>
+              <td>回调失败不发布该批 Hook；不撤销用户自己修改的状态或已停止的外部服务</td>
+            </tr>
+            <tr>
+              <td>新增 Hook 安装失败</td>
+              <td>尝试撤销本次已拿到 handle 的新增项；不能仅凭撤销成功断言安装无副作用</td>
+            </tr>
+            <tr>
+              <td>底层 <code class="org.jetbrains.dokka.pages.commenttable@429f7009 lang-kotlin">HookBuilder.intercept</code> 抛错</td>
+              <td><strong>即使是首次物理安装，也可能已安装但未返回 handle</strong>；结果不明，要求重启目标进程。101 普通安装同样适用</td>
+            </tr>
+            <tr>
+              <td>已开始旧 Hook 替换、自定义旧 handle 处置、直接 session 安装等不可逆操作</td>
+              <td>不把资源盲目退回旧版；失败保留当前资源并要求重启，可能已混合两代 Hook</td>
+            </tr>
+            <tr>
+              <td>旧 Hook 清理失败</td>
+              <td>继续尝试其余清理，统一报告失败，阻止当前 entry 后续热重载；资源已提交，不再回滚</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="paragraph">资源迁移、<code class="lang-kotlin">onExtra</code>、自定义 <code class="lang-kotlin">onOldHooks</code> 与首次 ready 回调共享异常处理边界。资源迁移失败不继续发布 Hook； 只有尚未发生不可逆或结果不明的操作时才尝试资源回退，撤销按逆序执行。若加回旧 loader 失败，不再摘对应新 loader， 避免移除最后一份可用资源，并要求重启。</p>
+      <p class="paragraph">这不是跨 generation 的全局失败锁。framework 如何继续处理失败 entry、真实 loader 是否按预期切换，仍需实机确认。 用户原生 API、异步任务与其他外部副作用不在库的回滚保证内；宿主没有可逆更新 API 时应重启目标进程。</p>
+      <p class="paragraph"><a id="validation"></a></p>
+      <h2 class="">验证与兼容边界</h2>
+      <p class="paragraph">纯 JVM 测试可验证查询计划、缓存界限、重载选择、回调状态、跨代快照、异常顺序与恢复控制流。 Android stub / fake <strong>不能证明真实 Hook 生效、ResourcesLoader 切换或 Theme 效果</strong>；这些行为尚未实机验证， 不能把逻辑测试通过写成 framework 兼容结论。</p>
+      <p class="paragraph">实机验收至少区分：</p>
+      <ul>
+        <li>
+          <p class="paragraph">经典 82 与 libxposed 101 普通 Hook；101 不得触碰 102-only API。</p>
+        </li>
+        <li>
+          <p class="paragraph">102 的连续换代、目标增删、全部功能关闭，以及首次安装结果不明、部分替换和清理失败。</p>
+        </li>
+        <li>
+          <p class="paragraph">Android 26 的 TypedArray 与旧注入路径；Q 的提前 target-ready；R+ 的 loader / provider 迁移和失败恢复。</p>
+        </li>
+        <li>
+          <p class="paragraph">Theme / 命名空间冲突、locale / 复数、数组、mipmap、已 inflate View 和宿主缓存。</p>
+        </li>
+        <li>
+          <p class="paragraph">外部 listener / 线程的注销与结束，旧加载器是否仍被用户对象或宿主缓存引用。</p>
+        </li>
+      </ul>
+      <p class="paragraph">源码验证入口是 <code class="lang-kotlin">./gradlew build</code>，覆盖编译、lint、Core 单测与 <code class="lang-kotlin">checkApi102Gateway</code> 等检查； 它不能替代上述实机验收。</p>
+    </div>
+    <h2 class="">All modules:</h2>
+    <div class="table"><a data-name="-387464810%2FMain%2F0" anchor-label="core" id="-387464810%2FMain%2F0" data-filterable-set=""></a>
+      <div class="table-row table-row_multimodule">
+        <div class="main-subrow ">
+          <div class="w-100"><span class="inline-flex">
+              <div><a href="core/index.html">core</a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-387464810%2FMain%2F0"></span>
+                <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+              </span></span></div>
+          <div><span class="brief-comment"></span></div>
+        </div>
+      </div>
+<a data-name="-1805653150%2FMain%2F0" anchor-label="hook-xposed-102" id="-1805653150%2FMain%2F0" data-filterable-set=""></a>
+      <div class="table-row table-row_multimodule">
+        <div class="main-subrow ">
+          <div class="w-100"><span class="inline-flex">
+              <div><a href="hook-xposed-102/index.html">hook-xposed-102</a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1805653150%2FMain%2F0"></span>
+                <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+              </span></span></div>
+          <div><span class="brief-comment"></span></div>
+        </div>
+      </div>
+<a data-name="-1371543501%2FMain%2F0" anchor-label="hook-xposed-82" id="-1371543501%2FMain%2F0" data-filterable-set=""></a>
+      <div class="table-row table-row_multimodule">
+        <div class="main-subrow ">
+          <div class="w-100"><span class="inline-flex">
+              <div><a href="hook-xposed-82/index.html">hook-xposed-82</a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1371543501%2FMain%2F0"></span>
+                <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+              </span></span></div>
+          <div><span class="brief-comment"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>© 2026 Copyright</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
