@@ -1,6 +1,7 @@
 package io.github.lingqiqi5211.ezhooktool.xposed
 
 import io.github.libxposed.api.XposedInterface
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 
@@ -22,3 +23,16 @@ internal fun fakeXposed(
     fake { method, args ->
         if (method.name == "getApiVersion") 102 else call(method, args)
     }
+
+/** 保存并恢复测试修改的 framework 能力协商状态，不改变生产入口。 */
+internal class XposedApiCompatSnapshot : AutoCloseable {
+    private val values =
+        listOf("supported", "resolvedApiVersion").map { name ->
+            val field = XposedApiCompat::class.java.getDeclaredField(name).apply { isAccessible = true }
+            field to field.getInt(XposedApiCompat)
+        }
+
+    override fun close() {
+        values.forEach { (field, value) -> field.setInt(XposedApiCompat, value) }
+    }
+}

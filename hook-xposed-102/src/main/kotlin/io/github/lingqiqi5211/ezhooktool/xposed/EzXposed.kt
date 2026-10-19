@@ -12,8 +12,8 @@ import io.github.libxposed.api.XposedModuleInterface
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import io.github.lingqiqi5211.ezhooktool.xposed.common.ModuleResources
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.ApplicationLifecycle
-import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import io.github.lingqiqi5211.ezhooktool.xposed.internal.HookDiagnostics
+import io.github.lingqiqi5211.ezhooktool.xposed.internal.XposedApiCompat
 import java.lang.ref.WeakReference
 import java.lang.reflect.Executable
 import java.util.function.Consumer
@@ -282,9 +282,11 @@ object EzXposed {
      *
      * 第一次注册时库会自动 hook `Application.attach`，回调按注册顺序在 attach after 阶段执行。
      *
-     * - 回调里收到的 `context` 是目标进程的 application，库会在触发回调前把它写入 [appContext] 缓存（仅当未初始化时）。
+     * - 回调收到的是 `Application.attach(Context)` 的入参，不能假定它就是 `Application`；库会在触发回调前把它写入
+     *   [appContext] 缓存（仅当未初始化时）。
      * - 如果注册时 application 已经 attach 过（即 [appContextOrNull] 非 null），新注册的回调会立即在当前线程同步触发一次。
      * - callback 抛出的异常会被库捕获并记日志，不会影响其它已注册回调，也不会影响目标 app 的 `Application.attach`。
+     * - 回调长期保留且没有 token：需要能取消时用 [subscribeApplicationAttach]，只跑一次用 [runOnApplicationAttachOnce]。
      *
      * 调用前必须先完成 [initOnModuleLoaded]（hook API 依赖 [base]）。
      */
@@ -297,7 +299,45 @@ object EzXposed {
     }
 
     /**
-     * 仅供 [ApplicationLifecycle] 内部回填：在 `Application.attach` 触发瞬间把 application context 写进缓存。
+     * 注册只执行一次的 attach 回调。
+     *
+     * 回调在领取后、执行前就从登记表摘除并释放强引用，所以即使它抛异常也算消费；之后不会再有第二次分发。
+     * 晚注册（attach 已发生、[appContextOrNull] 非 null）时在当前线程同步执行一次，随后立即失效。
+     * 需要再次等待时重新登记。
+     *
+     * 调用前必须先完成 [initOnModuleLoaded]。找不到 `Application.attach(Context)` 时抛出 [IllegalStateException]；
+     * 安装或 Context 读取失败保留原异常，注册失败不留下回调。
+     *
+     * 返回的 token 只用于取消；登记只在当前 module generation / classloader 内有效，热重载不会把它带到新一代。
+     */
+    @JvmStatic
+    fun runOnApplicationAttachOnce(callback: ApplicationAttachCallback): ApplicationAttachSubscription {
+        check(::base.isInitialized) {
+            "runOnApplicationAttachOnce requires EzXposed.initOnModuleLoaded to be called first."
+        }
+        return ApplicationLifecycle.registerOnce(callback)
+    }
+
+    /**
+     * 注册可取消的持续 attach 回调；分发时机与 [runOnApplicationAttach] 相同。
+     *
+     * [ApplicationAttachSubscription.cancel] 阻止尚未领取的调用；已领取的调用仍可能在取消后开始或完成。
+     * 重复 cancel 无害，取消后的 token 不再强持有回调对象。
+     *
+     * 调用前必须先完成 [initOnModuleLoaded]。找不到 attach 方法时抛出 [IllegalStateException]；
+     * 安装或 Context 读取失败保留原异常，注册失败不留回调。
+     * 登记只在当前 module generation / classloader 内有效，热重载不会把它带到新一代。
+     */
+    @JvmStatic
+    fun subscribeApplicationAttach(callback: ApplicationAttachCallback): ApplicationAttachSubscription {
+        check(::base.isInitialized) {
+            "subscribeApplicationAttach requires EzXposed.initOnModuleLoaded to be called first."
+        }
+        return ApplicationLifecycle.subscribe(callback)
+    }
+
+    /**
+     * 仅供 [ApplicationLifecycle] 内部回填：在 `Application.attach` 触发瞬间把它的入参写进缓存。
      *
      * 仅在缓存为空时写入，不会覆盖调用方已经显式塞入的值。
      */
@@ -957,9 +997,10 @@ fun interface TargetReadyCallback {
 }
 
 /**
- * [EzXposed.runOnApplicationAttach] 注册的回调。
+ * [EzXposed.runOnApplicationAttach] / [EzXposed.runOnApplicationAttachOnce] / [EzXposed.subscribeApplicationAttach]
+ * 登记的回调。
  *
- * 在目标进程 `Application.attach(Context)` 之后触发，参数为该 application context。
+ * 在目标进程 `Application.attach(Context)` 之后触发，参数是该方法的入参；不要假定它是 `Application`。
  */
 fun interface ApplicationAttachCallback {
     fun onApplicationAttached(context: Context)
