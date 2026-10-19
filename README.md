@@ -4,9 +4,9 @@ Kotlin 反射与 Hook 工具库，提供成员查找、调用、DSL 和 Java 入
 
 ![Maven Central](https://img.shields.io/maven-central/v/io.github.lingqiqi5211.ezhooktool/core)
 
-[详细指南](doc/overview.md) · [API 文档](https://lingqiqi5211.github.io/EzHookTool/api/latest/) · [版本变化](CHANGELOG.md) · [示例工程](#示例与构建)
+[详细指南](doc/overview.md) · [AI 接入指南](doc/AI_GUIDE.md) · [API 文档](https://lingqiqi5211.github.io/EzHookTool/api/latest/) · [版本变化](CHANGELOG.md) · [示例工程](#示例与构建)
 
-本文对应当前源码。使用已发布版本时，请同时查看 CHANGELOG；`Unreleased` 中的变化尚未发布。
+本文对应 1.3.1 源码。使用已发布版本时，以 Maven 实际解析版本为准，版本差异见 CHANGELOG。
 
 ## 选择模块
 
@@ -65,6 +65,8 @@ val text = method.invoke(Example(), "EzHookTool")
 - 条件默认按 AND 组合；可选择当前类、继承链或唯一结果。
 - 查询匹配和缓存使用同一份计划；一次同步查询及其嵌套查询沿用同一配置。
 - 缓存合计最多 4096 条，超过 256 项的集合结果不缓存。它在作用域内持有强引用，配置切换或 `clearCache()` 会清空旧缓存并阻止旧查询回写。
+- 缓存命中、淘汰与大集合跳过可用 `EzReflect.cacheStats` 观察，快照只含数字。
+- 使用默认成员解析器时，首项查找可按精确方法签名、字段名或构造器参数直接查找；自定义解析器与额外条件仍走原查询流程。
 - BestMatch 无法唯一选择时报告歧义，不依赖枚举顺序；不隐式拓宽数值或打包 vararg。
 
 字段、构造器、descriptor、Java 门面和错误契约见 [Core 指南](doc/overview.md#core)。
@@ -100,6 +102,30 @@ class MainHook : XposedModule() {
 在 `IXposedHookLoadPackage.handleLoadPackage` 筛选目标包后调用 `EzXposed.init(lpparam)`，再安装 Hook。使用模块资源时，还需实现 `IXposedHookZygoteInit` 并调用 `EzXposed.initZygote(startupParam)`，提供可靠的模块路径。
 
 完整入口见 [82 示例](sample-xposed-82/src/main/kotlin/io/github/lingqiqi5211/ezhooktool/sample82/MainHook.kt)。
+
+### 等待 Application attach
+
+两个后端用同一组入口等 `Application.attach(Context)`；已经 attach 时在注册线程立即执行一次：
+
+```kotlin
+EzXposed.runOnApplicationAttach { context ->
+    // 没有 token，回调长期保留；context 是 attach 入参，不能假定为 Application。
+}
+
+EzXposed.runOnApplicationAttachOnce { context ->
+    // 只跑一次：领取后立即摘除，抛异常也算消费。
+}
+
+val subscription = EzXposed.subscribeApplicationAttach { context ->
+    // 需要时 subscription.cancel()。
+}
+```
+
+`cancel()` 阻止尚未领取的调用；已领取的调用仍可能在取消后开始或完成。
+回调按登记顺序分发，异常记日志且不阻断其他回调；登记与分发共用同一把锁，同一个 attach 不会被晚注册补发和分发扫描各触发一次。
+102 的三个入口都要求先 `initOnModuleLoaded`；82 无需先 `initZygote`。两个新入口找不到 attach 方法时抛
+`IllegalStateException`，安装或 Context 读取失败保留原异常，注册失败不留回调；旧入口找不到 attach 方法时只记日志。
+登记与 token 只属于当前 generation，热重载不会带过去。
 
 ### 查找后安装
 
@@ -152,6 +178,7 @@ EzResources.setDensityReplacement("com.example.target", "dimen", "toolbar_height
 - [sample-xposed-82](sample-xposed-82)：经典 Xposed 接入与 Hook / 资源用法。
 - [sample-xposed-102](sample-xposed-102)：libxposed 接入、多个目标作用域和热重载。
 - [详细指南](doc/overview.md)：Kotlin / Java 用法、行为契约与限制。
+- [AI 接入指南](doc/AI_GUIDE.md)：单一固定入口，可整份复制到接入工程（版本边界、后端选择、精确查找、生命周期与交付检查）。
 - [API 文档](https://lingqiqi5211.github.io/EzHookTool/api/latest/)：Dokka 生成的签名与 KDoc。
 
 本地构建需要 JDK 25：

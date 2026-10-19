@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.3.1
+
+### 新增
+
+- `EzReflect.cacheStats`：只含数字的缓存计数快照（`ReflectCacheStats`：代次、条目数、容量、命中、未命中、淘汰、大集合跳过），
+  不持有 Class、ClassLoader 或结果。
+- 新增一次性与可取消的 attach 登记：`runOnApplicationAttachOnce`、`subscribeApplicationAttach`，两者返回
+  `ApplicationAttachSubscription`；`cancel()` 阻止尚未领取的分发，重复 cancel 无害，取消后 token 不再强持有回调。
+  `runOnApplicationAttach` 的签名与长期订阅行为不变。
+
+### 修复
+
+- API 101 上 `runOnApplicationAttach` 不再因内部 hook ID 要求而安装失败：只有 framework 支持 hook ID（API 102）时
+  设置稳定内部 key，101 匿名安装。
+- 82 与 102 的 Application attach 分发不再因用户 logger 抛错而中断：回调失败、晚注册补发与 attach 方法查找失败
+  都走安全诊断；attach 订阅回调的异常始终隔离，`safeMode = false` 不改变这一行为。
+- attach 登记与分发共用同一把锁：晚注册补发与分发扫描不再对同一个 attach 各触发一次，回调与 logger 都在锁外执行。
+- `runOnApplicationAttachOnce` / `subscribeApplicationAttach` 找不到 attach 方法时抛 `IllegalStateException`；hook 安装或 Context
+  读取抛错时保留原异常，注册失败不留回调。旧的无 token 入口在找不到 attach 方法时仍只记日志。
+
+### 性能
+
+- 默认成员解析器下，条件恰好是名称加完整参数类型的首项方法查询、名称的首项字段查询或完整参数类型的首项构造器查询，分别改用 `getDeclaredMethod` / `getDeclaredField` / `getDeclaredConstructor`，
+  不再枚举成员；`findSingle()`、批量查询和带 `filter`、assignable、vague、泛型条件的查询保持完整扫描。
+
+### 文档
+
+- 新增可复制到接入工程的 AI 指南 `doc/AI_GUIDE.md`，集中说明版本边界、后端接入、查找与 Hook、性能和生命周期约束。
+
 ## 1.3.0
 
 ### 新增

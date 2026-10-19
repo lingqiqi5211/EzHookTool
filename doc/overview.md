@@ -41,7 +41,7 @@ dependencies {
 `io.github.lingqiqi5211.ezhooktool.core`，查询类型位于其 `query` 包；Hook DSL 位于
 `io.github.lingqiqi5211.ezhooktool.xposed.dsl`。完整工程可参考
 [`sample-xposed-82`](../sample-xposed-82) 和 [`sample-xposed-102`](../sample-xposed-102)。
-本页是详细指南；项目入口见 [README](../README.md)。
+本页是详细指南；项目入口见 [README](../README.md)，接入其它工程时的单一入口见 [AI 接入指南](AI_GUIDE.md)。
 
 <a id="core"></a>
 
@@ -258,7 +258,15 @@ BestMatch 的类型重载与实参重载使用同一选择规则：
 当前缓存是同步有界 LRU，类与成员查询**合计最多 4096 条**，超过 **256 项**的集合结果不缓存。
 有效期间强引用键与结果，不靠弱引用自动释放加载器；成员枚举、解析器和用户条件在缓存锁外执行。
 
+使用默认成员解析器，且首项查询的条件恰好是「名称 + 完整参数类型」（字段只有名称、构造器只有完整参数类型）时，内部按签名直接查找，
+不再枚举成员；命中结果仍用同一份计划校验，找不到时保持原搜索范围与 `MemberNotFoundException` 契约。
+自定义 `MemberResolver`、`findSingle()`、批量查询和带 `filter`、assignable、vague、泛型条件的查询继续完整扫描。
+
+缓存计数用 `EzReflect.cacheStats` 读取：`generation`、`entries`、`capacity`、`hits`、`misses`、`evictions`、
+`skippedOversizeResults`。快照只含数字，不持有 Class、ClassLoader 或结果；换代后计数从零开始。
+
 ```kotlin
+val stats = EzReflect.cacheStats
 EzReflect.clearCache()
 EzReflect.cacheEnabled = false
 ```
@@ -347,16 +355,36 @@ override fun onPackageReady(param: PackageReadyParam) {
 
 ### Application 与模块资源的可用时机
 
-82 和 101 / 102 都可通过 `runOnApplicationAttach` 等待 Application；若已经 attach，新注册回调在当前线程立即执行：
+82 和 101 / 102 都可通过 attach 回调等待 Application；若已经 attach，新注册回调在注册线程立即执行一次：
 
 ```kotlin
 EzXposed.runOnApplicationAttach { context ->
-    // context 是 Application context。
+    // context 是 Application.attach(Context) 的入参，不能假定为 Application。
+}
+
+val subscription = EzXposed.subscribeApplicationAttach { context ->
+    // 需要时再 subscription.cancel()。
+}
+
+EzXposed.runOnApplicationAttachOnce { context ->
+    // 只跑一次：领取后立即从登记表移除，抛异常也算消费。
 }
 ```
 
-回调按登记顺序执行，异常记日志且不阻断其他回调。libxposed 必须先调用 `initOnModuleLoaded`；82 的此入口不要求先调
-`initZygote`。过早读取 `appContext` 会抛异常，不确定时用 `appContextOrNull`。
+`runOnApplicationAttach` 没有 token，回调长期保留；需要能取消时用返回 `ApplicationAttachSubscription` 的
+`subscribeApplicationAttach`。`cancel()` 阻止尚未领取的调用；已领取的调用仍可能在取消后开始或完成。
+重复 cancel 无害，取消后的 token 不再强持有回调对象。
+`runOnApplicationAttachOnce` 在领取执行前摘除并清引用，晚注册同样只跑一次。
+
+回调按登记顺序执行（并发之间不承诺额外顺序），异常记日志且不阻断其他回调；用户 logger 自己抛异常也不会打断后续回调。
+登记与 attach 分发共用同一把锁；Context 探针在锁外读取，期间若发生分发则重读，避免漏发或重复补发。
+回调、logger 与 framework hook 安装都在锁外执行，回调里可以重入登记或取消。
+libxposed 三个入口都必须先调用 `initOnModuleLoaded`；82 的三个入口都不要求先调 `initZygote`。
+两个新入口找不到 `Application.attach(Context)` 时抛 `IllegalStateException`；安装或 Context 读取失败保留原异常，
+注册失败不留回调。旧的无 token 入口找不到 attach 方法时仍只记日志。
+登记与 token 只属于当前 module generation / classloader，不进入热重载 saved state。
+过早读取 `appContext` 会抛异常，不确定时用 `appContextOrNull`。102 后端内部安装 attach hook 时只在 framework 支持
+hook ID（API 102）时使用稳定 `reloadKey`，API 101 上匿名安装，因此不影响运行基线。
 
 `initAppContext(context)` 默认只在缓存为空时保留 `applicationContext` 或传入的 Application，不可用时抛
 `IllegalStateException`；已有值不覆盖。`force=true` 原样缓存指定 Context，调用者承担 Activity 泄漏等生命周期风险。

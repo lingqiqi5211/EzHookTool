@@ -62,6 +62,11 @@ class MainHook : XposedModule() {
      * 条件安装支持一个开关管理多个 hook，也支持热重载后全部开关关闭。
      */
     private fun installHooksForCurrentScope() {
+        if (EzXposed.packageName !in TargetApps) return
+        // 在每代 targetReady 窗口登记，内部 attach hook 才能参与热重载迁移。
+        EzXposed.runOnApplicationAttachOnce { context ->
+            android.util.Log.i("EzHookToolSample", "Application attached: ${context.packageName}")
+        }
         val switches = readHookSwitches()
         when (EzXposed.packageName) {
             PrimaryTarget -> {

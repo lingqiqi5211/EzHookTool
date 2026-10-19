@@ -13,7 +13,9 @@ import io.github.lingqiqi5211.ezhooktool.xposed.EzXposed
 
 private const val TargetApp = "com.example.target"
 
-class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
+class MainHook :
+    IXposedHookLoadPackage,
+    IXposedHookZygoteInit {
     override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
         EzXposed.initZygote(startupParam)
     }
@@ -22,6 +24,10 @@ class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
         if (lpparam.packageName != TargetApp) return
 
         EzXposed.init(lpparam)
+        // 一次性入口领取即消费；它返回的 token 也可用于提前取消。
+        EzXposed.runOnApplicationAttachOnce { context ->
+            android.util.Log.i("EzHookToolSample", "${lpparam.packageName} attached: ${context.packageName}")
+        }
         initHooks(ExampleKotlinHook, ExampleJavaHook.INSTANCE, ExampleVipHook, ExampleReporterHook, ExampleResourceHook)
     }
 
