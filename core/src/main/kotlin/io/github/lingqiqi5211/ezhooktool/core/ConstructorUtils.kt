@@ -3,6 +3,7 @@
 package io.github.lingqiqi5211.ezhooktool.core
 
 import io.github.lingqiqi5211.ezhooktool.core.query.ConstructorQuery
+import io.github.lingqiqi5211.ezhooktool.core.query.ExactLookup
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryPlan
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryResultMode
@@ -91,19 +92,48 @@ private fun findConstructorOrNull(
             return cached
         }
     }
-    val results = findConstructorsMatching(clz, plan)
-    if (plan.requiresSingleResult && results.size > 1) {
-        throw SingleResultExpectedException(
-            target = "constructor in ${clz.name}",
-            conditionDesc = plan.description,
-        )
-    }
-    val result = results.firstOrNull()
+    val exact = plan.exactLookup as? ExactLookup.Constructor
+    val result =
+        if (exact != null) {
+            findConstructorByExactParameters(clz, exact, plan)
+        } else {
+            val results = findConstructorsMatching(clz, plan)
+            if (plan.requiresSingleResult && results.size > 1) {
+                throw SingleResultExpectedException(
+                    target = "constructor in ${clz.name}",
+                    conditionDesc = plan.description,
+                )
+            }
+            results.firstOrNull()
+        }
     if (result != null && EzReflect.cacheEnabled && queryKey != null) {
         EzReflect.cachePut(clz, ReflectCacheBucket.CONSTRUCTOR, queryKey, result)
     }
     return result
 }
+
+/**
+ * 条件只有完整参数类型时直接使用 `getDeclaredConstructor`，不再枚举构造器。
+ *
+ * 构造器签名在一个类内唯一，所以命中即等价于通用扫描的首个结果；找不到时仍返回 null，由调用方
+ * 按同一份计划生成错误信息。
+ */
+private fun findConstructorByExactParameters(
+    clz: Class<*>,
+    signature: ExactLookup.Constructor,
+    plan: QueryPlan<Constructor<*>>,
+): Constructor<*>? =
+    try {
+        val constructor = clz.getDeclaredConstructor(*signature.parameterTypes)
+        if (plan.matches(constructor)) {
+            constructor.isAccessible = true
+            constructor
+        } else {
+            null
+        }
+    } catch (_: NoSuchMethodException) {
+        null
+    }
 
 internal fun findConstructorsMatching(
     clz: Class<*>,

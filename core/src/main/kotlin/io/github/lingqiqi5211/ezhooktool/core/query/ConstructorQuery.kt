@@ -68,6 +68,7 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
             ConstructorCachePart.PARAMETER_TYPES to Collections.unmodifiableList(snapshot.toList()),
             "params=${snapshot.describeTypes()}",
         ) { parameterTypes.contentEquals(snapshot) }
+        recordParameterTypesCondition(snapshot)
     }
 
     /** [parameterTypes] 的短名称。 */
@@ -192,6 +193,13 @@ class ConstructorQuery internal constructor() : BaseQuery<Constructor<*>>() {
         condition: Constructor<*>.() -> Boolean,
     ) {
         addCondition(ConstructorCachePart.FLAGS to (name to value), "$name=$value") { condition(this) == value }
+    }
+
+    // 构造器的完整参数签名在一个类内唯一，等价于 getDeclaredConstructor；其它条件保持通用扫描。
+    internal override fun exactLookup(): ExactLookup? {
+        val parameterTypes = parameterTypesCondition ?: return null
+        if (conditionCount != 1) return null
+        return ExactLookup.Constructor(parameterTypes.toTypedArray())
     }
 }
 

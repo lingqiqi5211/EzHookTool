@@ -2,6 +2,7 @@
 
 package io.github.lingqiqi5211.ezhooktool.core
 
+import io.github.lingqiqi5211.ezhooktool.core.query.ExactLookup
 import io.github.lingqiqi5211.ezhooktool.core.query.MethodQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryPlan
@@ -184,18 +185,52 @@ private fun findMethodOrNull(
             return cached
         }
     }
-    val results = findMethodsMatching(clz, plan)
-    if (plan.requiresSingleResult && results.size > 1) {
-        throw SingleResultExpectedException(
-            target = "method in ${clz.name}",
-            conditionDesc = plan.description,
-        )
-    }
-    val result = results.firstOrNull()
+    val exact = plan.exactLookup as? ExactLookup.Method
+    val result =
+        if (exact != null) {
+            findMethodByExactSignature(clz, exact, plan)
+        } else {
+            val results = findMethodsMatching(clz, plan)
+            if (plan.requiresSingleResult && results.size > 1) {
+                throw SingleResultExpectedException(
+                    target = "method in ${clz.name}",
+                    conditionDesc = plan.description,
+                )
+            }
+            results.firstOrNull()
+        }
     if (result != null && EzReflect.cacheEnabled && queryKey != null) {
         EzReflect.cachePut(clz, ReflectCacheBucket.METHOD, queryKey, result)
     }
     return result
+}
+
+/**
+ * 名称与完整参数类型都已确定时逐层使用 `getDeclaredMethod`，不再枚举成员。
+ *
+ * 协变返回的桥接方法由 `getDeclaredMethod` 选择更具体的返回类型；带返回类型等额外条件时仍用通用扫描。
+ * 搜索范围和找不到时的返回值不变，错误信息由调用方用同一份计划生成。
+ */
+private fun findMethodByExactSignature(
+    clz: Class<*>,
+    signature: ExactLookup.Method,
+    plan: QueryPlan<Method>,
+): Method? {
+    var current: Class<*>? = clz
+    while (current != null) {
+        try {
+            val method = current.getDeclaredMethod(signature.name, *signature.parameterTypes)
+            if (plan.matches(method)) {
+                method.isAccessible = true
+                return method
+            }
+        } catch (_: NoSuchMethodException) {
+            // 该层没有这个签名，按搜索范围继续。
+        }
+        if (plan.findSuper == false) return null
+        current = current.superclass
+    }
+    return null
 }
 
 internal fun findMethodsMatching(
@@ -420,8 +455,7 @@ fun String.findMethodOrNull(
  * 从类名查找全部方法。
  */
 @JvmName("findAllMethodsFromString")
-fun String.findAllMethods(classLoader: ClassLoader = EzReflect.defaultLoaderMarker): List<Method> =
-    findAllMethods(this, classLoader)
+fun String.findAllMethods(classLoader: ClassLoader = EzReflect.defaultLoaderMarker): List<Method> = findAllMethods(this, classLoader)
 
 /**
  * 从类名按查询条件查找方法。

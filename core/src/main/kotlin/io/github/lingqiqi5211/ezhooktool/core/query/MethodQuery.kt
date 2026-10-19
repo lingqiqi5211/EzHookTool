@@ -57,6 +57,7 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
     /** 限定方法名。 */
     fun name(value: String) {
         addCondition(MethodCachePart.NAME to value, "name=$value") { name == value }
+        recordNameCondition(value)
     }
 
     /** 限定方法名包含指定文本。 */
@@ -144,6 +145,7 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
         ) {
             parameterTypes.contentEquals(snapshot)
         }
+        recordParameterTypesCondition(snapshot)
     }
 
     /** [parameterTypes] 的短名称。 */
@@ -396,6 +398,14 @@ class MethodQuery internal constructor() : BaseQuery<Method>() {
         condition: Method.() -> Boolean,
     ) {
         addCondition(MethodCachePart.FLAGS to (name to value), "$name=$value") { condition(this) == value }
+    }
+
+    // 只有名称和完整参数类型时使用 getDeclaredMethod；额外条件仍走通用扫描。
+    internal override fun exactLookup(): ExactLookup? {
+        val name = nameCondition ?: return null
+        val parameterTypes = parameterTypesCondition ?: return null
+        if (conditionCount != 2) return null
+        return ExactLookup.Method(name, parameterTypes.toTypedArray())
     }
 }
 

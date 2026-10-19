@@ -2,6 +2,7 @@
 
 package io.github.lingqiqi5211.ezhooktool.core
 
+import io.github.lingqiqi5211.ezhooktool.core.query.ExactLookup
 import io.github.lingqiqi5211.ezhooktool.core.query.FieldQuery
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryFilterContext
 import io.github.lingqiqi5211.ezhooktool.core.query.QueryPlan
@@ -160,18 +161,51 @@ private fun findFieldOrNull(
             return cached
         }
     }
-    val results = findFieldsMatching(clz, plan)
-    if (plan.requiresSingleResult && results.size > 1) {
-        throw SingleResultExpectedException(
-            target = "field in ${clz.name}",
-            conditionDesc = plan.description,
-        )
-    }
-    val result = results.firstOrNull()
+    val exact = plan.exactLookup as? ExactLookup.Field
+    val result =
+        if (exact != null) {
+            findFieldByExactName(clz, exact, plan)
+        } else {
+            val results = findFieldsMatching(clz, plan)
+            if (plan.requiresSingleResult && results.size > 1) {
+                throw SingleResultExpectedException(
+                    target = "field in ${clz.name}",
+                    conditionDesc = plan.description,
+                )
+            }
+            results.firstOrNull()
+        }
     if (result != null && EzReflect.cacheEnabled && queryKey != null) {
         EzReflect.cachePut(clz, ReflectCacheBucket.FIELD, queryKey, result)
     }
     return result
+}
+
+/**
+ * 条件只有字段名时逐层使用 `getDeclaredField`，不再枚举成员。
+ *
+ * 一个类内字段名唯一，所以命中即等价于通用扫描的首个结果；搜索范围和找不到时的返回值保持原有语义。
+ */
+private fun findFieldByExactName(
+    clz: Class<*>,
+    signature: ExactLookup.Field,
+    plan: QueryPlan<Field>,
+): Field? {
+    var current: Class<*>? = clz
+    while (current != null) {
+        try {
+            val field = current.getDeclaredField(signature.name)
+            if (plan.matches(field)) {
+                field.isAccessible = true
+                return field
+            }
+        } catch (_: NoSuchFieldException) {
+            // 该层没有这个字段，按搜索范围继续。
+        }
+        if (plan.findSuper == false) return null
+        current = current.superclass
+    }
+    return null
 }
 
 internal fun findFieldsMatching(
@@ -442,8 +476,7 @@ fun String.findFieldOrNull(
  * @param classLoader 用于加载当前类名的 `ClassLoader`
  */
 @JvmName("findAllFieldsFromString")
-fun String.findAllFields(classLoader: ClassLoader = EzReflect.defaultLoaderMarker): List<Field> =
-    findAllFields(this, classLoader)
+fun String.findAllFields(classLoader: ClassLoader = EzReflect.defaultLoaderMarker): List<Field> = findAllFields(this, classLoader)
 
 /**
  * 从类名按查询条件查找字段。

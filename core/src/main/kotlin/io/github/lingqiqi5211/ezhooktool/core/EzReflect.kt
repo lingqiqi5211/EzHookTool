@@ -116,6 +116,14 @@ object EzReflect {
     @JvmStatic
     var debugMode: Boolean = false
 
+    /**
+     * 当前缓存状态的计数快照，用于区分命中、未命中、淘汰与大集合跳过。
+     *
+     * 统计只是一次受同一把缓存锁保护的读取，不额外持有类或结果；计数随状态换代归零，见 [ReflectCacheStats]。
+     */
+    @JvmStatic
+    val cacheStats: ReflectCacheStats get() = context.state.stats()
+
     /** 日志实现，默认 [DefaultLogger]。 */
     @Volatile
     @JvmStatic

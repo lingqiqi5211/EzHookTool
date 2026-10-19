@@ -1,5 +1,6 @@
 package io.github.lingqiqi5211.ezhooktool.core.query
 
+import io.github.lingqiqi5211.ezhooktool.core.DefaultMemberResolver
 import io.github.lingqiqi5211.ezhooktool.core.EzReflect
 import java.lang.reflect.Type
 import java.util.Collections
@@ -23,6 +24,27 @@ internal class QueryTerm<T>(
     val predicate: T.() -> Boolean,
 )
 
+/**
+ * 可证明等价于一次精确反射查找的条件。
+ *
+ * 只有查询块里的条件集合恰好等于名称和/或完整参数类型时才会生成；出现任何其它条件、重复条件或
+ * 范围不受支持的查找方式时保持为 null，继续走通用扫描。
+ */
+internal sealed interface ExactLookup {
+    class Method(
+        val name: String,
+        val parameterTypes: Array<Class<*>>,
+    ) : ExactLookup
+
+    class Field(
+        val name: String,
+    ) : ExactLookup
+
+    class Constructor(
+        val parameterTypes: Array<Class<*>>,
+    ) : ExactLookup
+}
+
 /** 条件、搜索范围和结果模式的独立快照；用户谓词的闭包状态仍由调用者负责。 */
 internal class QueryPlan<T>(
     queryType: Class<*>,
@@ -31,6 +53,7 @@ internal class QueryPlan<T>(
     val scope: QueryScope,
     val resultMode: QueryResultMode,
     manualCacheKey: String?,
+    val exactLookup: ExactLookup?,
 ) {
     private val terms = terms.toList()
     private val nameTerms = nameTerms.toList()
@@ -94,7 +117,18 @@ abstract class BaseQuery<T> internal constructor() {
     private val nameTerms = mutableListOf<QueryTerm<String>>()
     private var manualCacheKey: String? = null
     private var singleResult = false
+    private var recordedName: String? = null
+    private var recordedParameterTypes: List<Class<*>>? = null
     internal var searchScope: QueryScope = QueryScope.DECLARED
+
+    /** 已登记的条件条数；精确快路径用它确认条件集合没有第三个条件。 */
+    internal val conditionCount: Int get() = terms.size
+
+    /** [name] 条件登记的名称，供 [exactLookup] 判断条件集合是否只有名称。 */
+    internal val nameCondition: String? get() = recordedName
+
+    /** [parameterTypes] 条件登记的完整参数类型，供 [exactLookup] 决定能否直接按签名查找。 */
+    internal val parameterTypesCondition: List<Class<*>>? get() = recordedParameterTypes
 
     /** 为当前查询指定主动缓存 key。 */
     fun cacheKey(key: String) {
@@ -122,15 +156,32 @@ abstract class BaseQuery<T> internal constructor() {
         nameTerms += QueryTerm(key, description, predicate)
     }
 
-    internal fun freeze(resultMode: QueryResultMode): QueryPlan<T> =
-        QueryPlan(
+    internal fun freeze(resultMode: QueryResultMode): QueryPlan<T> {
+        val mode = if (resultMode == QueryResultMode.FIRST && singleResult) QueryResultMode.EXACTLY_ONE else resultMode
+        return QueryPlan(
             queryType = javaClass,
             terms = terms,
             nameTerms = nameTerms,
             scope = searchScope,
-            resultMode = if (resultMode == QueryResultMode.FIRST && singleResult) QueryResultMode.EXACTLY_ONE else resultMode,
+            resultMode = mode,
             manualCacheKey = manualCacheKey,
+            // 只有首项查询能用精确快路径：findSingle 必须先完整扫描确认唯一，批量查询需要全部结果。
+            exactLookup = if (mode == QueryResultMode.FIRST && EzReflect.memberResolver === DefaultMemberResolver) exactLookup() else null,
         )
+    }
+
+    /** 记录 [name] 条件的值；只有条件集合恰好是名称和/或完整参数类型时才会被采用。 */
+    internal fun recordNameCondition(value: String) {
+        recordedName = value
+    }
+
+    /** 记录 [parameterTypes] 条件的类型副本；调用方已经复制过数组。 */
+    internal fun recordParameterTypesCondition(types: Array<out Class<*>>) {
+        recordedParameterTypes = types.toList()
+    }
+
+    /** 结构化条件能否降级为精确查找；子类只声明自己认可的条件组合。 */
+    internal open fun exactLookup(): ExactLookup? = null
 }
 
 internal object QueryFilterContext {

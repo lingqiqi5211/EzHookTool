@@ -41,6 +41,7 @@ class FieldQuery internal constructor() : BaseQuery<Field>() {
     /** 限定字段名。 */
     fun name(value: String) {
         addCondition(FieldCachePart.NAME to value, "name=$value") { name == value }
+        recordNameCondition(value)
     }
 
     /** 限定字段名包含指定文本。 */
@@ -229,6 +230,13 @@ class FieldQuery internal constructor() : BaseQuery<Field>() {
         condition: Field.() -> Boolean,
     ) {
         addCondition(FieldCachePart.FLAGS to (name to value), "$name=$value") { condition(this) == value }
+    }
+
+    // 字段名在一个类内唯一，等价于 getDeclaredField；类型与修饰符仍按条件逐层比较。
+    internal override fun exactLookup(): ExactLookup? {
+        val name = nameCondition ?: return null
+        if (conditionCount != 1) return null
+        return ExactLookup.Field(name)
     }
 }
 

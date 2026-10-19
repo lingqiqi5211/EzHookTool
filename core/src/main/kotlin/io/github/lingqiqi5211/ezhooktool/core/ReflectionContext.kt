@@ -50,6 +50,10 @@ internal data class ReflectionState(
 ) {
     private val cache = LinkedHashMap<CacheKey, Any>(16, 0.75f, true)
     private var retired = false
+    private var hits = 0L
+    private var misses = 0L
+    private var evictions = 0L
+    private var skippedOversizeResults = 0L
 
     fun get(
         owner: Any,
@@ -57,7 +61,13 @@ internal data class ReflectionState(
         key: Any,
     ): Any? =
         synchronized(cache) {
-            if (!cacheEnabled || retired) null else cache[CacheKey(owner, bucket, key)]
+            if (!cacheEnabled || retired) {
+                null
+            } else {
+                val value = cache[CacheKey(owner, bucket, key)]
+                if (value == null) misses++ else hits++
+                value
+            }
         }
 
     fun put(
@@ -66,14 +76,19 @@ internal data class ReflectionState(
         key: Any,
         value: Any,
     ) {
-        if (!cacheEnabled || value is Collection<*> && value.size > maxResultSize) return
+        if (!cacheEnabled) return
         synchronized(cache) {
             if (retired) return
+            if (value is Collection<*> && value.size > maxResultSize) {
+                skippedOversizeResults++
+                return
+            }
             cache[CacheKey(owner, bucket, key)] = value
             if (cache.size > capacity) {
                 val iterator = cache.entries.iterator()
                 iterator.next()
                 iterator.remove()
+                evictions++
             }
         }
     }
@@ -85,6 +100,20 @@ internal data class ReflectionState(
         }
 
     internal val size: Int get() = synchronized(cache) { cache.size }
+
+    /** 当前状态的计数快照；只含数字，不引用键、结果或解析器。 */
+    internal fun stats(): ReflectCacheStats =
+        synchronized(cache) {
+            ReflectCacheStats(
+                generation = version,
+                entries = cache.size,
+                capacity = capacity,
+                hits = hits,
+                misses = misses,
+                evictions = evictions,
+                skippedOversizeResults = skippedOversizeResults,
+            )
+        }
 
     private class CacheKey(
         val owner: Any,
