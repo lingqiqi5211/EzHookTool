@@ -394,6 +394,7 @@ override fun onHotReloaded(param: HotReloadedParam) {
 - 持久开关每一代重新读取；不要跨代保存模块对象、旧回调或安装时的固定 snapshot。
 - 只有需要稳定的逐条身份时才用 `reloadKey`；不要与默认自动流程重叠使用 `HotReloadSession`。
 - 外部 listener、receiver、定时任务、线程不是 HookHandle，仍需模块自己注销或停止。
+- 资源换代中的 loader 变更由库投递主线程；`onHotReloaded` 的 Binder 线程同步等待，每次上限 10 秒，失败时回滚与提交可能再各等一次。
 - 101 不提供热重载；为 102 编译保留的覆写在 101 framework 上不会被调用。
 
 ### 资源替换

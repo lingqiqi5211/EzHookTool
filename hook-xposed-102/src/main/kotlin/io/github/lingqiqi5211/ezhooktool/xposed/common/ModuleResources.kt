@@ -20,6 +20,7 @@ internal object ModuleResources {
      *
      * Android R 及以上优先走 `ResourcesLoader`，
      * 更低版本回退到 `AssetManager.addAssetPath(...)`。
+     * 这里的 loader 只绑定独立 `AssetManager`，尚未挂到宿主 `Resources`；热重载的宿主迁移由 `EzResources` 在主线程完成。
      */
     fun create(modulePath: String): Resources {
         require(modulePath.isNotBlank()) { "modulePath must not be blank" }

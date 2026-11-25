@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### 修复
+
+- 102 热重载在 SDK 37 / HyperOS 4 上多次迁移后切换主题崩溃：资源换代中的 `Resources.addLoaders` / `removeLoaders` 与
+  `ResourcesLoader` provider 变更改在主线程执行。`onHotReloaded` 的 Binder 线程同步等待，每次上限 10 秒；
+  超时、中断或主线程拒绝时按迁移失败处理，不在后台线程继续修改资源表。
+
 ## 1.3.1
 
 ### 新增
