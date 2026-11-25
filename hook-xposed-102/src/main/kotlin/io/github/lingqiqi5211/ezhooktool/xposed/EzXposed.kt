@@ -612,6 +612,9 @@ object EzXposed {
      * 默认自动流程要求 hook 初始化位于 [onTargetReady] 的同步回调中，且旧 handle 都有 hook ID。
      * 初次从无 ID 的旧版本迁移时会拒绝本次热重载，保留旧实现并要求完整重启一次目标进程。
      *
+     * 资源换代同步投递到主线程；回调线程等待主线程，每次上限 10 秒。主线程不可用时抛 `IllegalStateException`，
+     * 失败路径的回滚与提交可能各再等待一次。
+     *
      * @param onOldHooks 上一代 hook handle 的自定义处置策略；`null` 表示使用默认自动原子替换流程
      * @param onExtra    接收 [handleHotReloading] 透传的 `extra`；`null` 表示忽略
      */
@@ -652,6 +655,8 @@ object EzXposed {
      * 带稳定内部 ID 的物理 hook。
      * 需要自定义旧 handle 处置时改用带 `onOldHooks` 参数的 [handleHotReloaded]。
      *
+     * 资源换代同步投递到主线程；回调线程等待主线程，每次上限 10 秒。主线程不可用时抛 `IllegalStateException`。
+     *
      * @return 新 hook 安装、原子替换与遗留旧 hook 清理的统计结果
      */
     @JvmStatic
@@ -673,6 +678,7 @@ object EzXposed {
      * 执行默认自动热重载流程，并返回实际替换与清理数量。
      *
      * 与 [handleHotReloaded] 的无 `onOldHooks` 形式等价；需要把结果写入日志、通知或 UI 时使用本入口。
+     * 资源换代同步投递到主线程，主线程不可用时抛 `IllegalStateException`（每次等待上限 10 秒）。
      */
     @JvmStatic
     @JvmOverloads

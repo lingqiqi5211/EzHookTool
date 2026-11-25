@@ -112,6 +112,7 @@ class HotReloadSession {
      * 之后才清理没有重新声明的旧 hook。任一初始化错误会原样抛出，避免把失败伪装成成功。
      *
      * [onExtra] 在 [scope] 状态恢复后、`onTargetReady` 回调前同步调用。
+     * 资源换代同步投递到主线程，主线程不可用时抛 `IllegalStateException`（每次等待上限 10 秒）。
      */
     @JvmOverloads
     fun restore(

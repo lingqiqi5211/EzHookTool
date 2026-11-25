@@ -169,6 +169,7 @@ EzResources.setDensityReplacement("com.example.target", "dimen", "toolbar_height
 - API 101 可使用普通 Hook（包括替换返回值），但不能使用 102-only 的 hook ID、`HookHandle.replaceHook`、热重载和 entry detach；通过 `XposedFeature` 查询能力。
 - `onTargetReady` 初始化失败不自动重试。`targetReadyState` / `targetReadyFailure` 描述首次初始化，不代表整次热重载成功。
 - framework 不提供全部 Hook 的统一原子回滚。部分发布、底层结果不明或撤销失败时，工具明确要求重启目标进程，不把混合状态报告为成功。
+- 资源换代中的 loader 变更同步投递到主线程；回调线程每次最多等待 10 秒，失败路径的回滚与提交可能再各等一次，主线程不可用时抛异常。
 - 业务容器快照与 framework 对象分通道；监听器、线程和已创建的 View 仍需处理自己的生命周期。
 
 完整桥接代码、功能开关、交接数据和失败处理见 [热重载指南](doc/overview.md#hot-reload)。

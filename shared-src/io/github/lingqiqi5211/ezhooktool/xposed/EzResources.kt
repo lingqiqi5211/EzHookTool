@@ -25,6 +25,10 @@ import java.lang.reflect.Method
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 internal enum class ResourceHookState { PENDING, INSTALLED, FAILED }
 
@@ -42,6 +46,46 @@ internal class ResourceInjectionQueue(private val lock: Any) {
     }
 
     fun invalidate() = synchronized(lock) { epoch++ }
+}
+
+/**
+ * 把 [action] 投递到主线程并同步等待结果。超时、投递失败或中断都抛 [IllegalStateException]；
+ * 等待方放弃后，晚到的任务不再执行 [action]。中断标记会被消费，保证随后的回滚/提交仍能投递。
+ */
+internal fun awaitMainThread(
+    post: (Runnable) -> Boolean,
+    timeoutMillis: Long,
+    action: () -> Unit,
+) {
+    val completed = CountDownLatch(1)
+    val failure = AtomicReference<Throwable?>(null)
+    val abandoned = AtomicBoolean(false)
+    val posted =
+        post {
+            if (!abandoned.get()) {
+                try {
+                    action()
+                } catch (t: Throwable) {
+                    failure.set(t)
+                }
+            }
+            completed.countDown()
+        }
+    check(posted) { "Main thread rejected the resource loader change." }
+    try {
+        check(completed.await(timeoutMillis, TimeUnit.MILLISECONDS)) {
+            "Timed out after ${timeoutMillis}ms waiting for the main thread to apply resource loader changes."
+        }
+    } catch (e: InterruptedException) {
+        // 不恢复中断标记：调用方还要在同一线程调度回滚与提交，立即使其等待失败会把资源留在半迁移状态。
+        throw IllegalStateException(
+            "Interrupted while waiting for the main thread to apply resource loader changes.",
+            e,
+        )
+    } finally {
+        abandoned.set(true)
+    }
+    failure.get()?.let { throw it }
 }
 
 /** 规则发布后不再修改；读取先匹配包名，再匹配通配规则，不创建临时 key。 */
@@ -76,7 +120,8 @@ internal class ResourceRules<T> private constructor(
  * ```
  *
  * 包名传 `"*"` 表示不限宿主，精确匹配优先。hook 按需装、进程级、带稳定 reloadKey，模块不需要持有或摘除。
- * 替换规则按名字存、取值时才对当前挂着的 apk 解析 id，所以 102 热重载换 apk 不会串资源；loader 由新一代先挂新再摘旧。
+ * 替换规则按名字存、取值时才对当前挂着的 apk 解析 id，所以 102 热重载换 apk 不会串资源。
+ * 热重载换代时，新一代先挂新再摘旧，这些 loader 变更在主线程执行；其它入口仍按 [inject] 的 `onMainLooper` 决定线程。
  */
 object EzResources {
     private const val TAG = "EzResources"
@@ -89,6 +134,9 @@ object EzResources {
 
     /** 单个 Resources 每种定位表的上限。宿主资源表几万条，这里只留热集。 */
     private const val ResIdCacheLimit = 4096
+
+    /** 热重载把 loader 变更投递到主线程后的等待上限；超过即明确失败，不退回错误线程继续改资源表。 */
+    private const val MainThreadTimeoutMillis = 10_000L
 
     private const val ResourcesHookIdPrefix = "ezhooktool.internal.resources."
     private const val TypedArrayHookIdPrefix = "ezhooktool.internal.typedarray."
@@ -933,6 +981,7 @@ object EzResources {
     /**
      * 新一代在 onTargetReady 之前调用。对每个 Resources 先挂新 apk 的 loader 再摘旧的，中间没有空窗；
      * 后挂的 loader 优先级高，两者并存的一瞬也是新 apk 生效。R 以下的 addAssetPath 摘不掉，模块资源保持旧版到重启。
+     * loader 变更整体切到主线程：AOSP 要求 `addLoaders/removeLoaders` 与 provider 变更在 UI thread 执行。
      */
     internal fun restoreFromHotReload(saved: Any?) {
         val arr = saved as? Array<*>
@@ -940,48 +989,78 @@ object EzResources {
         val oldLoader = arr?.getOrNull(1)
         // 旧版本只有两项，按旧约定将已注入资源视为使用旧 loader。
         val oldResources = (arr?.getOrNull(2) as? List<*>)?.filterIsInstance<Resources>() ?: resources
-        synchronized(injectionLock) {
-            check(pendingSwap == null) { "Resource hot reload is already in progress." }
-            pendingSwap = ResourceReloadState(oldLoader, oldResources.toSet(), arr?.getOrNull(3))
+        val oldProvider = arr?.getOrNull(3)
+        onMainThreadBlocking {
+            synchronized(injectionLock) {
+                check(pendingSwap == null) { "Resource hot reload is already in progress." }
+                pendingSwap = ResourceReloadState(oldLoader, oldResources.toSet(), oldProvider)
+            }
+            var injectedCount = 0
+            for (target in resources) {
+                check(inject(target)) { "Failed to restore module resources for $target; hot reload did not complete." }
+                injectedCount++
+            }
+            HookDiagnostics.debug(
+                TAG,
+                "hot reload restore: ${resources.size} resources, injected=$injectedCount, oldLoader=${oldLoader != null}",
+            )
         }
-        var injectedCount = 0
-        for (target in resources) {
-            check(inject(target)) { "Failed to restore module resources for $target; hot reload did not complete." }
-            injectedCount++
-        }
-        HookDiagnostics.debug(
-            TAG,
-            "hot reload restore: ${resources.size} resources, injected=$injectedCount, oldLoader=${oldLoader != null}",
-        )
     }
 
     /** 仅在 Hook 尚可安全回退时调用；不可撤销注入或 loader 恢复失败会抛异常，不能宣称旧状态已恢复。 */
-    internal fun rollbackHotReload() =
-        synchronized(injectionLock) {
-            val swap = pendingSwap ?: return@synchronized
-            try {
-                swap.journal.rollback()
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) LoaderInjector.releaseUnused()
-            } finally {
-                swap.journal.clear()
-                pendingSwap = null
-                synchronized(resIdCacheLock) {
-                    sources.clear()
+    internal fun rollbackHotReload() {
+        onMainThreadBlocking {
+            synchronized(injectionLock) {
+                val swap = pendingSwap ?: return@synchronized
+                try {
+                    swap.journal.rollback()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) LoaderInjector.releaseUnused()
+                } finally {
+                    swap.journal.clear()
+                    pendingSwap = null
+                    synchronized(resIdCacheLock) {
+                        sources.clear()
+                    }
                 }
             }
         }
+    }
 
     /** 丢掉回滚记录；资源早已切换，本方法不代表旧 Hook 清理成功。 */
-    internal fun commitHotReload() =
-        synchronized(injectionLock) {
-            val swap = pendingSwap ?: return@synchronized
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) LoaderInjector.releasePrevious(swap)
-            } finally {
-                swap.journal.clear()
-                pendingSwap = null
+    internal fun commitHotReload() {
+        onMainThreadBlocking {
+            synchronized(injectionLock) {
+                val swap = pendingSwap ?: return@synchronized
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) LoaderInjector.releasePrevious(swap)
+                } finally {
+                    swap.journal.clear()
+                    pendingSwap = null
+                }
             }
         }
+    }
+
+    /**
+     * 在 UI thread 同步执行 loader 变更。AOSP 规定 `Resources.addLoaders/removeLoaders` 与
+     * `ResourcesLoader.addProvider/removeProvider` 只在 UI thread 调用；后台迁移会让随后的配置更新
+     * 在 `AssetManager2` 里读到失效的资源表并崩溃。
+     *
+     * 非主线程调用方阻塞等待，超时、投递失败或中断都抛 [IllegalStateException]，不会退回当前线程继续改。
+     * 调用点必须在 [injectionLock] 之外，否则主线程的注入会与等待方互锁。
+     */
+    private fun onMainThreadBlocking(action: () -> Unit) {
+        val mainLooper = Looper.getMainLooper()
+        if (mainLooper == null || Looper.myLooper() === mainLooper) {
+            action()
+            return
+        }
+        val handler =
+            synchronized(lock) {
+                mainHandler ?: Handler(mainLooper).also { mainHandler = it }
+            }
+        awaitMainThread(handler::post, MainThreadTimeoutMillis, action)
+    }
 
     // endregion
 }

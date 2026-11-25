@@ -857,6 +857,12 @@ package / system_server 回调仍使用前文初始化入口。`prepare` 仅在 
 provider 仅在旧绑定全部迁移成功后释放。失败时遵循资源 journal 的回退或重启判断，不能关闭所有权不明的旧对象。
 已 inflate 的 View、宿主静态缓存、SystemUI 缓存和非自有绑定不会自动刷新。
 
+热重载恢复、回滚与提交中的 `Resources.addLoaders` / `removeLoaders` 与 `ResourcesLoader` provider 变更统一在主线程执行：
+AOSP 要求这些调用只在 UI thread 发生，后台迁移会让后续配置更新读到失效的资源表。
+`onHotReloaded` 运行在 Binder 线程时，库在回调线程同步等待主线程完成，每次等待上限 10 秒；
+恢复失败时回滚与提交各再等待一次，最坏约 30 秒。主线程拒绝、超时或等待被中断都按迁移失败处理，
+不在错误线程继续修改资源表。新一代 `moduleRes` 的独立 loader 仍在回调线程创建，此时尚未绑定任何宿主 `Resources`。
+
 | 失败位置 | 保证与处理 |
 | --- | --- |
 | 默认 batch 仍在收集规则，未发布物理 Hook | 回调失败不发布该批 Hook；不撤销用户自己修改的状态或已停止的外部服务 |
